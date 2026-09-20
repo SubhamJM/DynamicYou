@@ -22,9 +22,13 @@ hl.bind(mainMod .. " + SHIFT + M", hl.dsp.global("quickshell:toggleMusicInfoNotc
 hl.bind(mainMod .. " + grave", hl.dsp.global("quickshell:resetNotchToIdle"))
 hl.bind(mainMod .. " + D", hl.dsp.global("quickshell:toggleShelfNotch"))
 hl.bind(mainMod .. " + N", hl.dsp.global("quickshell:toggleNotificationsNotch"))
+hl.bind(mainMod .. " + SHIFT + N", hl.dsp.global("quickshell:toggleNotesNotch"))
+hl.bind(mainMod .. " + slash", hl.dsp.global("quickshell:toggleCheatsheetNotch"))
+hl.bind(mainMod .. " + U", hl.dsp.global("quickshell:toggleUtilityNotch"))
 hl.bind("ALT + TAB", hl.dsp.global("quickshell:cycleWindowNext"))
 hl.bind("ALT + SHIFT + TAB", hl.dsp.global("quickshell:cycleWindowPrev"))
 hl.bind("Print", hl.dsp.exec_cmd('grimblast --notify copysave area'))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))
@@ -92,8 +96,8 @@ hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
 
--- 2. Full Output (Entire Screen)
-hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd([[sh -c 'grim - | wl-copy && notify-send "Screenshot" "Full screen copied to clipboard"']]))
+-- 2. Screenshot Annotation Hub (Area crop + Dynamic Island action hub)
+hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/quickshell/scripts/screenshot_hub.sh"))
 
 -- 3. Active Window
 hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd([[sh -c 'hyprctl activewindow -j | jq -r "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" | grim -g - - | wl-copy && notify-send "Screenshot" "Window copied to clipboard"']]))
@@ -101,4 +105,4 @@ hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd([[sh -c 'hyprctl activewin
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("fuzzel"), { on_release = true })
 
 hl.bind("SUPER + M", hl.dsp.workspace.toggle_special("music"))
-hl.bind("SUPER + D", hl.dsp.workspace.toggle_special("extra"))
+hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("extra"))

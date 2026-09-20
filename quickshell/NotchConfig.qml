@@ -52,18 +52,20 @@ QtObject {
         "bluetooth":     { width: 420, height: 380, radius: 26 },
         "recorder":      { width: 420, height: 275, radius: 26 },
         "battery":       { width: 460, height: 285, radius: 26 },
-        "powermenu":     { width: 560, height: 108, radius: 24 },
+        "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 460, height: 380, radius: 12 },
         "shelf":         { width: 460, height: 380, radius: 12 },
         "utility":       { width: 460, height: 318, radius: 26 },
         "music":         { width: 600, height: 335, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
-        "cheatsheet":    { width: 800, height: 440, radius: 14 }
+        "cheatsheet":    { width: 800, height: 440, radius: 14 },
+        "notifications": { width: 460, height: 380, radius: 26 }
     })
 
     function calculateUtilityHeight(activeSection) {
         if (activeSection === "audio") return 360;
+        if (activeSection === "vpn") return 236;
         return 318;
     }
 

@@ -52,6 +52,47 @@ ShellRoot {
         }
     }
 
+    // Screenshot Island State (Section 4.1 Screenshot Annotation Hub)
+    property string screenshotIslandPath: ""
+    property string screenshotIslandStatus: ""
+    readonly property bool isScreenshotIslandActive: screenshotIslandPath !== ""
+
+    Timer {
+        id: screenshotIslandTimer
+        interval: 8000
+        repeat: false
+        onTriggered: {
+            root.screenshotIslandPath = "";
+            root.screenshotIslandStatus = "";
+            if (root.activeMode === "idle" && !notchHoverHandler.hovered) {
+                root.collapseToIdle();
+            }
+        }
+    }
+
+    Timer {
+        id: screenshotActionFeedbackTimer
+        interval: 1400
+        repeat: false
+        onTriggered: {
+            root.screenshotIslandPath = "";
+            root.screenshotIslandStatus = "";
+            if (root.activeMode === "idle" && !notchHoverHandler.hovered) {
+                root.collapseToIdle();
+            }
+        }
+    }
+
+    function triggerScreenshotHub(filePath) {
+        if (!filePath) return;
+        root.screenshotIslandStatus = "";
+        root.screenshotIslandPath = filePath;
+        screenshotIslandTimer.restart();
+        if (root.activeMode !== "idle" && root.activeMode !== "hover") {
+            root.collapseToIdle();
+        }
+    }
+
     property bool isServerReady: false
 
     Timer {
@@ -112,7 +153,11 @@ ShellRoot {
     function collapseToIdle() {
         root.isWorkspacePeeking = false;
         root.openedViaShortcut = false;
-        root.activeMode = "idle";
+        if (typeof notchHoverHandler !== "undefined" && notchHoverHandler.hovered) {
+            root.activeMode = "hover";
+        } else {
+            root.activeMode = "idle";
+        }
     }
 
     function switchMode(newMode, fromShortcut = false) {
@@ -191,11 +236,17 @@ ShellRoot {
         if (activeMode === "notes" && typeof notesMod !== "undefined" && notesMod.isWideMode) {
             return 820;
         }
+        if (activeMode === "utility" && typeof utilMod !== "undefined" && utilMod.activeSection === "vpn") {
+            return 420;
+        }
         var dim = NotchConfig.modeDimensions[activeMode];
         return dim && dim.width !== undefined ? dim.width : NotchConfig.modeDimensions["idle"].width;
     }
     
     readonly property int targetHeight: {
+        if (root.isScreenshotIslandActive && root.isDashMode) {
+            return 44;
+        }
         if (root.isNotifPopupActive && root.isDashMode) {
             return 42;
         }
@@ -250,8 +301,8 @@ ShellRoot {
     } 
 
     readonly property int targetRadius: {
-        if (dashMod.isIslandActive || (root.isNotifPopupActive && root.isDashMode)) {
-            return 21;
+        if (dashMod.isIslandActive || (root.isNotifPopupActive && root.isDashMode) || (root.isScreenshotIslandActive && root.isDashMode)) {
+            return 22;
         }
         if (activeMode === "idle") {
             return 16;
@@ -382,6 +433,12 @@ while True:
                 } else if (m.startsWith("utility")) {
                     var parts = m.split(" ");
                     root.openUtility(parts.length > 1 ? parts[1] : "", true);
+                } else if (m.startsWith("screenshot")) {
+                    var parts = m.split(" ");
+                    if (parts.length > 1) {
+                        var scPath = parts.slice(1).join(" ").trim();
+                        root.triggerScreenshotHub(scPath);
+                    }
                 } else if (m !== "") {
                     root.openedViaShortcut = true;
                     root.activeMode = m;
@@ -538,6 +595,10 @@ while True:
         function setScreenRecording(active: bool): string {
             root.isScreenRecording = active;
             if (typeof recMod !== "undefined") recMod.isRecording = active;
+            return "OK";
+        }
+        function showScreenshot(filePath: string): string {
+            root.triggerScreenshotHub(filePath);
             return "OK";
         }
     }
@@ -821,6 +882,7 @@ while True:
                 HoverHandler {
                     id: notchHoverHandler
                     enabled: root.activeMode !== "osd"
+                    cursorShape: Qt.ArrowCursor
                     onHoveredChanged: {
                         if (typeof shelfMod !== "undefined" && shelfMod.isDragging) return;
                         if (typeof utilMod !== "undefined" && (utilMod.isDraggingVolume || utilMod.isDraggingBrightness)) return;

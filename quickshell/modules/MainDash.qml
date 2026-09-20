@@ -12,9 +12,10 @@ Item {
 
     property bool netIslandExpanded: false
     property bool powerIslandExpanded: false
-    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking
+    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive
 
     readonly property string currentIslandType: {
+        if (root.isScreenshotIslandActive) return "screenshot";
         if (root.isNotifPopupActive) return "notif";
         if (btIslandExpanded) return "bluetooth";
         if (powerIslandExpanded) return "power";
@@ -32,6 +33,9 @@ Item {
     }
 
     property int activeIslandWidth: {
+        if (displayedIslandType === "screenshot" || root.isScreenshotIslandActive) {
+            return Math.max(400, screenshotPopupRow.implicitWidth + 36);
+        }
         if (displayedIslandType === "notif" || root.isNotifPopupActive) {
             var textW = Math.max(notifSummaryText.implicitWidth, notifBodyText.implicitWidth);
             return Math.min(520, Math.max(260, textW + 80));
@@ -299,6 +303,241 @@ Item {
         onOpacityChanged: {
             if (opacity <= 0.01 && !dash.isIslandActive) {
                 dash.displayedIslandType = "";
+            }
+        }
+
+        // Screenshot Annotation Hub Island (Section 4.1)
+        RowLayout {
+            id: screenshotPopupRow
+            anchors.centerIn: parent
+            spacing: 10
+            visible: dash.displayedIslandType === "screenshot" || root.isScreenshotIslandActive
+
+            // 1. Thumbnail Preview (or fallback icon)
+            Rectangle {
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                radius: 6
+                color: Qt.rgba(0, 0, 0, 0.4)
+                clip: true
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.15)
+                Layout.alignment: Qt.AlignVCenter
+
+                Image {
+                    anchors.fill: parent
+                    source: root.screenshotIslandPath !== "" ? ("file://" + root.screenshotIslandPath) : ""
+                    fillMode: Image.PreserveAspectCrop
+                    smooth: true
+                    cache: false
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: root.screenshotIslandPath === ""
+                    text: "󰄀"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 14
+                    color: Theme.colors.accent ?? "#7aa2f7"
+                }
+            }
+
+            // 2. Info text Column
+            ColumnLayout {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 1
+
+                Text {
+                    text: "Screenshot"
+                    font.family: "Inter"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: Theme.colors.text_primary ?? "white"
+                }
+
+                Text {
+                    text: root.screenshotIslandStatus !== "" ? root.screenshotIslandStatus : "Captured & Copied"
+                    font.family: "Inter"
+                    font.pixelSize: 9
+                    color: root.screenshotIslandStatus !== "" ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
+                }
+            }
+
+            // 3. Action Buttons Row
+            Row {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 6
+
+                // Action 1: Annotate (swappy)
+                Rectangle {
+                    width: annotRow.implicitWidth + 14
+                    height: 24
+                    radius: 12
+                    color: annotMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.22)
+                    border.width: 1
+                    border.color: annotMouse.containsMouse ? "transparent" : Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.45)
+                    Behavior on color { ColorAnimation { duration: 140 } }
+
+                    Row {
+                        id: annotRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            text: "󰏫"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.accent ?? "#7aa2f7")
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "Annotate"
+                            font.family: "Inter"
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_primary ?? "#ffffff")
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: annotMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            Quickshell.execDetached(["swappy", "-f", root.screenshotIslandPath]);
+                            screenshotIslandTimer.stop();
+                            root.screenshotIslandPath = "";
+                            root.screenshotIslandStatus = "";
+                        }
+                    }
+                }
+
+                // Action 2: Pin to Shelf
+                Rectangle {
+                    width: shelfBtnRow.implicitWidth + 14
+                    height: 24
+                    radius: 12
+                    color: shelfBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    border.color: shelfBtnMouse.containsMouse ? (Theme.colors.border_hover ?? "#7aa2f7") : Qt.rgba(1, 1, 1, 0.12)
+                    Behavior on color { ColorAnimation { duration: 140 } }
+
+                    Row {
+                        id: shelfBtnRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            text: "󰉋"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            color: Theme.colors.accent ?? "#7aa2f7"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "Shelf"
+                            font.family: "Inter"
+                            font.pixelSize: 10
+                            font.weight: Font.Medium
+                            color: Theme.colors.text_primary ?? "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: shelfBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (typeof shelfMod !== "undefined") {
+                                shelfMod.addFiles([root.screenshotIslandPath]);
+                            }
+                            root.screenshotIslandStatus = "Pinned to Shelf!";
+                            screenshotActionFeedbackTimer.restart();
+                        }
+                    }
+                }
+
+                // Action 3: Instant OCR
+                Rectangle {
+                    width: ocrBtnRow.implicitWidth + 14
+                    height: 24
+                    radius: 12
+                    color: ocrBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 1
+                    border.color: ocrBtnMouse.containsMouse ? (Theme.colors.border_hover ?? "#7aa2f7") : Qt.rgba(1, 1, 1, 0.12)
+                    Behavior on color { ColorAnimation { duration: 140 } }
+
+                    Row {
+                        id: ocrBtnRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            text: "󰬚"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            color: Theme.colors.accent ?? "#7aa2f7"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: "OCR"
+                            font.family: "Inter"
+                            font.pixelSize: 10
+                            font.weight: Font.Medium
+                            color: Theme.colors.text_primary ?? "#ffffff"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: ocrBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            var scriptPath = Quickshell.env("HOME") + "/.config/quickshell/scripts/snip_ocr.sh";
+                            Quickshell.execDetached(["bash", scriptPath, root.screenshotIslandPath]);
+                            root.screenshotIslandStatus = "Text Extracted!";
+                            screenshotActionFeedbackTimer.restart();
+                        }
+                    }
+                }
+
+                // Action 4: Close / Dismiss
+                Rectangle {
+                    width: 22
+                    height: 22
+                    radius: 11
+                    color: closeMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰅖"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        color: closeMouse.containsMouse ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_secondary ?? "#565f89")
+                    }
+
+                    MouseArea {
+                        id: closeMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            screenshotIslandTimer.stop();
+                            root.screenshotIslandPath = "";
+                            root.screenshotIslandStatus = "";
+                        }
+                    }
+                }
             }
         }
 
@@ -662,19 +901,6 @@ Item {
                 isScreenRecording: root.isScreenRecording
             }
         }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (root.isScreenRecording) {
-                    root.switchMode("recorder");
-                } else {
-                    root.switchMode("calendar");
-                }
-            }
-        }
     }
 
     // ========================================================
@@ -764,19 +990,6 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
             }
         }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (root.isScreenRecording) {
-                    root.switchMode("recorder");
-                } else {
-                    dash.showMusicInfo = !dash.showMusicInfo;
-                }
-            }
-        }
     }
 
     // ========================================================
@@ -859,19 +1072,6 @@ Item {
             IrisWaveform {
                 running: dash.isMediaPlaying && root.activeMode === "idle"
                 Layout.alignment: Qt.AlignVCenter
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                if (root.isScreenRecording) {
-                    root.switchMode("recorder");
-                } else {
-                    dash.showMusicInfo = false;
-                }
             }
         }
     }

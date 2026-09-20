@@ -37,11 +37,11 @@ FocusScope {
         Rectangle {
             id: backBtn
             anchors.left: parent.left
-            anchors.leftMargin: 6
+            anchors.leftMargin: 8
             anchors.verticalCenter: parent.verticalCenter
-            width: 34
-            height: 34
-            radius: 11
+            width: 32
+            height: 32
+            radius: 10
             color: backMouse.containsMouse ? (Theme.colors.hover_bg ?? "#252b3d") : (Theme.colors.card_bg ?? "#181b28")
             border.width: 1
             border.color: backMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba(255, 255, 255, 0.06)
@@ -53,7 +53,7 @@ FocusScope {
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "arrow_back"
-                iconSize: 17
+                iconSize: 16
                 color: backMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_primary ?? "#e2e8f0")
             }
 
@@ -69,10 +69,12 @@ FocusScope {
             }
         }
 
-        // 2. Centered Power Action Buttons Container
+        // 2. Power Action Buttons Container (Right-aligned with balanced margins)
         RowLayout {
-            anchors.centerIn: parent
-            spacing: 16
+            anchors.right: parent.right
+            anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
 
             // Hold Button Component — solid, filled Android-style circular tile with progress ring
             component HoldButton: Item {
@@ -85,18 +87,18 @@ FocusScope {
                 property color activeColor: Theme.colors.accent ?? "#7aa2f7"
                 property real progress: 0.0
 
-                readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+                readonly property color baseTileColor: Theme.colors.card_bg ?? "#14161f"
 
-                Layout.preferredWidth: 68
+                Layout.preferredWidth: 66
                 Layout.preferredHeight: 82
                 Layout.alignment: Qt.AlignVCenter
 
                 opacity: root.activeMode === "powermenu" ? 1.0 : 0.0
                 transform: Translate {
                     y: root.activeMode === "powermenu" ? 0 : 6
-                    Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: btnRoot.motionCurve } }
+                    Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
-                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: btnRoot.motionCurve } }
+                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
                 NumberAnimation on progress {
                     id: chargeAnim
@@ -119,38 +121,49 @@ FocusScope {
                     // Solid circular tile
                     Rectangle {
                         id: circleBg
-                        width: 52
-                        height: 52
-                        radius: 26
+                        width: 50
+                        height: 50
+                        radius: 25
                         anchors.horizontalCenter: parent.horizontalCenter
-                        color: (holdMouse.pressed || holdMouse.containsMouse || btnRoot.isFocused)
-                            ? Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, holdMouse.pressed ? 0.32 : 0.20)
-                            : "#121216"
-                        scale: holdMouse.pressed ? 0.92 : (btnRoot.isFocused ? 1.05 : (holdMouse.containsMouse ? 1.03 : 1.0))
+                        color: holdMouse.pressed
+                            ? Qt.tint(btnRoot.baseTileColor, Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, 0.38))
+                            : (btnRoot.isFocused || holdMouse.containsMouse)
+                                ? Qt.tint(btnRoot.baseTileColor, Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, 0.22))
+                                : btnRoot.baseTileColor
+                        scale: holdMouse.pressed ? 0.94 : (btnRoot.isFocused ? 1.04 : (holdMouse.containsMouse ? 1.02 : 1.0))
 
-                        Behavior on color { ColorAnimation { duration: 180 } }
-                        Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: btnRoot.motionCurve } }
+                        Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
-                        // Faint track ring
+                        // Faint track ring with smooth focus highlight
                         Rectangle {
+                            id: trackRing
                             anchors.fill: parent
                             anchors.margins: -4
                             radius: width / 2
                             color: "transparent"
-                            border.width: 2.5
-                            border.color: Qt.rgba(255, 255, 255, 0.07)
+                            border.width: 2
+                            border.color: holdMouse.pressed
+                                ? Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, 0.85)
+                                : (btnRoot.isFocused || holdMouse.containsMouse)
+                                    ? Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, 0.60)
+                                    : Qt.rgba(255, 255, 255, 0.07)
+                            Behavior on border.color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
                         }
 
-                        // Circular Fill Progress Ring
+                        // Circular Fill Progress Ring (only visible & rendered when charging)
                         Canvas {
                             id: progressCanvas
                             anchors.fill: parent
                             anchors.margins: -4
+                            visible: btnRoot.progress > 0.001
                             renderTarget: Canvas.FramebufferObject
 
                             Connections {
                                 target: btnRoot
-                                function onProgressChanged() { progressCanvas.requestPaint(); }
+                                function onProgressChanged() {
+                                    if (btnRoot.progress > 0.001) progressCanvas.requestPaint();
+                                }
                             }
 
                             onPaint: {
@@ -164,7 +177,7 @@ FocusScope {
 
                                 ctx.beginPath();
                                 ctx.arc(centerX, centerY, radius, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * btnRoot.progress), false);
-                                ctx.lineWidth = 3.5;
+                                ctx.lineWidth = 3.0;
                                 ctx.strokeStyle = btnRoot.activeColor;
                                 ctx.lineCap = "round";
                                 ctx.stroke();
@@ -176,7 +189,10 @@ FocusScope {
                             anchors.centerIn: parent
                             text: btnRoot.iconText
                             iconSize: 22
-                            color: btnRoot.activeColor
+                            color: (btnRoot.isFocused || holdMouse.containsMouse)
+                                ? btnRoot.activeColor
+                                : Qt.rgba(btnRoot.activeColor.r, btnRoot.activeColor.g, btnRoot.activeColor.b, 0.70)
+                            Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
                         }
 
                         MouseArea {
@@ -186,6 +202,7 @@ FocusScope {
                             cursorShape: Qt.PointingHandCursor
 
                             onPressed: {
+                                powerMenu.currentIndex = btnRoot.btnIndex;
                                 btnRoot.progress = 0.0;
                                 chargeAnim.restart();
                             }
@@ -200,15 +217,17 @@ FocusScope {
                         }
                     }
 
-                    // Label
+                    // Label (constant weight avoids horizontal layout shift; smooth color fade)
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: btnRoot.label
                         font.family: "Noto Sans"
                         font.pixelSize: 11
-                        font.weight: btnRoot.isFocused ? Font.Bold : Font.DemiBold
-                        color: btnRoot.isFocused ? btnRoot.activeColor : (holdMouse.containsMouse ? "#ffffff" : (Theme.colors.text_secondary ?? "#94a3b8"))
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        font.weight: Font.DemiBold
+                        color: btnRoot.isFocused
+                            ? btnRoot.activeColor
+                            : (holdMouse.containsMouse ? "#ffffff" : (Theme.colors.text_secondary ?? "#94a3b8"))
+                        Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
                     }
                 }
             }

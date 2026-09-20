@@ -14,8 +14,19 @@ Item {
     // ========================================================
     // STATE PROPERTIES & CONTROLS
     // ========================================================
-    property string activeSection: "" // "" (main), "audio"
+    property string activeSection: "" // "" (main), "audio", "vpn"
+    onActiveSectionChanged: {
+        if (activeSection === "audio") {
+            fetchAudioDevices.running = true;
+        } else if (activeSection === "vpn") {
+            fetchVpnStatus.running = true;
+        }
+    }
 
+    Component.onCompleted: {
+        fetchAudioDevices.running = true;
+        fetchVpnStatus.running = true;
+    }
     property bool nightLightActive: false
     property bool caffeineActive: false
     property bool audioMuted: false
@@ -120,21 +131,35 @@ Item {
         checkNightLight.running = true;
     }
 
-    // 4. Caffeine (systemd-inhibit)
+    // 4. Caffeine / Keep Me Awake (hypridle inhibitor)
     Process {
         id: caffeineInhibitor
         running: false
-        command: ["systemd-inhibit", "--what=idle", "--who=quickshell", "--why=Caffeine", "sleep", "infinity"]
+        command: ["systemd-inhibit", "--what=idle:sleep", "--who=quickshell", "--why=Keep Me Awake", "sleep", "infinity"]
+    }
+
+    Process {
+        id: checkCaffeineState
+        running: false
+        command: ["sh", "-c", "if [ -f /tmp/quickshell_keep_awake ]; then if pidof hypridle >/dev/null 2>&1; then rm -f /tmp/quickshell_keep_awake; echo 'inactive'; else echo 'active'; fi; else echo 'inactive'; fi"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                utilModule.caffeineActive = (this.text.trim() === "active");
+            }
+        }
     }
 
     function toggleCaffeine() {
         if (caffeineActive) {
             caffeineInhibitor.running = false;
             caffeineActive = false;
+            Quickshell.execDetached(["sh", "-c", "rm -f /tmp/quickshell_keep_awake; pidof hypridle >/dev/null 2>&1 || hyprctl dispatch exec hypridle || hypridle &"]);
         } else {
-            caffeineInhibitor.running = true;
             caffeineActive = true;
+            Quickshell.execDetached(["sh", "-c", "touch /tmp/quickshell_keep_awake; killall -9 hypridle 2>/dev/null; brightnessctl -r 2>/dev/null; hyprctl dispatch dpms on 2>/dev/null"]);
+            caffeineInhibitor.running = true;
         }
+        checkCaffeineState.running = true;
     }
 
     // 5. Screen OCR
@@ -149,10 +174,11 @@ Item {
         Quickshell.execDetached(["sh", "-c", "sleep 0.15; hyprpicker -a && notify-send 'Color Picker' \"Copied $(wl-paste) to clipboard\""]);
     }
 
-    // 7. Area Screenshot (grim + slurp)
+    // 7. Area Screenshot Hub (grim + slurp -> Dynamic Island annotation hub)
     function triggerScreenshot() {
         root.collapseToIdle();
-        Quickshell.execDetached(["sh", "-c", 'sleep 0.15; F="$HOME/Pictures/Screenshots/Screenshot_$(date +%Y%m%d_%H%M%S).png"; mkdir -p "$(dirname "$F")"; grim -g "$(slurp)" "$F" && wl-copy < "$F" && notify-send "Screenshot" "Area copied to clipboard and saved"']);
+        var hubScript = Quickshell.env("HOME") + "/.config/quickshell/scripts/screenshot_hub.sh";
+        Quickshell.execDetached(["bash", hubScript]);
     }
 
     // 8. Audio Volume & Mute (wpctl)
@@ -260,16 +286,155 @@ Item {
         }
     }
 
+    function cleanDeviceName(name, desc) {
+        var d = (desc && desc.length > 0) ? desc : (name || "Audio Device");
+        d = d.replace(/^Alder Lake PCH-P High Definition Audio Controller\s*/i, "");
+        return d.trim() || desc || name;
+    }
+
+    function getSinkIcon(name, desc) {
+        var n = ((name || "") + " " + (desc || "")).toLowerCase();
+        if (n.includes("bluez") || n.includes("buds") || n.includes("headset") || n.includes("headphone") || n.includes("ear")) return "headphones";
+        if (n.includes("hdmi") || n.includes("displayport") || n.includes("tv")) return "tv";
+        return "speaker";
+    }
+
     function setDefaultSink(sinkName) {
+        var updated = [];
+        for (var i = 0; i < utilModule.audioSinks.length; i++) {
+            var item = utilModule.audioSinks[i];
+            updated.push({
+                id: item.id,
+                name: item.name,
+                desc: item.desc,
+                isDefault: (item.name === sinkName)
+            });
+        }
+        utilModule.audioSinks = updated;
+
         Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", ""), "set-sink", sinkName]);
-        fetchAudioDevices.running = true;
-        fetchVolumeProcess.running = true;
+        Quickshell.execDetached(["pactl", "set-default-sink", sinkName]);
+        audioRefreshTimer.restart();
     }
 
     function setDefaultSource(sourceName) {
+        var updated = [];
+        for (var i = 0; i < utilModule.audioSources.length; i++) {
+            var item = utilModule.audioSources[i];
+            updated.push({
+                id: item.id,
+                name: item.name,
+                desc: item.desc,
+                isDefault: (item.name === sourceName)
+            });
+        }
+        utilModule.audioSources = updated;
+
         Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", ""), "set-source", sourceName]);
-        fetchAudioDevices.running = true;
-        fetchMicProcess.running = true;
+        Quickshell.execDetached(["pactl", "set-default-source", sourceName]);
+        audioRefreshTimer.restart();
+    }
+
+    Timer {
+        id: audioRefreshTimer
+        interval: 350
+        repeat: false
+        running: false
+        onTriggered: {
+            fetchAudioDevices.running = true;
+            fetchVolumeProcess.running = true;
+            fetchMicProcess.running = true;
+        }
+    }
+
+    // 11. VPN State & Management (Cloudflare WARP, Tailscale, WireGuard, NM VPNs)
+    property bool vpnActive: false
+    property bool vpnConnecting: false
+    property string activeVpnName: "Disconnected"
+    property string activeVpnId: "none"
+    property string defaultVpnId: "warp"
+    property var vpnProviders: []
+
+    Process {
+        id: fetchVpnStatus
+        running: false
+        command: ["python3", Qt.resolvedUrl("../scripts/vpn_manager.py").toString().replace("file://", ""), "status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!this.text || this.text.trim() === "") return;
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    utilModule.vpnActive = data.connected || false;
+                    utilModule.vpnConnecting = data.connecting || false;
+                    utilModule.activeVpnName = data.active_name || (data.connecting ? "Connecting..." : "Disconnected");
+                    utilModule.activeVpnId = data.active_id || "none";
+                    utilModule.defaultVpnId = data.default_id || "warp";
+                    utilModule.vpnProviders = data.providers || [];
+                } catch (e) {}
+            }
+        }
+    }
+
+    function toggleVpn(providerId) {
+        var isBusy = utilModule.vpnActive || utilModule.vpnConnecting;
+        if (providerId) {
+            var targetRunning = false;
+            for (var i = 0; i < utilModule.vpnProviders.length; i++) {
+                var p = utilModule.vpnProviders[i];
+                if (p.id === providerId && (p.active || p.connecting)) {
+                    targetRunning = true;
+                    break;
+                }
+            }
+            if (targetRunning || isBusy) {
+                // User wants to turn off
+                utilModule.vpnActive = false;
+                utilModule.vpnConnecting = false;
+                utilModule.activeVpnName = "Disconnected";
+                Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/vpn_manager.py").toString().replace("file://", ""), "disconnect", providerId]);
+                if (providerId === "warp") {
+                    Quickshell.execDetached(["warp-cli", "--accept-tos", "disconnect"]);
+                }
+            } else {
+                // User wants to connect
+                utilModule.vpnConnecting = true;
+                utilModule.activeVpnName = "Connecting...";
+                Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/vpn_manager.py").toString().replace("file://", ""), "toggle", providerId]);
+            }
+        } else {
+            // Main VPN toggle
+            if (isBusy) {
+                // Immediately turn off warp-cli regardless of whether it is connecting right now or already connected!
+                utilModule.vpnActive = false;
+                utilModule.vpnConnecting = false;
+                utilModule.activeVpnName = "Disconnected";
+                Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/vpn_manager.py").toString().replace("file://", ""), "disconnect"]);
+                Quickshell.execDetached(["warp-cli", "--accept-tos", "disconnect"]);
+            } else {
+                // Immediately show connecting visual cues!
+                utilModule.vpnConnecting = true;
+                utilModule.activeVpnName = "Connecting...";
+                Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/vpn_manager.py").toString().replace("file://", ""), "toggle"]);
+            }
+        }
+        vpnPollTimer.ticks = 0;
+        vpnPollTimer.restart();
+    }
+
+    Timer {
+        id: vpnPollTimer
+        interval: 800
+        repeat: true
+        running: false
+        property int ticks: 0
+        onTriggered: {
+            fetchVpnStatus.running = true;
+            ticks++;
+            if (ticks > 6) {
+                running = false;
+                ticks = 0;
+            }
+        }
     }
 
     Timer {
@@ -280,10 +445,13 @@ Item {
         onTriggered: {
             checkWifiRadio.running = true;
             checkNightLight.running = true;
+            checkCaffeineState.running = true;
             fetchVolumeProcess.running = true;
             fetchMicProcess.running = true;
             fetchBrightnessProcess.running = true;
+            fetchVpnStatus.running = true;
             if (utilModule.activeSection === "audio") fetchAudioDevices.running = true;
+            if (utilModule.activeSection === "vpn") fetchVpnStatus.running = true;
         }
     }
 
@@ -382,6 +550,14 @@ Item {
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
+            }
+
+            MaterialSymbol {
+                visible: pill.isSplit
+                text: "chevron_right"
+                iconSize: 15
+                color: pill.isActive ? "#ffffff" : utilModule.colMuted
+                opacity: 0.5
             }
         }
 
@@ -598,13 +774,16 @@ Item {
         implicitHeight: 36
         radius: 12
 
-        color: chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+        color: chip.lit
+            ? Qt.tint(utilModule.colCard, Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, chipMouse.containsMouse ? 0.28 : 0.16))
+            : (chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
         border.width: 1
-        border.color: Qt.rgba(255, 255, 255, 0.05)
+        border.color: chip.lit ? Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, 0.35) : Qt.rgba(255, 255, 255, 0.05)
 
         scale: chipMouse.pressed ? 0.92 : 1.0
         Behavior on scale { NumberAnimation { duration: 90 } }
         Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on border.color { ColorAnimation { duration: 110 } }
 
         MaterialSymbol {
             anchors.centerIn: parent
@@ -684,7 +863,7 @@ Item {
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: utilModule.activeSection !== "" ? "arrow_back" : "tune"
+                    text: utilModule.activeSection !== "" ? "arrow_back" : "close"
                     iconSize: 15
                     color: utilModule.activeSection !== "" ? utilModule.colAccent : "#e2e8f0"
                 }
@@ -709,7 +888,7 @@ Item {
                 spacing: 0
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Sound Devices" : "Control Center"
+                    text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : "Control Center")
                     font.family: "Noto Sans"
                     font.pixelSize: 13
                     font.weight: Font.Bold
@@ -717,7 +896,7 @@ Item {
                 }
 
                 Text {
-                    text: utilModule.activeSection !== "" ? "Select preferred output & input" : Qt.formatDate(clock.date, "dddd, d MMMM")
+                    text: utilModule.activeSection === "audio" ? "Select preferred output & input" : (utilModule.activeSection === "vpn" ? "Select VPN provider or quick-connect" : Qt.formatDate(clock.date, "dddd, d MMMM"))
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: "#94a3b8"
@@ -761,7 +940,36 @@ Item {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
                 }
+            }
 
+            // Quick Disconnect Button in Header when in VPN subview
+            Rectangle {
+                visible: utilModule.activeSection === "vpn" && (utilModule.vpnActive || utilModule.vpnConnecting)
+                Layout.alignment: Qt.AlignRight
+                width: headerDisconnectText.implicitWidth + 16
+                height: 24
+                radius: 12
+                color: headerDiscMouse.containsMouse ? "#3a1e24" : "#241418"
+                border.width: 1
+                border.color: "#f7768e"
+
+                Text {
+                    id: headerDisconnectText
+                    anchors.centerIn: parent
+                    text: utilModule.vpnConnecting ? "Cancel" : "Disconnect"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    color: "#f7768e"
+                }
+
+                MouseArea {
+                    id: headerDiscMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: utilModule.toggleVpn()
+                }
             }
         }
 
@@ -791,22 +999,31 @@ Item {
                         }
                         return "Disconnected";
                     }
-                    isActive: utilModule.wifiEnabled
+                    isActive: (utilModule.activeNetType === "eth") || utilModule.wifiEnabled
                     isSplit: true
                     activeColor: utilModule.colAccent
                     onToggleClicked: utilModule.toggleWifi()
                     onDetailClicked: root.switchMode("wifi", false)
                 }
 
-                // Focus / DND Pill
+                // Record Pill (Material You Pill)
                 MaterialPill {
-                    glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
-                    title: "Focus"
-                    subtitle: root.dndEnabled ? "On" : "Off"
-                    isActive: root.dndEnabled
-                    isSplit: false
-                    activeColor: utilModule.colAccent
-                    onToggleClicked: root.dndEnabled = !root.dndEnabled
+                    glyph: (typeof recMod !== "undefined" && recMod.isRecording) ? "stop_circle" : "radio_button_checked"
+                    title: "Record"
+                    subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording..." : "Screen Record"
+                    isActive: typeof recMod !== "undefined" && recMod.isRecording
+                    isSplit: true
+                    activeColor: "#f7768e"
+                    onToggleClicked: {
+                        if (typeof recMod !== "undefined") {
+                            if (recMod.isRecording) {
+                                recMod.stopRecording();
+                            } else {
+                                recMod.startRecording(false);
+                            }
+                        }
+                    }
+                    onDetailClicked: root.switchMode("recorder", false)
                 }
 
                 // Lock Circular Button
@@ -846,15 +1063,23 @@ Item {
                     onDetailClicked: root.switchMode("bluetooth", false)
                 }
 
-                // Night Light Pill (hyprsunset)
+                // VPN Pill (Split: disc quick-toggles default VPN, body opens VPN provider list)
                 MaterialPill {
-                    glyph: "nightlight"
-                    title: "Night Light"
-                    subtitle: utilModule.nightLightActive ? "On" : "Off"
-                    isActive: utilModule.nightLightActive
-                    isSplit: false
+                    glyph: (utilModule.vpnActive || utilModule.vpnConnecting) ? "shield" : "vpn_key"
+                    title: "VPN"
+                    subtitle: {
+                        if (utilModule.vpnConnecting) return "Connecting...";
+                        if (utilModule.vpnActive) return utilModule.activeVpnName;
+                        return (utilModule.defaultVpnId === "warp" ? "Cloudflare WARP" : "Off");
+                    }
+                    isActive: utilModule.vpnActive || utilModule.vpnConnecting
+                    isSplit: true
                     activeColor: utilModule.colAccent
-                    onToggleClicked: utilModule.toggleNightLight()
+                    onToggleClicked: utilModule.toggleVpn()
+                    onDetailClicked: {
+                        utilModule.activeSection = "vpn";
+                        fetchVpnStatus.running = true;
+                    }
                 }
 
                 // Power Circular Button
@@ -901,7 +1126,7 @@ Item {
                 onIconClicked: utilModule.setBrightness(utilModule.displayBrightness > 0.5 ? 0.2 : 0.8)
             }
 
-            // ROW 5: Secondary Hardware Tools Squircle Row (Mic, Caffeine, Capture, Record, Picker)
+            // ROW 5: Secondary Hardware Tools Squircle Row (Mic, Caffeine, Night Light, Capture, Record, Picker)
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
@@ -923,7 +1148,15 @@ Item {
                     onClicked: utilModule.toggleCaffeine()
                 }
 
-                // 3. Screen Capture (grim + slurp)
+                // 3. Night Light (hyprsunset)
+                MaterialChipBtn {
+                    glyph: "nightlight"
+                    lit: utilModule.nightLightActive
+                    tint: "#e0af68"
+                    onClicked: utilModule.toggleNightLight()
+                }
+
+                // 4. Screen Capture (grim + slurp)
                 MaterialChipBtn {
                     glyph: "crop"
                     lit: false
@@ -931,12 +1164,12 @@ Item {
                     onClicked: utilModule.triggerScreenshot()
                 }
 
-                // 4. Screen Record
+                // 5. Focus / DND
                 MaterialChipBtn {
-                    glyph: (typeof recMod !== "undefined" && recMod.isRecording) ? "stop_circle" : "radio_button_checked"
-                    lit: typeof recMod !== "undefined" && recMod.isRecording
-                    tint: "#f7768e"
-                    onClicked: root.switchMode("recorder", false)
+                    glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
+                    lit: root.dndEnabled
+                    tint: "#bb9af7"
+                    onClicked: root.dndEnabled = !root.dndEnabled
                 }
 
                 // 5. Color Picker (hyprpicker)
@@ -950,159 +1183,315 @@ Item {
         }
 
         // ── 2. SOUND DEVICES SUBVIEW ───────────────────────────────
-        ColumnLayout {
+        Item {
             id: audioSubviewContainer
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
             visible: utilModule.activeSection === "audio"
+            clip: true
 
-            // Tactile Back Header
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
+            Flickable {
+                id: audioScroll
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: audioContentCol.implicitHeight + 14
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
 
-                Rectangle {
-                    width: 28; height: 28; radius: 8
-                    color: audioBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
-                    border.width: 1
-                    border.color: Qt.rgba(255, 255, 255, 0.08)
+                WheelHandler {
+                    onWheel: (event) => {
+                        var maxY = Math.max(0, audioScroll.contentHeight - audioScroll.height);
+                        audioScroll.contentY = Math.max(0, Math.min(maxY, audioScroll.contentY - event.angleDelta.y));
+                    }
+                }
+
+                ColumnLayout {
+                    id: audioContentCol
+                    width: audioScroll.width
+                    spacing: 6
 
                     Text {
-                        anchors.centerIn: parent
-                        text: "󰁍"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: utilModule.colText
+                        text: "OUTPUT AUDIO SINKS"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        color: utilModule.colMuted
+                        Layout.topMargin: 2
+                        Layout.bottomMargin: 2
                     }
 
-                    MouseArea {
-                        id: audioBackMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: utilModule.activeSection = ""
-                    }
-                }
-
-                Text {
-                    text: "OUTPUT AUDIO SINKS"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
-                    color: utilModule.colMuted
-                }
-            }
-
-            Repeater {
-                model: utilModule.audioSinks
-                delegate: Rectangle {
-                    Layout.fillWidth: true
-                    height: 42
-                    radius: 14
-                    color: sinkMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
-                    border.width: 1
-                    border.color: Qt.rgba(255, 255, 255, 0.05)
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12; anchors.rightMargin: 12
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: modelData.name.includes("bluez") ? "headphones" : "speaker"
-                            iconSize: 20
-                            color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                        }
-
-                        Text {
+                    Repeater {
+                        model: utilModule.audioSinks
+                        delegate: Rectangle {
+                            id: sinkItemRect
                             Layout.fillWidth: true
-                            text: modelData.desc || modelData.name
-                            font.family: "Noto Sans"
-                            font.pixelSize: 12
-                            font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
-                            color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                            elide: Text.ElideRight
-                        }
+                            Layout.preferredHeight: 40
+                            implicitHeight: 40
+                            radius: 12
+                            color: modelData.isDefault
+                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.16)
+                                : (sinkMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
+                            border.width: 1
+                            border.color: modelData.isDefault ? utilModule.colAccent : Qt.rgba(255, 255, 255, 0.05)
 
-                        MaterialSymbol {
-                            visible: modelData.isDefault
-                            text: "check_circle"
-                            iconSize: 18
-                            color: utilModule.colAccent
+                            scale: sinkMouse.pressed ? 0.98 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 80 } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12; anchors.rightMargin: 12
+                                spacing: 10
+
+                                MaterialSymbol {
+                                    text: utilModule.getSinkIcon(modelData.name, modelData.desc)
+                                    iconSize: 18
+                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: utilModule.cleanDeviceName(modelData.name, modelData.desc)
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 12
+                                    font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
+                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
+                                    elide: Text.ElideRight
+                                }
+
+                                MaterialSymbol {
+                                    visible: modelData.isDefault
+                                    text: "check_circle"
+                                    iconSize: 18
+                                    color: utilModule.colAccent
+                                }
+                            }
+
+                            MouseArea {
+                                id: sinkMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: utilModule.setDefaultSink(modelData.name)
+                            }
                         }
                     }
 
-                    MouseArea {
-                        id: sinkMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: utilModule.setDefaultSink(modelData.name)
+                    Item { Layout.preferredHeight: 6 }
+
+                    Text {
+                        text: "INPUT MICROPHONE SOURCES"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        color: utilModule.colMuted
+                        Layout.topMargin: 2
+                        Layout.bottomMargin: 2
                     }
-                }
-            }
 
-            Item { Layout.preferredHeight: 4 }
-
-            Text {
-                text: "INPUT MICROPHONE SOURCES"
-                font.family: "Noto Sans"
-                font.pixelSize: 11
-                font.weight: Font.Bold
-                color: utilModule.colMuted
-            }
-
-            Repeater {
-                model: utilModule.audioSources
-                delegate: Rectangle {
-                    Layout.fillWidth: true
-                    height: 42
-                    radius: 14
-                    color: sourceMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
-                    border.width: 1
-                    border.color: Qt.rgba(255, 255, 255, 0.05)
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12; anchors.rightMargin: 12
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: "mic"
-                            iconSize: 20
-                            color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                        }
-
-                        Text {
+                    Repeater {
+                        model: utilModule.audioSources
+                        delegate: Rectangle {
+                            id: sourceItemRect
                             Layout.fillWidth: true
-                            text: modelData.desc || modelData.name
-                            font.family: "Noto Sans"
-                            font.pixelSize: 12
-                            font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
-                            color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                            elide: Text.ElideRight
-                        }
+                            Layout.preferredHeight: 40
+                            implicitHeight: 40
+                            radius: 12
+                            color: modelData.isDefault
+                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.16)
+                                : (sourceMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
+                            border.width: 1
+                            border.color: modelData.isDefault ? utilModule.colAccent : Qt.rgba(255, 255, 255, 0.05)
 
-                        MaterialSymbol {
-                            visible: modelData.isDefault
-                            text: "check_circle"
-                            iconSize: 18
-                            color: utilModule.colAccent
-                        }
-                    }
+                            scale: sourceMouse.pressed ? 0.98 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 80 } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
-                    MouseArea {
-                        id: sourceMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: utilModule.setDefaultSource(modelData.name)
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12; anchors.rightMargin: 12
+                                spacing: 10
+
+                                MaterialSymbol {
+                                    text: "mic"
+                                    iconSize: 18
+                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: utilModule.cleanDeviceName(modelData.name, modelData.desc)
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 12
+                                    font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
+                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
+                                    elide: Text.ElideRight
+                                }
+
+                                MaterialSymbol {
+                                    visible: modelData.isDefault
+                                    text: "check_circle"
+                                    iconSize: 18
+                                    color: utilModule.colAccent
+                                }
+                            }
+
+                            MouseArea {
+                                id: sourceMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: utilModule.setDefaultSource(modelData.name)
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            Item { Layout.fillHeight: true }
+        // ── 3. VPN & PRIVACY PROVIDERS SUBVIEW ─────────────────────────
+        Item {
+            id: vpnSubviewContainer
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: utilModule.activeSection === "vpn"
+            clip: true
+
+            Flickable {
+                id: vpnScroll
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: vpnContentCol.implicitHeight + 14
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+
+                WheelHandler {
+                    onWheel: (event) => {
+                        var maxY = Math.max(0, vpnScroll.contentHeight - vpnScroll.height);
+                        vpnScroll.contentY = Math.max(0, Math.min(maxY, vpnScroll.contentY - event.angleDelta.y));
+                    }
+                }
+
+                ColumnLayout {
+                    id: vpnContentCol
+                    width: vpnScroll.width
+                    spacing: 6
+
+                    Repeater {
+                        model: utilModule.vpnProviders
+                        delegate: Rectangle {
+                            id: vpnCard
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 48
+                            implicitHeight: 48
+                            radius: 14
+                            color: (modelData.active || modelData.connecting)
+                                ? Qt.tint(utilModule.colCard, Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, cardMouse.containsMouse ? 0.28 : 0.16))
+                                : (cardMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
+                            border.width: 1
+                            border.color: (modelData.active || modelData.connecting) ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.4) : Qt.rgba(255, 255, 255, 0.05)
+
+                            scale: cardMouse.pressed ? 0.98 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 90 } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.color { ColorAnimation { duration: 120 } }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12; anchors.rightMargin: 12
+                                spacing: 10
+
+                                // Provider Icon Disc
+                                Rectangle {
+                                    width: 32; height: 32; radius: 16
+                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? "#1c1c24" : "#141418")
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon || "shield"
+                                        iconSize: 17
+                                        color: (modelData.active || modelData.connecting) ? "#000000" : (modelData.installed ? "#e2e8f0" : "#64748b")
+                                    }
+                                }
+
+                                // Provider Info
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+
+                                    RowLayout {
+                                        spacing: 6
+                                        Text {
+                                            text: modelData.name
+                                            font.family: "Noto Sans"
+                                            font.pixelSize: 12
+                                            font.weight: Font.DemiBold
+                                            color: (modelData.active || modelData.connecting) ? utilModule.colAccent : utilModule.colText
+                                        }
+
+                                        Rectangle {
+                                            visible: modelData.is_default && !modelData.active && !modelData.connecting
+                                            width: defText.implicitWidth + 8
+                                            height: 16
+                                            radius: 8
+                                            color: Qt.rgba(255, 255, 255, 0.08)
+
+                                            Text {
+                                                id: defText
+                                                anchors.centerIn: parent
+                                                text: "Default"
+                                                font.family: "Noto Sans"
+                                                font.pixelSize: 9
+                                                font.weight: Font.Normal
+                                                color: utilModule.colMuted
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: modelData.connecting ? "Connecting to network..." : (modelData.installed ? modelData.subtitle : "Not installed on system")
+                                        font.family: "Noto Sans"
+                                        font.pixelSize: 10
+                                        color: (modelData.active || modelData.connecting) ? utilModule.colAccent : utilModule.colMuted
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                // Status Indicator / Connect Button
+                                Rectangle {
+                                    width: statusLabel.implicitWidth + 14
+                                    height: 26
+                                    radius: 13
+                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.07) : "transparent")
+
+                                    Text {
+                                        id: statusLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.connecting ? "Connecting..." : (modelData.active ? "Connected" : (modelData.installed ? "Connect" : "Install"))
+                                        font.family: "Noto Sans"
+                                        font.pixelSize: 10
+                                        font.weight: Font.DemiBold
+                                        color: (modelData.active || modelData.connecting) ? "#000000" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: cardMouse
+                                anchors.fill: parent
+                                cursorShape: modelData.installed ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                hoverEnabled: true
+                                enabled: modelData.installed
+                                onClicked: {
+                                    utilModule.toggleVpn(modelData.id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

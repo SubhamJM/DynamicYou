@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
 
-# Freeze and select screen region with slurp (redirect stdin from /dev/null to avoid blocking on pipe)
-GEOM=$(slurp < /dev/null 2>/dev/null)
-if [ -z "$GEOM" ]; then
-    exit 0
-fi
+# If an existing image file is provided as $1, run OCR directly on it
+if [ -n "$1" ] && [ -f "$1" ]; then
+    RAW_TEXT=$(tesseract "$1" stdout -l eng --psm 3 2>/dev/null)
+    if [ -z "$RAW_TEXT" ]; then
+        RAW_TEXT=$(tesseract "$1" stdout -l eng --psm 6 2>/dev/null)
+    fi
+else
+    # Freeze and select screen region with slurp (redirect stdin from /dev/null to avoid blocking on pipe)
+    GEOM=$(slurp < /dev/null 2>/dev/null)
+    if [ -z "$GEOM" ]; then
+        exit 0
+    fi
 
-# Tiny delay to ensure slurp selection overlay is completely cleared
-sleep 0.1
+    # Tiny delay to ensure slurp selection overlay is completely cleared
+    sleep 0.1
 
-# Capture screenshot of region with grim and run tesseract OCR
-RAW_TEXT=$(grim -g "$GEOM" - | tesseract stdin stdout -l eng --psm 3 2>/dev/null)
-if [ -z "$RAW_TEXT" ]; then
-    RAW_TEXT=$(grim -g "$GEOM" - | tesseract stdin stdout -l eng --psm 6 2>/dev/null)
+    # Capture screenshot of region with grim and run tesseract OCR
+    RAW_TEXT=$(grim -g "$GEOM" - | tesseract stdin stdout -l eng --psm 3 2>/dev/null)
+    if [ -z "$RAW_TEXT" ]; then
+        RAW_TEXT=$(grim -g "$GEOM" - | tesseract stdin stdout -l eng --psm 6 2>/dev/null)
+    fi
 fi
 
 # Clean up form feeds and trim leading/trailing whitespace

@@ -761,12 +761,9 @@ except Exception:
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: {
-                    root.activeMode = "idle";
-                    Quickshell.execDetached(["sh", "-c", `
-                        mkdir -p ~/Pictures/Screenshots
-                        F="$HOME/Pictures/Screenshots/screenshot_$(date +%Y%m%d_%H%M%S).png"
-                        grim -g "$(slurp)" "$F" && wl-copy < "$F"
-                    `]);
+                    root.collapseToIdle();
+                    var hubScript = Quickshell.env("HOME") + "/.config/quickshell/scripts/screenshot_hub.sh";
+                    Quickshell.execDetached(["bash", hubScript]);
                 }
             }
         }

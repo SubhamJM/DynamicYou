@@ -48,10 +48,34 @@ def get_audio_info():
 
     return {"sinks": sinks, "sources": sources}
 
+def set_sink(sink_name):
+    try:
+        subprocess.run(['pactl', 'set-default-sink', sink_name], check=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(['pactl', 'list', 'short', 'sink-inputs'], text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            parts = line.strip().split()
+            if parts:
+                input_id = parts[0]
+                subprocess.run(['pactl', 'move-sink-input', input_id, sink_name], stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def set_source(source_name):
+    try:
+        subprocess.run(['pactl', 'set-default-source', source_name], check=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(['pactl', 'list', 'short', 'source-outputs'], text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            parts = line.strip().split()
+            if parts:
+                output_id = parts[0]
+                subprocess.run(['pactl', 'move-source-output', output_id, source_name], stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     if len(sys.argv) > 2 and sys.argv[1] == "set-sink":
-        subprocess.run(['pactl', 'set-default-sink', sys.argv[2]])
+        set_sink(sys.argv[2])
     elif len(sys.argv) > 2 and sys.argv[1] == "set-source":
-        subprocess.run(['pactl', 'set-default-source', sys.argv[2]])
+        set_source(sys.argv[2])
     else:
         print(json.dumps(get_audio_info()))
