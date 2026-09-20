@@ -14,6 +14,8 @@ try:
     # Priority selection: Playing with title > Playing > Paused with title > Any with title
     candidates = []
     for p in players:
+        if "playerctld" in p.lower():
+            continue
         try:
             proxy = bus.get_object(p, "/org/mpris/MediaPlayer2")
             props_iface = dbus.Interface(proxy, "org.freedesktop.DBus.Properties")
@@ -58,7 +60,9 @@ try:
                 hash_val = hashlib.md5(art.encode()).hexdigest()
                 cache_path = f"/tmp/mpris_art_{hash_val}.jpg"
                 if not os.path.exists(cache_path) or os.path.getsize(cache_path) == 0:
-                    urllib.request.urlretrieve(art, cache_path)
+                    tmp_dl = cache_path + ".tmp"
+                    urllib.request.urlretrieve(art, tmp_dl)
+                    os.replace(tmp_dl, cache_path)
                 art = f"file://{cache_path}"
             except Exception:
                 pass
@@ -71,8 +75,52 @@ try:
             length = int(meta.get("mpris:length", 0))
         except Exception:
             length = 0
-        print(f"{status}\n{title}\n{artist}\n{art}\n{pos}\n{length}")
+
+        # Extract vibrant color using Iris 1:1 ColorQuantizer algorithm
+        vibrant_hex = ""
+        img_path = ""
+        if art.startswith("file://"):
+            img_path = art[7:]
+        elif os.path.exists(art):
+            img_path = art
+
+        if img_path and os.path.exists(img_path):
+            try:
+                from PIL import Image, ImageFile
+                import colorsys
+                ImageFile.LOAD_TRUNCATED_IMAGES = True
+                im = Image.open(img_path).convert("RGB")
+                im = im.resize((48, 48))
+                colors = im.getcolors(48 * 48)
+                if colors:
+                    best = None
+                    best_score = -1
+                    for count, col in colors:
+                        r, g, b = [x / 255.0 for x in col[:3]]
+                        h, l, s = colorsys.rgb_to_hls(r, g, b)
+                        if s < 0.14 or h < 0:
+                            continue
+                        score = s * (1.0 - abs(l - 0.5))
+                        if score > best_score:
+                            best_score = score
+                            target_s = max(0.50, min(1.0, s))
+                            target_l = max(0.64, min(0.76, l + 0.22))
+                            r2, g2, b2 = colorsys.hls_to_rgb(h, target_l, target_s)
+                            best = f"#{int(r2*255):02x}{int(g2*255):02x}{int(b2*255):02x}"
+                    if best:
+                        vibrant_hex = best
+            except Exception:
+                pass
+
+        if vibrant_hex:
+            try:
+                with open("/tmp/current_accent.txt", "w") as f:
+                    f.write(vibrant_hex)
+            except Exception:
+                pass
+
+        print(f"{status}\n{title}\n{artist}\n{art}\n{pos}\n{length}\n{vibrant_hex}")
     else:
-        print("\n\n\n\n\n")
+        print("\n\n\n\n\n\n")
 except Exception:
-    print("\n\n\n\n\n")
+    print("\n\n\n\n\n\n")

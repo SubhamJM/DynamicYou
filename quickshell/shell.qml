@@ -148,7 +148,7 @@ ShellRoot {
     }
 
     readonly property bool isDashMode: activeMode === "idle" || activeMode === "hover"
-    readonly property bool isPopupMode: activeMode === "launcher" || activeMode === "wifi" || activeMode === "bluetooth" || activeMode === "utility" || activeMode === "battery" || activeMode === "recorder" || activeMode === "calendar" || activeMode === "notifications" || activeMode === "shelf" || activeMode === "notes" || activeMode === "cheatsheet" || activeMode === "clipboard" || activeMode === "hover" || activeMode === "music"
+    readonly property bool isPopupMode: activeMode !== "idle" && activeMode !== "osd"
 
     function collapseToIdle() {
         root.isWorkspacePeeking = false;
@@ -167,6 +167,9 @@ ShellRoot {
         } else {
             root.openedViaShortcut = fromShortcut;
             root.activeMode = newMode;
+            if (newMode !== "launcher" && (notchHoverHandler.hovered || (extendedHoverArea.enabled && extendedHoverArea.containsMouse))) {
+                root.openedViaShortcut = false;
+            }
         }
     }
 
@@ -255,8 +258,8 @@ ShellRoot {
         }
         if (activeMode === "launcher") {
             return typeof launcherMod !== "undefined"
-                ? NotchConfig.calculateLauncherHeight(launcherMod.calculatedCount, launcherMod.allApps.length)
-                : 360;
+                ? NotchConfig.calculateLauncherHeight(launcherMod.calculatedCount, launcherMod.allApps.length, launcherMod.browsing)
+                : 246;
         }
         if (activeMode === "transition" || activeMode === "calendar" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
             var mDim = NotchConfig.modeDimensions[activeMode];
@@ -288,7 +291,7 @@ ShellRoot {
                 : 400;
         }
         if (activeMode === "music") {
-            return typeof musicMod !== "undefined" ? musicMod.calculatedHeight : 335;
+            return typeof musicMod !== "undefined" ? musicMod.calculatedHeight : 265;
         }
         if (activeMode === "idle") {
             return 32;
@@ -438,6 +441,12 @@ while True:
                     if (parts.length > 1) {
                         var scPath = parts.slice(1).join(" ").trim();
                         root.triggerScreenshotHub(scPath);
+                    }
+                } else if (m.startsWith("search ")) {
+                    root.openedViaShortcut = true;
+                    root.activeMode = "launcher";
+                    if (typeof launcherMod !== "undefined") {
+                        launcherMod.searchInput.text = m.substring(7);
                     }
                 } else if (m !== "") {
                     root.openedViaShortcut = true;
@@ -603,10 +612,10 @@ while True:
         }
     }
 
-    // Native Hyprland focus grabber: captures outside clicks and closes the expanded notch
+    // Native Hyprland focus grabber (disabled to prevent background window focus changes from collapsing popups)
     HyprlandFocusGrab {
         id: focusGrab
-        active: !root.isDashMode && root.activeMode !== "osd" && (!shelfMod || !shelfMod.isDragging)
+        active: false
         windows: [panel]
         onCleared: {
             if (typeof shelfMod !== "undefined" && shelfMod.isDragging) return;
@@ -649,9 +658,11 @@ while True:
                 : notchContainer
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
-            ? WlrKeyboardFocus.OnDemand 
-            : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.activeMode === "launcher"
+            ? WlrKeyboardFocus.Exclusive
+            : ((root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
+                ? WlrKeyboardFocus.OnDemand 
+                : WlrKeyboardFocus.None)
 
         // Fullscreen click-away backdrop: collapses any open popup/menu when clicking anywhere outside
         MouseArea {
@@ -752,6 +763,23 @@ while True:
                 }
             }
 
+            MouseArea {
+                id: extendedHoverArea
+                anchors.fill: notch
+                anchors.margins: -20
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                enabled: root.isPopupMode
+                onContainsMouseChanged: {
+                    if (containsMouse) {
+                        if (root.activeMode !== "launcher") root.openedViaShortcut = false;
+                        autoCollapseTimer.stop();
+                    } else if (root.activeMode !== "launcher" && !notchHoverHandler.hovered && !root.openedViaShortcut) {
+                        autoCollapseTimer.restart();
+                    }
+                }
+            }
+
             // Notch Surface
             Rectangle {
                 id: notch
@@ -785,7 +813,7 @@ while True:
 
                     opacity: (root.isDashMode && root.activeMode !== "osd") ? 1.0 : 0.0
                     visible: opacity > 0.01
-                    Behavior on height { NumberAnimation { duration: root.isOsdMode ? 220 : NotchConfig.animNotchResize; easing.type: Easing.OutExpo } }
+                    Behavior on height { NumberAnimation { duration: root.isOsdMode ? 220 : NotchConfig.animNotchResize; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1] } }
                     Behavior on opacity { NumberAnimation { duration: root.isOsdMode ? 140 : NotchConfig.animDashFade; easing.type: Easing.OutQuad } }
 
                     MainDash { 
@@ -879,6 +907,22 @@ while True:
                     }
                 }
 
+                Timer {
+                    id: autoCollapseTimer
+                    interval: NotchConfig.timerAutoCollapse
+                    repeat: false
+                    onTriggered: {
+                        if (root.openedViaShortcut) return;
+                        if (root.activeMode === "launcher") return;
+                        if (typeof shelfMod !== "undefined" && shelfMod.isDragging) return;
+                        if (typeof utilMod !== "undefined" && (utilMod.isDraggingVolume || utilMod.isDraggingBrightness)) return;
+                        if (typeof musicMod !== "undefined" && musicMod.isDraggingSeek) return;
+                        if (!notchHoverHandler.hovered && (!extendedHoverArea.enabled || !extendedHoverArea.containsMouse) && root.activeMode !== "idle" && root.activeMode !== "osd" && !root.isWorkspacePeeking) {
+                            root.collapseToIdle();
+                        }
+                    }
+                }
+
                 HoverHandler {
                     id: notchHoverHandler
                     enabled: root.activeMode !== "osd"
@@ -886,13 +930,17 @@ while True:
                     onHoveredChanged: {
                         if (typeof shelfMod !== "undefined" && shelfMod.isDragging) return;
                         if (typeof utilMod !== "undefined" && (utilMod.isDraggingVolume || utilMod.isDraggingBrightness)) return;
+                        if (typeof musicMod !== "undefined" && musicMod.isDraggingSeek) return;
                         if (hovered) {
-                            root.openedViaShortcut = false;
+                            autoCollapseTimer.stop();
+                            if (root.activeMode !== "launcher") root.openedViaShortcut = false;
                             root.isWorkspacePeeking = false;
                             if (root.activeMode === "idle") root.activeMode = "hover";
                         } else {
                             if (root.activeMode === "hover") {
                                 root.collapseToIdle();
+                            } else if (root.isPopupMode && root.activeMode !== "launcher" && !root.openedViaShortcut && (!extendedHoverArea.enabled || !extendedHoverArea.containsMouse)) {
+                                autoCollapseTimer.restart();
                             }
                         }
                     }

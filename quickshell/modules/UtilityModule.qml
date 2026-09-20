@@ -39,12 +39,15 @@ Item {
     property bool isDraggingBrightness: false
 
     readonly property color colBg: "#000000"
-    readonly property color colCard: "#0e0e12"
-    readonly property color colCardHover: "#18181c"
-    readonly property color colAccent: Theme.colors.accent ?? "#7aa2f7"
-    readonly property color colText: "#f8fafc"
-    readonly property color colSubtext: "#94a3b8"
-    readonly property color colMuted: "#64748b"
+    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
+    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.12)
+    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.18)
+    readonly property color colAccent: Theme.colors.accent ?? "#a8c7fa"
+    readonly property color colText: "#f5f5f7"
+    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.60)
+    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)
+    readonly property color colBorder: "transparent"
+    readonly property color colBorderHover: "transparent"
 
     // Reactive Connectivity Data
     property bool wifiEnabled: true
@@ -481,11 +484,9 @@ Item {
         radius: 22
 
         color: (discMouse.containsMouse || pillBodyMouse.containsMouse) ? utilModule.colCardHover : utilModule.colCard
-        border.width: 1
-        border.color: Qt.rgba(255, 255, 255, 0.05)
+        border.width: 0
 
-        Behavior on color { ColorAnimation { duration: 150 } }
-        Behavior on border.color { ColorAnimation { duration: 150 } }
+        Behavior on color { ColorAnimation { duration: 120 } }
 
         RowLayout {
             anchors.fill: parent
@@ -499,7 +500,7 @@ Item {
                 width: 36
                 height: 36
                 radius: 18
-                color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? "#222228" : "#18181e")
+                color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.085))
 
                 scale: discMouse.pressed ? 0.90 : 1.0
                 Behavior on scale { NumberAnimation { duration: 90 } }
@@ -510,7 +511,7 @@ Item {
                     text: pill.glyph
                     fill: pill.isActive ? 1 : 0
                     iconSize: 19
-                    color: pill.isActive ? "#000000" : utilModule.colText
+                    color: pill.isActive ? "#101318" : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
 
@@ -546,7 +547,7 @@ Item {
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     font.weight: Font.Normal
-                    color: pill.isActive ? pill.activeColor : utilModule.colMuted
+                    color: pill.isActive ? pill.activeColor : utilModule.colSubtext
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -555,9 +556,9 @@ Item {
             MaterialSymbol {
                 visible: pill.isSplit
                 text: "chevron_right"
-                iconSize: 15
-                color: pill.isActive ? "#ffffff" : utilModule.colMuted
-                opacity: 0.5
+                iconSize: 16
+                color: pill.isActive ? pill.activeColor : utilModule.colSubtext
+                opacity: 0.6
             }
         }
 
@@ -590,8 +591,7 @@ Item {
         implicitHeight: 44
         radius: 22
         color: cmouse.containsMouse ? cbtn.hoverBg : cbtn.customBg
-        border.width: 1
-        border.color: cmouse.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : Qt.rgba(255, 255, 255, 0.05)
+        border.width: 0
 
         scale: cmouse.pressed ? 0.90 : 1.0
         Behavior on scale { NumberAnimation { duration: 90 } }
@@ -633,9 +633,8 @@ Item {
         Layout.fillWidth: true
         implicitHeight: 44
         radius: 22
-        color: utilModule.colCard
-        border.width: 1
-        border.color: Qt.rgba(255, 255, 255, 0.05)
+        color: Qt.rgba(255, 255, 255, 0.085)
+        border.width: 0
 
         scale: scardMouse.pressed ? 0.985 : 1.0
         Behavior on scale { NumberAnimation { duration: 90 } }
@@ -651,7 +650,7 @@ Item {
                 anchors.bottom: parent.bottom
                 width: (scard.muted || scard.currentRatio <= 0.001) ? 0 : Math.max(parent.height, parent.height + (parent.width - parent.height) * scard.currentRatio)
                 radius: scard.radius
-                color: scard.muted ? Qt.rgba(255, 255, 255, 0.1) : scard.activeColor
+                color: scard.muted ? Qt.rgba(255, 255, 255, 0.16) : scard.activeColor
 
                 Behavior on width {
                     enabled: scard.dragVal < 0
@@ -674,7 +673,7 @@ Item {
                 text: scard.icon
                 fill: 1
                 iconSize: 19
-                color: scard.muted ? "#f87171" : (scard.currentRatio > 0.08 ? "#09101d" : utilModule.colText)
+                color: scard.muted ? "#ff6961" : (scard.currentRatio > 0.08 ? "#101318" : utilModule.colText)
                 Behavior on color { ColorAnimation { duration: 90 } }
             }
         }
@@ -682,7 +681,7 @@ Item {
         // Right Percentage Label + Optional Chevron
         RowLayout {
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             z: 5
@@ -692,7 +691,7 @@ Item {
                 font.family: "Noto Sans"
                 font.pixelSize: 11
                 font.weight: Font.Bold
-                color: scard.muted ? "#f87171" : (scard.currentRatio > 0.88 ? "#09101d" : "#ffffff")
+                color: scard.muted ? "#ff6961" : (scard.currentRatio > 0.84 ? "#101318" : "#ffffff")
                 Behavior on color { ColorAnimation { duration: 90 } }
             }
 
@@ -700,7 +699,7 @@ Item {
                 visible: scard.showChevron
                 text: "chevron_right"
                 iconSize: 17
-                color: chevronMouse.containsMouse ? "#ffffff" : (scard.currentRatio > 0.94 ? "#09101d" : utilModule.colMuted)
+                color: chevronMouse.containsMouse ? "#ffffff" : (scard.currentRatio > 0.94 ? "#101318" : utilModule.colSubtext)
                 Behavior on color { ColorAnimation { duration: 90 } }
 
                 MouseArea {
@@ -775,22 +774,20 @@ Item {
         radius: 12
 
         color: chip.lit
-            ? Qt.tint(utilModule.colCard, Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, chipMouse.containsMouse ? 0.28 : 0.16))
+            ? chip.tint
             : (chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-        border.width: 1
-        border.color: chip.lit ? Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, 0.35) : Qt.rgba(255, 255, 255, 0.05)
+        border.width: 0
 
         scale: chipMouse.pressed ? 0.92 : 1.0
         Behavior on scale { NumberAnimation { duration: 90 } }
         Behavior on color { ColorAnimation { duration: 110 } }
-        Behavior on border.color { ColorAnimation { duration: 110 } }
 
         MaterialSymbol {
             anchors.centerIn: parent
             text: chip.glyph
             fill: chip.lit ? 1 : 0
             iconSize: 18
-            color: chip.lit ? chip.tint : utilModule.colText
+            color: chip.lit ? "#101318" : (chipMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
         }
 
         MouseArea {
@@ -802,23 +799,22 @@ Item {
         }
     }
 
-    // 6. Compact 3D Header Quick Action Button
+    // 6. Compact Header Quick Action Button
     component HeaderQuickBtn: Rectangle {
         id: hbtn
         property string glyph: ""
-        property color iconColor: "#e2e8f0"
-        property color customBg: "#121216"
-        property color hoverBg: "#1c1c22"
+        property color iconColor: utilModule.colSubtext
+        property color customBg: utilModule.colCard
+        property color hoverBg: utilModule.colCardHover
         signal clicked()
 
         width: 28
         height: 28
-        radius: 8
+        radius: 14
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
-        border.width: 1
-        border.color: hmouse.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : Qt.rgba(255, 255, 255, 0.04)
+        border.width: 0
 
-        scale: hmouse.pressed ? 0.90 : (hmouse.containsMouse ? 1.06 : 1.0)
+        scale: hmouse.pressed ? 0.90 : (hmouse.containsMouse ? 1.05 : 1.0)
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -826,7 +822,7 @@ Item {
             anchors.centerIn: parent
             text: hbtn.glyph
             iconSize: 15
-            color: hbtn.iconColor
+            color: hmouse.containsMouse ? "#f5f5f7" : hbtn.iconColor
         }
 
         MouseArea {
@@ -854,10 +850,9 @@ Item {
 
             // Tactile Back / Exit Button
             Rectangle {
-                width: 26; height: 26; radius: 8
-                color: headerBackMouse.containsMouse ? "#1c1c22" : "#121216"
-                border.width: 1
-                border.color: headerBackMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.1) : Qt.rgba(255, 255, 255, 0.04)
+                width: 28; height: 28; radius: 14
+                color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+                border.width: 0
                 scale: headerBackMouse.pressed ? 0.90 : 1.0
                 Behavior on scale { NumberAnimation { duration: 90 } }
 
@@ -865,7 +860,7 @@ Item {
                     anchors.centerIn: parent
                     text: utilModule.activeSection !== "" ? "arrow_back" : "close"
                     iconSize: 15
-                    color: utilModule.activeSection !== "" ? utilModule.colAccent : "#e2e8f0"
+                    color: utilModule.activeSection !== "" ? utilModule.colAccent : "#f5f5f7"
                 }
 
                 MouseArea {
@@ -891,15 +886,15 @@ Item {
                     text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : "Control Center")
                     font.family: "Noto Sans"
                     font.pixelSize: 13
-                    font.weight: Font.Bold
-                    color: "#f1f5f9"
+                    font.weight: Font.DemiBold
+                    color: "#f5f5f7"
                 }
 
                 Text {
                     text: utilModule.activeSection === "audio" ? "Select preferred output & input" : (utilModule.activeSection === "vpn" ? "Select VPN provider or quick-connect" : Qt.formatDate(clock.date, "dddd, d MMMM"))
                     font.family: "Noto Sans"
                     font.pixelSize: 10
-                    color: "#94a3b8"
+                    color: utilModule.colSubtext
                 }
             }
 
@@ -949,9 +944,8 @@ Item {
                 width: headerDisconnectText.implicitWidth + 16
                 height: 24
                 radius: 12
-                color: headerDiscMouse.containsMouse ? "#3a1e24" : "#241418"
-                border.width: 1
-                border.color: "#f7768e"
+                color: headerDiscMouse.containsMouse ? Qt.rgba(255, 105, 97, 0.25) : Qt.rgba(255, 105, 97, 0.14)
+                border.width: 0
 
                 Text {
                     id: headerDisconnectText
@@ -960,7 +954,7 @@ Item {
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
-                    color: "#f7768e"
+                    color: "#ff6961"
                 }
 
                 MouseArea {
@@ -1013,7 +1007,7 @@ Item {
                     subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording..." : "Screen Record"
                     isActive: typeof recMod !== "undefined" && recMod.isRecording
                     isSplit: true
-                    activeColor: "#f7768e"
+                    activeColor: "#ff453a"
                     onToggleClicked: {
                         if (typeof recMod !== "undefined") {
                             if (recMod.isRecording) {
@@ -1085,9 +1079,9 @@ Item {
                 // Power Circular Button
                 MaterialCircleBtn {
                     glyph: "power_settings_new"
-                    iconColor: "#ff5555"
+                    iconColor: "#ff453a"
                     customBg: utilModule.colCard
-                    hoverBg: "#221818"
+                    hoverBg: Qt.rgba(255, 69, 58, 0.18)
                     onClicked: root.switchMode("powermenu", false)
                 }
             }
@@ -1136,7 +1130,7 @@ Item {
                 MaterialChipBtn {
                     glyph: utilModule.audioMicMuted ? "mic_off" : "mic"
                     lit: !utilModule.audioMicMuted
-                    tint: utilModule.audioMicMuted ? "#f7768e" : utilModule.colAccent
+                    tint: utilModule.audioMicMuted ? "#ff453a" : utilModule.colAccent
                     onClicked: utilModule.toggleMicMute()
                 }
 
@@ -1144,7 +1138,7 @@ Item {
                 MaterialChipBtn {
                     glyph: "coffee"
                     lit: utilModule.caffeineActive
-                    tint: "#ff9e64"
+                    tint: "#ff9f0a"
                     onClicked: utilModule.toggleCaffeine()
                 }
 
@@ -1152,7 +1146,7 @@ Item {
                 MaterialChipBtn {
                     glyph: "nightlight"
                     lit: utilModule.nightLightActive
-                    tint: "#e0af68"
+                    tint: "#ffd60a"
                     onClicked: utilModule.toggleNightLight()
                 }
 
@@ -1160,7 +1154,7 @@ Item {
                 MaterialChipBtn {
                     glyph: "crop"
                     lit: false
-                    tint: "#2ac3de"
+                    tint: "#64d2ff"
                     onClicked: utilModule.triggerScreenshot()
                 }
 
@@ -1168,15 +1162,15 @@ Item {
                 MaterialChipBtn {
                     glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
                     lit: root.dndEnabled
-                    tint: "#bb9af7"
+                    tint: "#5e5ce6"
                     onClicked: root.dndEnabled = !root.dndEnabled
                 }
 
-                // 5. Color Picker (hyprpicker)
+                // 6. Color Picker (hyprpicker)
                 MaterialChipBtn {
                     glyph: "colorize"
                     lit: false
-                    tint: "#7dcfff"
+                    tint: "#30b0c7"
                     onClicked: utilModule.triggerColorPicker()
                 }
             }
@@ -1229,15 +1223,13 @@ Item {
                             implicitHeight: 40
                             radius: 12
                             color: modelData.isDefault
-                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.16)
+                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.20)
                                 : (sinkMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 1
-                            border.color: modelData.isDefault ? utilModule.colAccent : Qt.rgba(255, 255, 255, 0.05)
+                            border.width: 0
 
                             scale: sinkMouse.pressed ? 0.98 : 1.0
                             Behavior on scale { NumberAnimation { duration: 80 } }
                             Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -1246,6 +1238,7 @@ Item {
 
                                 MaterialSymbol {
                                     text: utilModule.getSinkIcon(modelData.name, modelData.desc)
+                                    fill: modelData.isDefault ? 1 : 0
                                     iconSize: 18
                                     color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
                                 }
@@ -1263,6 +1256,7 @@ Item {
                                 MaterialSymbol {
                                     visible: modelData.isDefault
                                     text: "check_circle"
+                                    fill: 1
                                     iconSize: 18
                                     color: utilModule.colAccent
                                 }
@@ -1285,7 +1279,7 @@ Item {
                         font.family: "Noto Sans"
                         font.pixelSize: 10
                         font.weight: Font.Bold
-                        color: utilModule.colMuted
+                        color: utilModule.colSubtext
                         Layout.topMargin: 2
                         Layout.bottomMargin: 2
                     }
@@ -1299,15 +1293,13 @@ Item {
                             implicitHeight: 40
                             radius: 12
                             color: modelData.isDefault
-                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.16)
+                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.20)
                                 : (sourceMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 1
-                            border.color: modelData.isDefault ? utilModule.colAccent : Qt.rgba(255, 255, 255, 0.05)
+                            border.width: 0
 
                             scale: sourceMouse.pressed ? 0.98 : 1.0
                             Behavior on scale { NumberAnimation { duration: 80 } }
                             Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -1316,6 +1308,7 @@ Item {
 
                                 MaterialSymbol {
                                     text: "mic"
+                                    fill: modelData.isDefault ? 1 : 0
                                     iconSize: 18
                                     color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
                                 }
@@ -1333,6 +1326,7 @@ Item {
                                 MaterialSymbol {
                                     visible: modelData.isDefault
                                     text: "check_circle"
+                                    fill: 1
                                     iconSize: 18
                                     color: utilModule.colAccent
                                 }
@@ -1388,15 +1382,13 @@ Item {
                             implicitHeight: 48
                             radius: 14
                             color: (modelData.active || modelData.connecting)
-                                ? Qt.tint(utilModule.colCard, Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, cardMouse.containsMouse ? 0.28 : 0.16))
+                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, cardMouse.containsMouse ? 0.24 : 0.18)
                                 : (cardMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 1
-                            border.color: (modelData.active || modelData.connecting) ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.4) : Qt.rgba(255, 255, 255, 0.05)
+                            border.width: 0
 
                             scale: cardMouse.pressed ? 0.98 : 1.0
                             Behavior on scale { NumberAnimation { duration: 90 } }
                             Behavior on color { ColorAnimation { duration: 120 } }
-                            Behavior on border.color { ColorAnimation { duration: 120 } }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -1406,13 +1398,15 @@ Item {
                                 // Provider Icon Disc
                                 Rectangle {
                                     width: 32; height: 32; radius: 16
-                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? "#1c1c24" : "#141418")
+                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.085) : Qt.rgba(255, 255, 255, 0.04))
+                                    border.width: 0
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
                                         text: modelData.icon || "shield"
+                                        fill: (modelData.active || modelData.connecting) ? 1 : 0
                                         iconSize: 17
-                                        color: (modelData.active || modelData.connecting) ? "#000000" : (modelData.installed ? "#e2e8f0" : "#64748b")
+                                        color: (modelData.active || modelData.connecting) ? "#101318" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
                                     }
                                 }
 
@@ -1437,6 +1431,7 @@ Item {
                                             height: 16
                                             radius: 8
                                             color: Qt.rgba(255, 255, 255, 0.08)
+                                            border.width: 0
 
                                             Text {
                                                 id: defText
@@ -1464,7 +1459,8 @@ Item {
                                     width: statusLabel.implicitWidth + 14
                                     height: 26
                                     radius: 13
-                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.07) : "transparent")
+                                    color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
+                                    border.width: 0
 
                                     Text {
                                         id: statusLabel
@@ -1473,7 +1469,7 @@ Item {
                                         font.family: "Noto Sans"
                                         font.pixelSize: 10
                                         font.weight: Font.DemiBold
-                                        color: (modelData.active || modelData.connecting) ? "#000000" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
+                                        color: (modelData.active || modelData.connecting) ? "#101318" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
                                     }
                                 }
                             }

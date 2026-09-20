@@ -13,7 +13,7 @@ QtObject {
     // ==========================================
     // 2. GLOBAL ANIMATION DURATIONS (ms)
     // ==========================================
-    readonly property int animNotchResize: 420      // Width / height transition of the notch surface
+    readonly property int animNotchResize: 260      // Width / height transition of the notch surface (Iris snappy morph)
     readonly property int animDashFade: 90          // Quick cross-fade for the persistent dash bar
     readonly property int animModulesFade: 100      // Cross-fade for the expanded module body
     readonly property int animColor: 150            // Standard button & hover color transitions
@@ -43,7 +43,7 @@ QtObject {
         "idle":          { width: 156, height: 32,  radius: 16 },
 		"hover":         { width: 460, height: 42,  radius: 21 },
 		"switcher":      { width: 800, height: 420, radius: 14 },
-        "launcher":      { width: 460, height: 360, radius: 20 },
+        "launcher":      { width: 560, height: 246, radius: 22 },
         "theme":         { width: 660, height: 200, radius: 14 },
         "wallpaper":     { width: 760, height: 320, radius: 12 },
         "transition":    { width: 440, height: 320, radius: 12 },
@@ -57,7 +57,7 @@ QtObject {
         "clipboard":     { width: 460, height: 380, radius: 12 },
         "shelf":         { width: 460, height: 380, radius: 12 },
         "utility":       { width: 460, height: 318, radius: 26 },
-        "music":         { width: 600, height: 335, radius: 26 },
+        "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
         "notifications": { width: 460, height: 380, radius: 26 }
@@ -91,9 +91,16 @@ QtObject {
         return Math.min(440, Math.max(180, 66 + (count * 48)));
     }
 
-    function calculateLauncherHeight(count, allAppsLength) {
-        if (count === 0 && allAppsLength === 0) return 320;
-        return Math.min(420, Math.max(160, 66 + (count * 48)));
+    function calculateLauncherHeight(count, allAppsLength, browsing = false) {
+        if (browsing) return 246;
+        if (count <= 0) return 128;
+        if (count === 1) return 156;
+        if (count === 2) return 224;
+        if (count === 3) return 266;
+        if (count === 4) return 308;
+        if (count === 5) return 350;
+        if (count === 6) return 392;
+        return 436;
     }
 
     function calculateRecorderHeight(recordAudio, isDropdownOpen, isRecording) {

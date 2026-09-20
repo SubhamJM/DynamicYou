@@ -15,6 +15,8 @@ ColumnLayout {
     property var allApps: []
     property var runningClients: []
     property var clipboardEntries: []
+    property var suggestions: []
+    property int selectedTileIndex: 0
 
     ListModel { id: resultsModel }
 
@@ -57,8 +59,8 @@ ColumnLayout {
     readonly property bool webMode: rawQuery.startsWith(prefixWeb)
     readonly property bool commandMode: rawQuery.startsWith(prefixCommand) || rawQuery.startsWith(">")
 
-    // Caelestia-flavoured emphasized-decelerate curve
-    readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+    // Iris liquid morph curve [0.16, 1, 0.3, 1]
+    readonly property var motionCurve: [0.16, 1, 0.3, 1, 1, 1]
 
     // Emojis dataset
     readonly property var emojisList: [
@@ -117,10 +119,12 @@ ColumnLayout {
 
     function onOpened() {
         launcher.isCopiedFeedback = false;
+        launcher.selectedTileIndex = 0;
         clientScanner.running = true;
         if (allApps.length === 0 && !appScanner.running) {
             appScanner.running = true;
         } else {
+            launcher.updateSuggestions();
             launcher.processSearch(searchInput.text);
         }
         searchInput.forceActiveFocus();
@@ -135,6 +139,35 @@ ColumnLayout {
         }
     }
 
+    function updateSuggestions() {
+        var list = [];
+        var limit = Math.min(launcher.allApps.length, 8);
+        for (var i = 0; i < limit; i++) {
+            var app = launcher.allApps[i];
+            var rc = launcher.getRunningClient(app.exec, app.name);
+            list.push({
+                name: app.name,
+                exec: app.exec,
+                iconName: app.iconName,
+                comment: app.comment || app.exec,
+                isRunning: rc !== null,
+                winAddress: rc ? rc.address : ""
+            });
+        }
+        launcher.suggestions = list;
+    }
+
+    function executeSuggestion(idx) {
+        if (idx < 0 || idx >= launcher.suggestions.length) return;
+        var s = launcher.suggestions[idx];
+        if (s.isRunning && s.winAddress !== "") {
+            Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + s.winAddress]);
+            root.collapseToIdle();
+        } else {
+            launcher.recordUsageAndLaunch(s.exec);
+        }
+    }
+
     function isSubsequence(query, target) {
         var qLen = query.length, tLen = target.length;
         if (qLen > tLen) return false;
@@ -144,6 +177,36 @@ ColumnLayout {
             tIdx++;
         }
         return qIdx === qLen;
+    }
+
+    function escapeHtml(value) {
+        return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function emphasised(name, query) {
+        var q = (query || "").trim();
+        if (q.length === 0) return launcher.escapeHtml(name);
+        var at = name.toLowerCase().indexOf(q.toLowerCase());
+        if (at < 0) return launcher.escapeHtml(name);
+        var dimColor = Theme.colors.text_secondary ?? "#8a8f9e";
+        var brightColor = Theme.colors.text_primary ?? "#ffffff";
+        return "<font color='" + dimColor + "'>" + launcher.escapeHtml(name.slice(0, at)) + "</font>"
+            + "<font color='" + brightColor + "'><b>" + launcher.escapeHtml(name.slice(at, at + q.length)) + "</b></font>"
+            + "<font color='" + dimColor + "'>" + launcher.escapeHtml(name.slice(at + q.length)) + "</font>";
+    }
+
+    function sectionOf(modelData, index) {
+        if (launcher.clipboardMode) return "Clipboard history";
+        if (launcher.actionMode) return "System actions";
+        if (launcher.emojiMode) return "Emojis";
+        if (launcher.webMode) return "Web search";
+        if (index === 0) return "Top hit";
+        var type = modelData ? modelData.itemType : "";
+        if (type === "app") return "Applications";
+        if (type === "action") return "Actions";
+        if (type === "math") return "Calculator";
+        if (type === "web") return "Web Search";
+        return "";
     }
 
     // ========================================================
@@ -234,6 +297,7 @@ ColumnLayout {
                 } catch(e) {
                     launcher.runningClients = [];
                 }
+                launcher.updateSuggestions();
             }
         }
     }
@@ -379,6 +443,7 @@ for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
                     }
                 }
                 launcher.allApps = tempList;
+                launcher.updateSuggestions();
                 launcher.processSearch(searchInput.text);
             }
         }
@@ -427,25 +492,8 @@ with open(f, 'w') as file: json.dump(d, file)
 
         // 2. EMPTY / BROWSING STATE: Frequently used suggestions
         if (raw === "") {
-            var limit = Math.min(launcher.allApps.length, 6);
-            for (var s = 0; s < limit; s++) {
-                var a = launcher.allApps[s];
-                var rc = getRunningClient(a.exec, a.name);
-                resultsModel.append({
-                    itemType: "app",
-                    name: a.name,
-                    comment: a.comment || a.exec,
-                    iconName: a.iconName,
-                    matIcon: "",
-                    nerdIcon: "",
-                    execCmd: a.exec,
-                    rawVal: "",
-                    isRunning: rc !== null,
-                    winAddress: rc ? rc.address : "",
-                    actionVerb: rc !== null ? "Switch to" : "Open"
-                });
-            }
-            appList.currentIndex = resultsModel.count > 0 ? 0 : -1;
+            launcher.updateSuggestions();
+            appList.currentIndex = -1;
             return;
         }
 
@@ -748,95 +796,90 @@ with open(f, 'w') as file: json.dump(d, file)
     }
 
     // ========================================================
-    // 1. SEARCH BAR (INSIDE THE NOTCH)
+    // 1. TOP SPOTLIGHT SEARCH BAR (ATTACHED TO NOTCH)
     // ========================================================
     Rectangle {
         id: searchBar
         Layout.fillWidth: true
-        Layout.preferredHeight: 46
+        Layout.preferredHeight: 48
         radius: 14
-        color: Theme.colors.card_bg ?? "#1f2335"
+        color: Theme.colors.card_bg ?? "#141416"
         border.width: 1.5
         border.color: searchInput.activeFocus ? launcher.accentColor : Qt.rgba(1, 1, 1, 0.08)
-        Behavior on border.color { ColorAnimation { duration: 180 } }
+        Behavior on border.color { ColorAnimation { duration: 150 } }
 
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 14
-            anchors.rightMargin: 10
+            anchors.rightMargin: 12
             spacing: 10
 
-            // Dynamic Prefix / Search Glyph
-            Item {
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
+            // Search Glyph (lights up on typing/focus like Iris)
+            MaterialSymbol {
                 Layout.alignment: Qt.AlignVCenter
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    iconSize: 20
-                    visible: launcher.clipboardMode || launcher.actionMode || launcher.webMode || (!launcher.isMathActive && !launcher.isCmdActive && !launcher.isBangActive && !launcher.emojiMode)
-                    text: {
-                        if (launcher.clipboardMode) return "content_paste";
-                        if (launcher.actionMode) return "bolt";
-                        if (launcher.webMode) return "travel_explore";
-                        return "search";
-                    }
-                    color: searchInput.activeFocus ? launcher.accentColor : (Theme.colors.text_secondary ?? "#a9b1d6")
-                    Behavior on color { ColorAnimation { duration: 180 } }
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    visible: launcher.isMathActive || launcher.isCmdActive || launcher.isBangActive || launcher.emojiMode
-                    text: {
-                        if (launcher.isMathActive) return "󱖦";
-                        if (launcher.isCmdActive) return "󰞷";
-                        if (launcher.isBangActive) return launcher.bangIcon || "󰊭";
-                        if (launcher.emojiMode) return "󰞅";
-                        return "⌕";
-                    }
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 17
-                    color: searchInput.activeFocus ? launcher.accentColor : (Theme.colors.text_secondary ?? "#a9b1d6")
-                    Behavior on color { ColorAnimation { duration: 180 } }
-                }
+                iconSize: 22
+                text: "search"
+                color: (searchInput.text.length > 0 || searchInput.activeFocus) ? launcher.accentColor : (Theme.colors.text_secondary ?? "#6c7086")
+                Behavior on color { ColorAnimation { duration: 150 } }
             }
 
-            // Input Field
+            // Text Input
             TextField {
                 id: searchInput
                 focus: true
                 selectByMouse: true
                 Layout.fillWidth: true
-                color: Theme.colors.text_primary ?? "#c0caf5"
+                color: Theme.colors.text_primary ?? "#ffffff"
                 font.family: "Noto Sans"
-                font.pixelSize: 14
-                placeholderText: "Search apps, math (=), actions (/), clipboard (;), emoji (:)..."
+                font.pixelSize: 15
+                font.weight: Font.Normal
+                placeholderText: "Spotlight Search"
                 placeholderTextColor: Theme.colors.text_secondary ?? "#565f89"
                 background: Item {}
 
                 onTextChanged: launcher.processSearch(text)
 
+                Keys.onLeftPressed: (event) => {
+                    if (launcher.browsing && launcher.suggestions.length > 0) {
+                        launcher.selectedTileIndex = Math.max(0, launcher.selectedTileIndex - 1);
+                        event.accepted = true;
+                    }
+                }
+                Keys.onRightPressed: (event) => {
+                    if (launcher.browsing && launcher.suggestions.length > 0) {
+                        launcher.selectedTileIndex = Math.min(launcher.suggestions.length - 1, launcher.selectedTileIndex + 1);
+                        event.accepted = true;
+                    }
+                }
+
                 Keys.onDownPressed: (event) => {
-                    if (appList.currentIndex < resultsModel.count - 1) {
+                    if (!launcher.browsing && appList.currentIndex < resultsModel.count - 1) {
                         appList.currentIndex++;
                         appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
                     }
                     event.accepted = true;
                 }
                 Keys.onUpPressed: (event) => {
-                    if (appList.currentIndex > 0) {
+                    if (!launcher.browsing && appList.currentIndex > 0) {
                         appList.currentIndex--;
                         appList.positionViewAtIndex(appList.currentIndex, ListView.Contain);
                     }
                     event.accepted = true;
                 }
-                Keys.onEscapePressed: root.collapseToIdle()
+                Keys.onEscapePressed: {
+                    if (text.length > 0) {
+                        text = "";
+                    } else {
+                        root.collapseToIdle();
+                    }
+                }
 
                 Keys.onReturnPressed: (event) => {
                     var isShift = (event.modifiers & Qt.ShiftModifier);
-                    if (launcher.isMathActive) {
+                    if (launcher.browsing && launcher.suggestions.length > 0) {
+                        launcher.executeSuggestion(launcher.selectedTileIndex);
+                        event.accepted = true;
+                    } else if (launcher.isMathActive) {
                         launcher.copyMathResult();
                         event.accepted = true;
                     } else if (launcher.isBangActive) {
@@ -857,7 +900,7 @@ with open(f, 'w') as file: json.dump(d, file)
                 }
             }
 
-            // Active Mode Token Pill
+            // Active Mode Token Pill (Iris styled)
             Rectangle {
                 id: activeModeToken
                 readonly property var activeInfo: {
@@ -872,14 +915,14 @@ with open(f, 'w') as file: json.dump(d, file)
 
                 visible: activeInfo !== null && searchInput.text.trim().length > 1
                 Layout.preferredHeight: 24
-                Layout.preferredWidth: modeRow.implicitWidth + 14
+                Layout.preferredWidth: modeRow.implicitWidth + 16
                 radius: 12
                 color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
 
                 Row {
                     id: modeRow
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: 5
                     MaterialSymbol {
                         anchors.verticalCenter: parent.verticalCenter
                         text: activeModeToken.activeInfo ? activeModeToken.activeInfo.glyph : ""
@@ -904,8 +947,8 @@ with open(f, 'w') as file: json.dump(d, file)
                 Layout.alignment: Qt.AlignVCenter
                 radius: 11
                 visible: searchInput.text.length > 0
-                color: clearMouse.containsMouse ? (Theme.colors.hover_bg ?? "#2a2f45") : "transparent"
-                Behavior on color { ColorAnimation { duration: 150 } }
+                color: clearMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {
                     anchors.centerIn: parent
@@ -926,593 +969,724 @@ with open(f, 'w') as file: json.dump(d, file)
     }
 
     // ========================================================
-    // 2. EMPTY STATE: MODE HINT CHIPS ROW
+    // 2. BROWSING VIEW (WHEN SEARCH QUERY IS EMPTY)
     // ========================================================
-    RowLayout {
-        Layout.fillWidth: true
-        Layout.topMargin: -2
-        Layout.bottomMargin: 2
-        spacing: 5
-        visible: launcher.browsing
-
-        component HintChip: Rectangle {
-            id: chipRoot
-            property string prefixChar: ""
-            property string labelText: ""
-            property string iconName: ""
-            Layout.fillWidth: true
-            height: 26
-            radius: 8
-            color: chipMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.16) : Qt.rgba(1, 1, 1, 0.04)
-            border.width: 1
-            border.color: chipMouse.containsMouse ? launcher.accentColor : Qt.rgba(1, 1, 1, 0.06)
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 3
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: chipRoot.prefixChar
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 11
-                    font.weight: Font.Bold
-                    color: launcher.accentColor
-                }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: chipRoot.labelText
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: chipMouse.containsMouse ? (Theme.colors.text_primary ?? "#c0caf5") : (Theme.colors.text_secondary ?? "#8a8f9e")
-                }
-            }
-
-            MouseArea {
-                id: chipMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    searchInput.text = chipRoot.prefixChar + " ";
-                    searchInput.cursorPosition = searchInput.text.length;
-                    searchInput.forceActiveFocus();
-                }
-            }
-        }
-
-        HintChip { prefixChar: ";"; labelText: "Clip" }
-        HintChip { prefixChar: "="; labelText: "Math" }
-        HintChip { prefixChar: "/"; labelText: "Action" }
-        HintChip { prefixChar: ":"; labelText: "Emoji" }
-        HintChip { prefixChar: "?"; labelText: "Web" }
-        HintChip { prefixChar: ">"; labelText: "Shell" }
-    }
-
-    // ========================================================
-    // 3. POWER USER CARDS (Math / Bang / Shell Command)
-    // ========================================================
-    // Math Evaluation Card
-    Rectangle {
-        id: mathCard
-        Layout.fillWidth: true
-        Layout.preferredHeight: 52
-        visible: launcher.isMathActive && launcher.mathResult !== ""
-        radius: 12
-        color: launcher.isCopiedFeedback
-            ? Qt.rgba(0.18, 0.83, 0.5, 0.22)
-            : (mathMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#1f2335"))
-        border.width: 1.5
-        border.color: launcher.isCopiedFeedback ? "#73daca" : launcher.accentColor
-        Behavior on color { ColorAnimation { duration: 150 } }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 14
-            spacing: 12
-
-            Rectangle {
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 10
-                color: launcher.isCopiedFeedback ? Qt.rgba(0.18, 0.83, 0.5, 0.25) : Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: launcher.isCopiedFeedback ? "✓" : "󱖦"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-                    color: launcher.isCopiedFeedback ? "#73daca" : launcher.accentColor
-                }
-            }
-
-            Column {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                Text {
-                    text: "= " + launcher.mathResult
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 15
-                    font.bold: true
-                    color: launcher.isCopiedFeedback ? "#73daca" : (Theme.colors.text_primary ?? "#c0caf5")
-                }
-
-                Text {
-                    text: launcher.isCopiedFeedback ? "Copied answer to clipboard!" : (launcher.mathExpr + " · Press Enter to copy")
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    color: launcher.isCopiedFeedback ? "#73daca" : (Theme.colors.text_secondary ?? "#565f89")
-                }
-            }
-
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: 64
-                radius: 6
-                color: Qt.rgba(1, 1, 1, 0.08)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: launcher.isCopiedFeedback ? "Copied" : "Copy ↵"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: Theme.colors.text_primary ?? "white"
-                }
-            }
-        }
-
-        MouseArea {
-            id: mathMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: launcher.copyMathResult()
-        }
-    }
-
-    // Search Bang Card
-    Rectangle {
-        id: bangCard
-        Layout.fillWidth: true
-        Layout.preferredHeight: 52
-        visible: launcher.isBangActive
-        radius: 12
-        color: bangMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#1f2335")
-        border.width: 1.5
-        border.color: launcher.accentColor
-        Behavior on color { ColorAnimation { duration: 150 } }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 14
-            spacing: 12
-
-            Rectangle {
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 10
-                color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: launcher.bangIcon || "󰊭"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-                    color: launcher.accentColor
-                }
-            }
-
-            Column {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                Text {
-                    text: launcher.bangLabel
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: Theme.colors.text_primary ?? "#c0caf5"
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    text: (launcher.bangType === "keys" || launcher.bangType === "notes") ? "Press Enter to open module" : "Press Enter to search in default browser"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                }
-            }
-
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: 64
-                radius: 6
-                color: Qt.rgba(1, 1, 1, 0.08)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Search ↵"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: Theme.colors.text_primary ?? "white"
-                }
-            }
-        }
-
-        MouseArea {
-            id: bangMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: launcher.executeBang()
-        }
-    }
-
-    // Shell Command Card (">" or "$")
-    Rectangle {
-        id: cmdCard
-        Layout.fillWidth: true
-        Layout.preferredHeight: 52
-        visible: launcher.isCmdActive
-        radius: 12
-        color: cmdMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#1f2335")
-        border.width: 1.5
-        border.color: launcher.accentColor
-        Behavior on color { ColorAnimation { duration: 150 } }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 14
-            spacing: 12
-
-            Rectangle {
-                Layout.preferredWidth: 34
-                Layout.preferredHeight: 34
-                radius: 10
-                color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰞷"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-                    color: launcher.accentColor
-                }
-            }
-
-            Column {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                Row {
-                    spacing: 6
-                    Text {
-                        text: "Run: " + launcher.cmdText
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        color: Theme.colors.text_primary ?? "#c0caf5"
-                        elide: Text.ElideRight
-                    }
-
-                    Rectangle {
-                        height: 16
-                        width: badgeText.implicitWidth + 8
-                        radius: 8
-                        color: launcher.isCmdInteractive ? Qt.rgba(0.48, 0.63, 0.97, 0.25) : Qt.rgba(1, 1, 1, 0.08)
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Text {
-                            id: badgeText
-                            anchors.centerIn: parent
-                            text: launcher.isCmdInteractive ? "kitty" : "background"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: launcher.isCmdInteractive ? launcher.accentColor : (Theme.colors.text_secondary ?? "#565f89")
-                        }
-                    }
-                }
-
-                Text {
-                    text: "Press Enter to execute · Shift+Enter to force in Kitty terminal"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                }
-            }
-
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: 54
-                radius: 6
-                color: Qt.rgba(1, 1, 1, 0.08)
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Run ↵"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: Theme.colors.text_primary ?? "white"
-                }
-            }
-        }
-
-        MouseArea {
-            id: cmdMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: launcher.executeShellCmd(false)
-        }
-    }
-
-    // ========================================================
-    // 4. RESULTS HEADER & LIST VIEW
-    // ========================================================
-    Text {
-        Layout.leftMargin: 4
-        visible: !launcher.isBangActive && !launcher.isCmdActive && resultsModel.count > 0
-        text: {
-            if (launcher.browsing) return "Frequently Used";
-            if (launcher.clipboardMode) return "Clipboard History (" + resultsModel.count + ")";
-            if (launcher.actionMode) return "System Actions (" + resultsModel.count + ")";
-            if (launcher.emojiMode) return "Emoji Results (" + resultsModel.count + ")";
-            if (launcher.webMode) return "Web Search";
-            return resultsModel.count + (resultsModel.count === 1 ? " result" : " results");
-        }
-        font.family: "Noto Sans"
-        font.pixelSize: 11
-        font.weight: Font.DemiBold
-        color: Theme.colors.text_secondary ?? "#565f89"
-    }
-
-    Item {
+    ColumnLayout {
+        id: browseContainer
         Layout.fillWidth: true
         Layout.fillHeight: true
-        visible: !launcher.isBangActive && !launcher.isCmdActive
+        Layout.bottomMargin: 4
+        visible: launcher.browsing
+        spacing: 6
 
-        ListView {
-            id: appList
-            anchors.fill: parent
-            clip: true
-            spacing: 4
-            model: resultsModel
-            currentIndex: 0
+        // Suggestions Label
+        Text {
+            Layout.leftMargin: 4
+            text: "Suggestions"
+            font.family: "Noto Sans"
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            color: Theme.colors.text_secondary ?? "#8a8f9e"
+        }
 
-            highlightFollowsCurrentItem: true
-            highlightRangeMode: ListView.ApplyRange
-            preferredHighlightBegin: 40
-            preferredHighlightEnd: height - 56
-            highlightMoveDuration: 120
+        // Horizontal App Tiles Grid (Iris 1:1)
+        Item {
+            id: tilesItem
+            Layout.fillWidth: true
+            Layout.preferredHeight: 92
+            readonly property real tileWidth: launcher.suggestions.length > 0 ? (width / launcher.suggestions.length) : 60
 
-            onCurrentIndexChanged: {
-                if (currentIndex >= 0 && currentIndex < count) {
-                    positionViewAtIndex(currentIndex, ListView.Contain);
+            // Liquid Sliding Highlight Behind Selected Tile
+            Rectangle {
+                id: tileHighlight
+                visible: launcher.suggestions.length > 0 && launcher.selectedTileIndex >= 0 && launcher.selectedTileIndex < launcher.suggestions.length
+                x: launcher.selectedTileIndex * tilesItem.tileWidth + 2
+                y: 2
+                width: tilesItem.tileWidth - 4
+                height: tilesItem.height - 4
+                radius: 12
+                color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18)
+                border.width: 1
+                border.color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.28)
+                Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: launcher.motionCurve } }
+            }
+
+            Row {
+                id: tilesRow
+                anchors.fill: parent
+
+                Repeater {
+                    model: launcher.suggestions
+                    delegate: Item {
+                        id: tile
+                        width: tilesItem.tileWidth
+                        height: tilesItem.height
+
+                        MouseArea {
+                            id: tileMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: launcher.selectedTileIndex = index
+                            onClicked: {
+                                launcher.selectedTileIndex = index;
+                                launcher.executeSuggestion(index);
+                            }
+                        }
+
+                        // App Icon
+                        Item {
+                            id: tileIcon
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: 8
+                            width: 44
+                            height: 44
+                            scale: tileMouse.pressed ? 0.92 : (launcher.selectedTileIndex === index ? 1.04 : 1.0)
+                            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
+
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                sourceSize.width: 40
+                                sourceSize.height: 40
+                                visible: status === Image.Ready && source != ""
+                                source: {
+                                    if (!modelData.iconName || modelData.iconName === "") return "";
+                                    if (modelData.iconName.startsWith("/")) return "file://" + modelData.iconName;
+                                    return "image://icon/" + modelData.iconName;
+                                }
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !parent.children[0].visible
+                                text: "apps"
+                                iconSize: 26
+                                color: Theme.colors.text_primary ?? "#ffffff"
+                            }
+                        }
+
+                        // Running status indicator dot
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: tileIcon.bottom
+                            anchors.topMargin: 2
+                            visible: modelData.isRunning
+                            width: 4
+                            height: 4
+                            radius: 2
+                            color: "#73daca"
+                        }
+
+                        // App Name
+                        Text {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 6
+                            horizontalAlignment: Text.AlignHCenter
+                            text: modelData.name
+                            font.family: "Noto Sans"
+                            font.pixelSize: 11
+                            font.weight: launcher.selectedTileIndex === index ? Font.DemiBold : Font.Normal
+                            color: launcher.selectedTileIndex === index ? (Theme.colors.text_primary ?? "#ffffff") : (Theme.colors.text_secondary ?? "#8a8f9e")
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
             }
+        }
 
-            boundsBehavior: Flickable.DragAndOvershootBounds
-            maximumFlickVelocity: 3500
-            flickDeceleration: 2200
+        // Hairline Divider
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            height: 1
+            color: Qt.rgba(1, 1, 1, 0.07)
+        }
 
-            ScrollBar.vertical: ScrollBar { 
-                policy: ScrollBar.AsNeeded
-                width: 4
-                contentItem: Rectangle { 
-                    radius: 2
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                    opacity: 0.4 
-                } 
-            }
+        // Mode Hint Chips Row (Iris 1:1)
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
 
-            add: Transition {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-                NumberAnimation { property: "scale"; from: 0.95; to: 1.0; duration: 220; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
-            }
-            addDisplaced: Transition { NumberAnimation { property: "y"; duration: 220; easing.type: Easing.OutCubic } }
-            remove: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
-            displaced: Transition { NumberAnimation { property: "y"; duration: 220; easing.type: Easing.OutCubic } }
+            component HintChip: Rectangle {
+                id: chipRoot
+                property string prefixChar: ""
+                property string labelText: ""
+                Layout.fillWidth: true
+                height: 28
+                radius: 8
+                color: chipMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.16) : Qt.rgba(1, 1, 1, 0.04)
+                border.width: 1
+                border.color: chipMouse.containsMouse ? launcher.accentColor : Qt.rgba(1, 1, 1, 0.06)
+                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on border.color { ColorAnimation { duration: 110 } }
 
-            delegate: Rectangle {
-                id: delegateRoot
-                width: ListView.view.width
-                height: 44
-                property bool isSelected: ListView.isCurrentItem
-                radius: 12
-                color: isSelected
-                    ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18)
-                    : (appMouse.containsMouse ? (Theme.colors.card_bg ?? "#1f2335") : "transparent")
-                scale: appMouse.pressed ? 0.98 : 1.0
-
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.BezierSpline; easing.bezierCurve: launcher.motionCurve } }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 10; anchors.rightMargin: 12
-                    anchors.topMargin: 4;  anchors.bottomMargin: 4
-                    spacing: 10
-
-                    // Icon Container
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
                     Rectangle {
-                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        Layout.alignment: Qt.AlignVCenter
-                        radius: 9
-                        color: delegateRoot.isSelected
-                            ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.24)
-                            : Qt.rgba(1, 1, 1, 0.05)
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        // 1. Material Icon
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            visible: model.matIcon !== ""
-                            text: model.matIcon
-                            iconSize: 18
-                            color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#c0caf5")
-                        }
-
-                        // 2. Nerd Icon / Text
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 16; height: 16; radius: 4
+                        color: chipMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.28) : Qt.rgba(1, 1, 1, 0.06)
                         Text {
                             anchors.centerIn: parent
-                            visible: model.nerdIcon !== "" && model.matIcon === ""
-                            text: model.nerdIcon
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 17
-                            color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#c0caf5")
-                        }
-
-                        // 3. Fallback App Icon
-                        Item {
-                            anchors.fill: parent
-                            visible: model.matIcon === "" && model.nerdIcon === "" && !appIcon.visible
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "󰀻"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 16
-                                color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_secondary ?? "#565f89")
-                            }
-                        }
-
-                        // 4. Desktop File Icon Image
-                        Image {
-                            id: appIcon
-                            anchors.fill: parent
-                            anchors.margins: 4
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
-                            sourceSize.width: 28
-                            sourceSize.height: 28
-                            visible: model.matIcon === "" && model.nerdIcon === "" && status === Image.Ready && source != ""
-                            
-                            source: {
-                                if (!model.iconName || model.iconName === "") return "";
-                                if (model.iconName.startsWith("/")) return "file://" + model.iconName;
-                                return "image://icon/" + model.iconName;
-                            }
-                        }
-                    }
-
-                    // Title & Description Column
-                    Column {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 1
-
-                        Text {
-                            width: parent.width
-                            text: model.name
-                            color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#c0caf5")
-                            font.family: "Noto Sans"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                        }
-                        Text {
-                            width: parent.width
-                            text: model.comment
-                            color: delegateRoot.isSelected ? (Theme.colors.text_primary ?? "#a9b1d6") : (Theme.colors.text_secondary ?? "#565f89")
-                            font.family: "Noto Sans"
+                            text: chipRoot.prefixChar
+                            font.family: "Noto Sans Mono"
                             font.pixelSize: 10
-                            elide: Text.ElideRight
-                            visible: text !== ""
+                            font.weight: Font.Bold
+                            color: launcher.accentColor
                         }
                     }
-
-                    // Running Badge Pill (if window is active)
-                    Rectangle {
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: model.isRunning
-                        height: 18
-                        width: runRow.implicitWidth + 10
-                        radius: 9
-                        color: Qt.rgba(0.2, 0.8, 0.4, 0.18)
-
-                        Row {
-                            id: runRow
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Rectangle {
-                                width: 6; height: 6; radius: 3
-                                color: "#73daca"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: "Running"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 9
-                                font.weight: Font.DemiBold
-                                color: "#73daca"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                    }
-
-                    // Action Hint Pill
-                    Rectangle {
-                        Layout.alignment: Qt.AlignVCenter
-                        height: 20
-                        width: actionHintText.implicitWidth + 12
-                        radius: 6
-                        color: delegateRoot.isSelected ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.25) : Qt.rgba(1, 1, 1, 0.05)
-                        visible: delegateRoot.isSelected || model.isRunning
-
-                        Text {
-                            id: actionHintText
-                            anchors.centerIn: parent
-                            text: model.actionVerb + " ↵"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            font.weight: Font.Medium
-                            color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_secondary ?? "#8a8f9e")
-                        }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: chipRoot.labelText
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        color: chipMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : (Theme.colors.text_secondary ?? "#8a8f9e")
                     }
                 }
 
                 MouseArea {
-                    id: appMouse
+                    id: chipMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: appList.currentIndex = index
-                    onClicked: launcher.executeSelectedItem(index)
+                    onClicked: {
+                        searchInput.text = chipRoot.prefixChar;
+                        searchInput.cursorPosition = searchInput.text.length;
+                        searchInput.forceActiveFocus();
+                    }
                 }
+            }
+
+            HintChip { prefixChar: ";"; labelText: "Clipboard" }
+            HintChip { prefixChar: "="; labelText: "Calculator" }
+            HintChip { prefixChar: "/"; labelText: "Actions" }
+            HintChip { prefixChar: ":"; labelText: "Emoji" }
+            HintChip { prefixChar: "?"; labelText: "Web" }
+            HintChip { prefixChar: "$"; labelText: "Command" }
+        }
+    }
+
+    // ========================================================
+    // 3. SEARCH RESULTS VIEW (WHEN SEARCH QUERY ACTIVE)
+    // ========================================================
+    ColumnLayout {
+        id: searchContainer
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.bottomMargin: 0
+        visible: !launcher.browsing
+        spacing: 4
+
+        // Math Evaluation Card
+        Rectangle {
+            id: mathCard
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            visible: launcher.isMathActive && launcher.mathResult !== ""
+            radius: 12
+            color: launcher.isCopiedFeedback
+                ? Qt.rgba(0.18, 0.83, 0.5, 0.22)
+                : (mathMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416"))
+            border.width: 1.5
+            border.color: launcher.isCopiedFeedback ? "#73daca" : launcher.accentColor
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 14
+                spacing: 12
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 10
+                    color: launcher.isCopiedFeedback ? Qt.rgba(0.18, 0.83, 0.5, 0.25) : Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: launcher.isCopiedFeedback ? "check" : "calculate"
+                        iconSize: 20
+                        color: launcher.isCopiedFeedback ? "#73daca" : launcher.accentColor
+                    }
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 1
+
+                    Text {
+                        text: "= " + launcher.mathResult
+                        font.family: "Noto Sans"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: launcher.isCopiedFeedback ? "#73daca" : (Theme.colors.text_primary ?? "#ffffff")
+                    }
+
+                    Text {
+                        text: launcher.isCopiedFeedback ? "Copied answer to clipboard!" : (launcher.mathExpr + " · Press Enter to copy")
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
+                        color: launcher.isCopiedFeedback ? "#73daca" : (Theme.colors.text_secondary ?? "#8a8f9e")
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: 64
+                    radius: 6
+                    color: Qt.rgba(1, 1, 1, 0.08)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: launcher.isCopiedFeedback ? "Copied" : "Copy ↵"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.Medium
+                        color: Theme.colors.text_primary ?? "white"
+                    }
+                }
+            }
+
+            MouseArea {
+                id: mathMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: launcher.copyMathResult()
             }
         }
 
-        // Empty state when search yields no results
-        Column {
-            anchors.centerIn: parent
-            spacing: 6
-            visible: resultsModel.count === 0 && searchInput.text.trim() !== "" && !launcher.isMathActive && !launcher.isCmdActive && !launcher.isBangActive
+        // Search Bang Card
+        Rectangle {
+            id: bangCard
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            visible: launcher.isBangActive
+            radius: 12
+            color: bangMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416")
+            border.width: 1.5
+            border.color: launcher.accentColor
+            Behavior on color { ColorAnimation { duration: 120 } }
 
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "󰍉"
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 22
-                color: Theme.colors.text_secondary ?? "#565f89"
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 14
+                spacing: 12
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 10
+                    color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: launcher.bangIcon || "󰊭"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 16
+                        color: launcher.accentColor
+                    }
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 2
+
+                    Text {
+                        text: launcher.bangLabel
+                        font.family: "Noto Sans"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        color: Theme.colors.text_primary ?? "#ffffff"
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        text: (launcher.bangType === "keys" || launcher.bangType === "notes") ? "Press Enter to open module" : "Press Enter to search in default browser"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
+                        color: Theme.colors.text_secondary ?? "#8a8f9e"
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: 64
+                    radius: 6
+                    color: Qt.rgba(1, 1, 1, 0.08)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Search ↵"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.Medium
+                        color: Theme.colors.text_primary ?? "white"
+                    }
+                }
             }
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "No results found"
-                font.family: "Noto Sans"
-                font.pixelSize: 12
-                color: Theme.colors.text_secondary ?? "#565f89"
+
+            MouseArea {
+                id: bangMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: launcher.executeBang()
+            }
+        }
+
+        // Shell Command Card (">" or "$")
+        Rectangle {
+            id: cmdCard
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            visible: launcher.isCmdActive
+            radius: 12
+            color: cmdMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416")
+            border.width: 1.5
+            border.color: launcher.accentColor
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 14
+                spacing: 12
+
+                Rectangle {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 34
+                    radius: 10
+                    color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.2)
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "terminal"
+                        iconSize: 20
+                        color: launcher.accentColor
+                    }
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 2
+
+                    Row {
+                        spacing: 6
+                        Text {
+                            text: "Run: " + launcher.cmdText
+                            font.family: "Noto Sans Mono"
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            color: Theme.colors.text_primary ?? "#ffffff"
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            height: 16
+                            width: badgeText.implicitWidth + 8
+                            radius: 8
+                            color: launcher.isCmdInteractive ? Qt.rgba(0.48, 0.63, 0.97, 0.25) : Qt.rgba(1, 1, 1, 0.08)
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                id: badgeText
+                                anchors.centerIn: parent
+                                text: launcher.isCmdInteractive ? "kitty" : "background"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 9
+                                color: launcher.isCmdInteractive ? launcher.accentColor : (Theme.colors.text_secondary ?? "#8a8f9e")
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "Press Enter to execute · Shift+Enter to force in Kitty terminal"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        color: Theme.colors.text_secondary ?? "#8a8f9e"
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: 54
+                    radius: 6
+                    color: Qt.rgba(1, 1, 1, 0.08)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Run ↵"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.Medium
+                        color: Theme.colors.text_primary ?? "white"
+                    }
+                }
+            }
+
+            MouseArea {
+                id: cmdMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: launcher.executeShellCmd(false)
+            }
+        }
+
+        // Results List
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: !launcher.isBangActive && !launcher.isCmdActive
+
+            ListView {
+                id: appList
+                anchors.fill: parent
+                clip: true
+                spacing: 3
+                bottomMargin: 2
+                model: resultsModel
+                currentIndex: 0
+
+                highlightFollowsCurrentItem: true
+                highlightRangeMode: ListView.ApplyRange
+                preferredHighlightBegin: 40
+                preferredHighlightEnd: height - 56
+
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0 && currentIndex < count) {
+                        positionViewAtIndex(currentIndex, ListView.Contain);
+                    }
+                }
+
+                boundsBehavior: Flickable.StopAtBounds
+
+                ScrollBar.vertical: ScrollBar { 
+                    policy: ScrollBar.AsNeeded
+                    width: 4
+                    contentItem: Rectangle { 
+                        radius: 2
+                        color: Theme.colors.text_secondary ?? "#565f89"
+                        opacity: 0.4 
+                    } 
+                }
+
+                delegate: Column {
+                    id: delegateRoot
+                    width: ListView.view ? ListView.view.width : 500
+                    property bool isSelected: ListView.isCurrentItem
+                    readonly property bool topHit: index === 0 && !launcher.clipboardMode
+                    readonly property bool showHeader: index === 0 || launcher.sectionOf(model, index) !== launcher.sectionOf(resultsModel.get(index - 1), index - 1)
+
+                    // Category Section Header (Top hit / Applications / etc.)
+                    Text {
+                        visible: delegateRoot.showHeader && text !== ""
+                        x: 8
+                        height: Math.round(index === 0 ? 20 : 24)
+                        verticalAlignment: Text.AlignBottom
+                        bottomPadding: 3
+                        text: launcher.sectionOf(model, index)
+                        color: Theme.colors.text_secondary ?? "#8a8f9e"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+
+                    Rectangle {
+                        id: rowRect
+                        width: parent.width
+                        height: delegateRoot.topHit ? 52 : 40
+                        radius: 10
+                        color: delegateRoot.isSelected
+                            ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18)
+                            : (rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
+                        border.width: delegateRoot.isSelected ? 1 : 0
+                        border.color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.28)
+                        Behavior on color { ColorAnimation { duration: 110 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 12
+                            spacing: 10
+
+                            // Icon Container
+                            Item {
+                                readonly property real iconBoxSize: delegateRoot.topHit ? 34 : 26
+                                Layout.preferredWidth: iconBoxSize
+                                Layout.preferredHeight: iconBoxSize
+                                Layout.alignment: Qt.AlignVCenter
+
+                                // Material Icon
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    visible: model.matIcon !== ""
+                                    text: model.matIcon
+                                    iconSize: delegateRoot.topHit ? 22 : 18
+                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#ffffff")
+                                }
+
+                                // Nerd Icon
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: model.nerdIcon !== "" && model.matIcon === ""
+                                    text: model.nerdIcon
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: delegateRoot.topHit ? 20 : 16
+                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#ffffff")
+                                }
+
+                                // App Icon Image
+                                Image {
+                                    id: appIcon
+                                    anchors.fill: parent
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    sourceSize.width: parent.width
+                                    sourceSize.height: parent.height
+                                    visible: model.matIcon === "" && model.nerdIcon === "" && status === Image.Ready && source != ""
+                                    source: {
+                                        if (!model.iconName || model.iconName === "") return "";
+                                        if (model.iconName.startsWith("/")) return "file://" + model.iconName;
+                                        return "image://icon/" + model.iconName;
+                                    }
+                                }
+
+                                // Fallback Icon
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    visible: model.matIcon === "" && model.nerdIcon === "" && !appIcon.visible
+                                    text: "apps"
+                                    iconSize: delegateRoot.topHit ? 20 : 16
+                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_secondary ?? "#8a8f9e")
+                                }
+                            }
+
+                            // Title & Description Column
+                            Column {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 1
+
+                                Text {
+                                    width: parent.width
+                                    textFormat: Text.StyledText
+                                    text: launcher.emphasised(model.name, launcher.rawQuery)
+                                    color: Theme.colors.text_primary ?? "#ffffff"
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: delegateRoot.topHit ? 14 : 12.5
+                                    font.weight: delegateRoot.topHit ? Font.DemiBold : Font.Normal
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    visible: (delegateRoot.topHit || model.comment !== "") && text !== ""
+                                    text: model.comment
+                                    color: delegateRoot.isSelected ? (Theme.colors.text_primary ?? "#a9b1d6") : (Theme.colors.text_secondary ?? "#8a8f9e")
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            // Running Badge Pill (if window is active)
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                visible: model.isRunning
+                                height: 18
+                                width: runRow.implicitWidth + 10
+                                radius: 9
+                                color: Qt.rgba(0.2, 0.8, 0.4, 0.18)
+
+                                Row {
+                                    id: runRow
+                                    anchors.centerIn: parent
+                                    spacing: 4
+                                    Rectangle {
+                                        width: 6; height: 6; radius: 3
+                                        color: "#73daca"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Text {
+                                        text: "Running"
+                                        font.family: "Noto Sans"
+                                        font.pixelSize: 9
+                                        font.weight: Font.DemiBold
+                                        color: "#73daca"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+
+                            // Action Hint Pill (e.g. Open ↵ / Switch to ↵)
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                height: 22
+                                width: actionHintText.implicitWidth + 14
+                                radius: 6
+                                color: delegateRoot.isSelected ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.25) : Qt.rgba(1, 1, 1, 0.05)
+                                visible: delegateRoot.isSelected || model.isRunning
+
+                                Text {
+                                    id: actionHintText
+                                    anchors.centerIn: parent
+                                    text: model.actionVerb + " ↵"
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Medium
+                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_secondary ?? "#8a8f9e")
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: rowMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onEntered: appList.currentIndex = index
+                            onClicked: launcher.executeSelectedItem(index)
+                        }
+                    }
+                }
+            }
+
+            // Empty state when search yields no results
+            Column {
+                anchors.centerIn: parent
+                spacing: 6
+                visible: resultsModel.count === 0 && searchInput.text.trim() !== "" && !launcher.isMathActive && !launcher.isCmdActive && !launcher.isBangActive
+
+                MaterialSymbol {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "search_off"
+                    iconSize: 28
+                    color: Theme.colors.text_secondary ?? "#565f89"
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "No results found"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
+                    color: Theme.colors.text_secondary ?? "#565f89"
+                }
             }
         }
     }

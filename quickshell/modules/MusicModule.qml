@@ -1,10 +1,12 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Effects
 import Quickshell
-import Quickshell.Widgets
 import Quickshell.Io
+import Quickshell.Widgets
 import Quickshell.Services.Mpris
+import Quickshell.Services.Pipewire
 import "../"
 
 Item {
@@ -13,274 +15,324 @@ Item {
     Layout.fillHeight: true
 
     // ========================================================
-    // 1. MPRIS & PLAYER STATE MANAGEMENT
+    // 1. MPRIS PLAYER DISCOVERY & SELECTION ENGINE (Iris 1:1)
     // ========================================================
-    readonly property var availablePlayers: {
+    property var manualPlayer: null
+    property bool isDraggingAnyStream: false
+    readonly property bool isDraggingSeek: (typeof timelineScrubber !== "undefined" && timelineScrubber.isDragging) || isDraggingAnyStream
+
+    function togglePanel(panelName) {
+        // Compatibility stub for shell IPC
+    }
+
+    function isRealPlayer(p) {
+        if (!p) return false;
+        const name = (p.dbusName ?? "").toLowerCase();
+        if (!name) return false;
+
+        // 1. Drop playerctld proxy
+        if (name.startsWith("org.mpris.MediaPlayer2.playerctld")) return false;
+
+        // 2. Drop Twitter / X noise
+        const rawUrl = (p.metadata?.["xesam:url"] ?? "").toLowerCase();
+        const lowerTitle = (p.trackTitle ?? "").toLowerCase();
+        if (rawUrl.includes("x.com") || rawUrl.includes("twitter.com") ||
+            lowerTitle.includes(" on x:") || lowerTitle.includes(" / x")) {
+            return false;
+        }
+
+        // 3. Browser players (Brave, Chrome, Firefox, Chromium, Zen, Opera, etc.)
+        const isBrowser = name.includes("brave") || name.includes("chrome") ||
+                          name.includes("chromium") || name.includes("firefox") ||
+                          name.includes("zen") || name.includes("vivaldi") ||
+                          name.includes("opera") || name.includes("plasma-browser-integration");
+
+        if (isBrowser) {
+            // Actively playing ALWAYS accepted immediately!
+            if (p.playbackState === MprisPlaybackState.Playing || p.isPlaying) return true;
+            // Paused: accept if valid title and has progress, length, or known streaming URL
+            const hasTitle = (p.trackTitle ?? "").trim().length > 0;
+            const hasProgress = (p.position ?? 0) > 0 || (p.length ?? 0) > 0;
+            if (hasTitle && (hasProgress || (p.length ?? 0) >= 15)) return true;
+            if (hasTitle && (rawUrl.includes("youtube.com") || rawUrl.includes("youtu.be") ||
+                             rawUrl.includes("spotify.com") || rawUrl.includes("soundcloud.com") ||
+                             rawUrl.includes("twitch.tv") || rawUrl.includes("bandcamp.com"))) {
+                return true;
+            }
+            return false;
+        }
+
+        // 4. Non-browser players (Spotify, VLC, MPV, etc.)
+        const hasTitle = (p.trackTitle ?? "").trim().length > 0;
+        if (hasTitle || p.playbackState === MprisPlaybackState.Playing || p.isPlaying) return true;
+        return false;
+    }
+
+    readonly property var allPlayers: {
         if (typeof Mpris === "undefined" || !Mpris.players) return [];
         return Mpris.players.values || [];
     }
 
-    property var manualActivePlayer: null
+    readonly property var realPlayers: {
+        const list = [];
+        for (let i = 0; i < allPlayers.length; i++) {
+            if (isRealPlayer(allPlayers[i])) {
+                list.push(allPlayers[i]);
+            }
+        }
+        return list;
+    }
+
     readonly property var activePlayer: {
-        if (manualActivePlayer && availablePlayers.indexOf(manualActivePlayer) !== -1) {
-            return manualActivePlayer;
-        }
-        for (var i = 0; i < availablePlayers.length; i++) {
-            if (availablePlayers[i].playbackState === MprisPlaybackState.Playing && (availablePlayers[i].trackTitle || availablePlayers[i].trackArtist)) {
-                return availablePlayers[i];
+        const list = realPlayers;
+        // 1. Manual user override via player chips
+        if (manualPlayer && list.includes(manualPlayer)) return manualPlayer;
+
+        // 2. Active playing player takes instant priority (Brave, Spotify, etc.)
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].playbackState === MprisPlaybackState.Playing || list[i].isPlaying) {
+                return list[i];
             }
         }
-        for (var j = 0; j < availablePlayers.length; j++) {
-            if (availablePlayers[j].playbackState === MprisPlaybackState.Playing) {
-                return availablePlayers[j];
-            }
-        }
-        for (var k = 0; k < availablePlayers.length; k++) {
-            if (availablePlayers[k].playbackState === MprisPlaybackState.Paused && (availablePlayers[k].trackTitle || availablePlayers[k].trackArtist)) {
-                return availablePlayers[k];
-            }
-        }
-        for (var m = 0; m < availablePlayers.length; m++) {
-            if (availablePlayers[m].trackTitle || availablePlayers[m].trackArtist) {
-                return availablePlayers[m];
-            }
-        }
-        return availablePlayers.length > 0 ? availablePlayers[0] : null;
+
+        // 3. Fallback to first available real player
+        if (list.length > 0) return list[0];
+        return null;
     }
 
-    readonly property bool hasPlayer: activePlayer !== null || rawPlayerName !== ""
-    readonly property bool isPlaying: activePlayer ? (activePlayer.playbackState === MprisPlaybackState.Playing) : rawIsPlaying
-    readonly property string playerName: activePlayer ? (activePlayer.identity || activePlayer.desktopEntry || "Media Player") : (rawPlayerName || "Media Player")
-    readonly property string songTitle: activePlayer ? (activePlayer.trackTitle || rawTitle || "") : rawTitle
-    readonly property string songArtist: {
+    readonly property var otherPlayers: realPlayers.filter(p => p !== activePlayer)
+
+    // ========================================================
+    // 2. EFFECTIVE MEDIA TRACK METADATA
+    // ========================================================
+    readonly property bool hasPlayer: activePlayer !== null
+    readonly property bool effectiveIsPlaying: activePlayer ? (activePlayer.playbackState === MprisPlaybackState.Playing || activePlayer.isPlaying) : false
+    readonly property string effectiveTitle: activePlayer?.trackTitle ? activePlayer.trackTitle.trim() : (hasPlayer ? (activePlayer.identity || "Media Player") : "No Media Playing")
+    readonly property string effectiveArtist: {
+        if (!activePlayer) return "Playback will appear here";
+        if (Array.isArray(activePlayer.trackArtists) && activePlayer.trackArtists.length > 0) return activePlayer.trackArtists.join(", ").trim();
+        if (typeof activePlayer.trackArtists === "string" && activePlayer.trackArtists.trim() !== "") return activePlayer.trackArtists.trim();
+        if (typeof activePlayer.trackArtist === "string" && activePlayer.trackArtist.trim() !== "") return activePlayer.trackArtist.trim();
+        return activePlayer.identity || "Unknown Artist";
+    }
+    readonly property string effectiveArtUrl: {
+        if (typeof dashMod !== "undefined" && dashMod && dashMod.currentAlbumArt && dashMod.currentAlbumArt !== "") {
+            return dashMod.currentAlbumArt;
+        }
+        return activePlayer?.trackArtUrl ?? "";
+    }
+    readonly property real effectiveLength: (activePlayer && activePlayer.length > 0 && activePlayer.length < 86400) ? activePlayer.length : 0
+    property real trackedPosition: activePlayer ? (activePlayer.position ?? 0) : 0
+    readonly property real effectivePosition: Math.max(0, Math.min(effectiveLength > 0 ? effectiveLength : 86400, trackedPosition))
+
+    // Broadcast current album art to whole shell Theme
+    onEffectiveArtUrlChanged: {
+        if (effectiveIsPlaying && effectiveArtUrl !== "") {
+            Theme.currentArtSource = effectiveArtUrl;
+        }
+    }
+    onEffectiveIsPlayingChanged: {
+        if (effectiveIsPlaying && effectiveArtUrl !== "") {
+            Theme.currentArtSource = effectiveArtUrl;
+        } else if (!effectiveIsPlaying) {
+            Theme.currentArtSource = "";
+        }
+    }
+
+    // Smooth position updater
+    Timer {
+        id: posTickTimer
+        interval: 250
+        repeat: true
+        running: musicModule.visible && musicModule.effectiveIsPlaying && !timelineScrubber.isDragging
+        onTriggered: {
+            if (activePlayer && activePlayer.position !== undefined) {
+                musicModule.trackedPosition = activePlayer.position;
+            }
+        }
+    }
+
+    onActivePlayerChanged: {
+        if (activePlayer && activePlayer.position !== undefined) {
+            trackedPosition = activePlayer.position;
+        }
+    }
+
+    // Media actions (clean single-invocation pattern with playerctl fallback)
+    function togglePlaying() {
         if (activePlayer) {
-            if (Array.isArray(activePlayer.trackArtists) && activePlayer.trackArtists.length > 0) return activePlayer.trackArtists.join(", ");
-            if (typeof activePlayer.trackArtists === "string" && activePlayer.trackArtists !== "") return activePlayer.trackArtists;
-            if (typeof activePlayer.trackArtist === "string" && activePlayer.trackArtist !== "") return activePlayer.trackArtist;
+            try {
+                activePlayer.togglePlaying();
+                return;
+            } catch(e) {}
         }
-        return rawArtist || "";
-    }
-    readonly property string songAlbum: {
-        if (activePlayer && activePlayer.trackAlbum) return activePlayer.trackAlbum;
-        return rawAlbum || "";
-    }
-    readonly property string albumArt: {
-        if (rawArtUrl && (rawArtUrl.startsWith("file://") || rawArtUrl.startsWith("/"))) return rawArtUrl;
-        if (typeof dashMod !== "undefined" && dashMod.currentAlbumArt && dashMod.currentAlbumArt !== "") return dashMod.currentAlbumArt;
-        if (activePlayer && activePlayer.trackArtUrl && activePlayer.trackArtUrl.startsWith("file://")) return activePlayer.trackArtUrl;
-        return rawArtUrl || "";
+        Quickshell.execDetached(["playerctl", "play-pause"]);
     }
 
-    // Positions & Duration
-    property int currentPositionSec: 0
-    property int totalLengthSec: 0
-    property bool isDraggingSeek: false
-    property int dragPositionSec: 0
-    readonly property int displayPositionSec: isDraggingSeek ? dragPositionSec : currentPositionSec
-    readonly property real seekRatio: totalLengthSec > 0 ? Math.max(0.0, Math.min(1.0, displayPositionSec / totalLengthSec)) : 0.0
-
-    // Volume, Loop & Shuffle
-    property real volumeLevel: 1.0
-    property real previousVolume: 0.8
-    property bool isShuffle: activePlayer ? (activePlayer.shuffle ?? false) : rawShuffle
-    property string loopMode: "None" // None, Track, Playlist
-
-    // Active Drawer Panel ("volume", "devices", "players", or "")
-    property string activePanel: ""
-    function togglePanel(panelName) {
-        activePanel = (activePanel === panelName) ? "" : panelName;
+    function previous() {
+        if (activePlayer) {
+            try {
+                activePlayer.previous();
+                return;
+            } catch(e) {}
+        }
+        Quickshell.execDetached(["playerctl", "previous"]);
     }
 
-    // Dynamic Height calculation (DMS style)
-    readonly property real baseCardHeight: 335
-    readonly property real calculatedHeight: {
-        if (!hasPlayer && !rawIsPlaying) return 240;
-        if (activePanel === "volume") return baseCardHeight + 64;
-        if (activePanel === "devices") return baseCardHeight + Math.max(1, Math.min(4, sinksModel.count)) * 46 + 18;
-        if (activePanel === "players") return baseCardHeight + Math.max(1, Math.min(4, availablePlayers.length)) * 46 + 18;
-        return baseCardHeight;
+    function next() {
+        if (activePlayer) {
+            try {
+                activePlayer.next();
+                return;
+            } catch(e) {}
+        }
+        Quickshell.execDetached(["playerctl", "next"]);
     }
 
-    // Dynamic Accent Color (with ColorQuantizer extraction or Theme fallback)
-    property color accentColor: Theme.colors.accent ?? "#7aa2f7"
+    function seek(seconds) {
+        const s = Math.max(0, Math.floor(seconds));
+        musicModule.trackedPosition = s;
+        if (activePlayer) {
+            try { activePlayer.position = s; } catch(e) {}
+        }
+        const pName = (activePlayer?.identity || activePlayer?.desktopEntry || "").toLowerCase();
+        if (pName && !pName.includes("player")) {
+            Quickshell.execDetached(["playerctl", "-p", pName, "position", s.toString()]);
+        } else {
+            Quickshell.execDetached(["playerctl", "position", s.toString()]);
+        }
+    }
+
+    function clockText(total) {
+        const s = Math.max(0, Math.floor(total || 0));
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        const pad = n => n < 10 ? "0" + n : String(n);
+        return h > 0 ? h + ":" + pad(m) + ":" + pad(sec) : m + ":" + pad(sec);
+    }
+
+    // ========================================================
+    // 3. COLOR QUANTIZATION (Dynamic Artwork Tint)
+    // ========================================================
     ColorQuantizer {
-        id: quantizer
-        source: musicModule.albumArt
-        depth: 4
-        rescaleSize: 64
+        id: tintQuantizer
+        source: musicModule.effectiveArtUrl
+        depth: 3
+        rescaleSize: 48
         onColorsChanged: {
             if (colors && colors.length > 0) {
-                var c = colors[0];
-                var lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-                if (lum > 0.15 && lum < 0.90) {
-                    musicModule.accentColor = c;
-                } else {
-                    musicModule.accentColor = Theme.colors.accent ?? "#7aa2f7";
+                let best = null;
+                let bestScore = -1;
+                for (let i = 0; i < colors.length; i++) {
+                    const c = colors[i];
+                    const score = Math.max(0, c.hslSaturation) * (1 - Math.abs(c.hslLightness - 0.5));
+                    if (score > bestScore) { bestScore = score; best = c; }
+                }
+                if (best && best.hslSaturation >= 0.14 && best.hslHue >= 0) {
+                    const extracted = Qt.hsla(best.hslHue, Math.max(0.5, best.hslSaturation),
+                        Math.max(0.64, Math.min(0.76, best.hslLightness + 0.22)), 1);
+                    Theme.setMediaAccent(extracted.toString());
                 }
             }
         }
     }
 
-    readonly property color onAccentColor: {
-        var lum = 0.2126 * accentColor.r + 0.7152 * accentColor.g + 0.0722 * accentColor.b;
-        return lum > 0.6 ? "#16161e" : "#ffffff";
+    readonly property color artTint: Theme.colors.accent ?? "#a8c7fa"
+
+    // ========================================================
+    // 4. PIPEWIRE APP AUDIO STREAMS (Levels & Mute)
+    // ========================================================
+    readonly property var streams: {
+        if (typeof Pipewire === "undefined" || !Pipewire.nodes) return [];
+        const groups = [];
+        const nodes = Pipewire.nodes.values.filter(n => n && n.isSink && n.audio && n.isStream);
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            const name = (node.properties?.["application.name"] || node.description || node.name || "App");
+            const group = groups.find(g => g.name === name);
+            if (group) {
+                group.nodes.push(node);
+            } else {
+                groups.push({ name: name, nodes: [node] });
+            }
+        }
+        return groups;
+    }
+
+    function streamIconName(node) {
+        if (!node) return "audio-x-generic";
+        const props = node.properties ?? {};
+        const appName = String(props["application.name"] || node.description || node.name || "").toLowerCase();
+        const binary = String(props["application.process.binary"] || "").toLowerCase();
+        const iconHint = String(props["application.icon-name"] || props["application.id"] || "").toLowerCase();
+        const combined = `${appName} ${binary} ${iconHint}`;
+
+        if (combined.includes("brave")) return "brave-desktop";
+        if (combined.includes("spotify")) return "spotify";
+        if (combined.includes("zen")) return "zen-browser";
+        if (combined.includes("firefox")) return "firefox";
+        if (combined.includes("chrome")) return "google-chrome";
+        if (combined.includes("chromium")) return "chromium";
+        if (combined.includes("mpv")) return "mpv";
+        if (combined.includes("vlc")) return "vlc";
+        if (combined.includes("discord") || combined.includes("vesktop")) return "discord";
+
+        for (const hint of [props["application.icon-name"], props["application.id"], appName]) {
+            if (!hint) continue;
+            const p = Quickshell.iconPath(hint, "");
+            if (p && p.length > 0) return hint;
+        }
+        return "audio-x-generic";
+    }
+
+    function getStreamVolume(nodes) {
+        if (!nodes || nodes.length === 0) return 1.0;
+        let maxVol = 0;
+        let found = false;
+        for (let i = 0; i < nodes.length; i++) {
+            const v = nodes[i]?.audio?.volume;
+            if (typeof v === "number" && !isNaN(v)) {
+                found = true;
+                if (v > maxVol) maxVol = v;
+            }
+        }
+        return found ? Math.max(0, Math.min(1, maxVol)) : 1.0;
+    }
+
+    function getStreamMuted(nodes) {
+        if (!nodes || nodes.length === 0) return false;
+        for (let i = 0; i < nodes.length; i++) {
+            if (nodes[i]?.audio?.muted === true) return true;
+        }
+        return false;
     }
 
     // ========================================================
-    // CAVA AUDIO VISUALIZER & ENERGY PROCESS (DMS style)
+    // 4.1 AUDIO OUTPUT DEVICES (Headphones, Speakers, etc.)
     // ========================================================
-    CavaProcess {
-        id: musicCava
-        active: musicModule.visible && musicModule.isPlaying
-        bars: 16
-    }
+    property var audioSinks: []
+    property string currentSinkName: ""
 
-    Timer {
-        id: vizTimer
-        property int tick: 0
-        interval: 40
-        repeat: true
-        running: musicModule.visible && musicModule.isPlaying
-        onTriggered: tick = (tick + 1) % 10000
-    }
-
-    readonly property real auraEnergy: {
-        if (!musicModule.isPlaying) return 0.0;
-        if (musicCava.audioSignalActive && musicCava.points.length >= 2) {
-            var bass = (musicCava.points[0] + musicCava.points[1]) / (2 * Math.max(1, musicCava.normalizationCeiling));
-            return Math.min(1.0, Math.max(0.0, bass));
-        }
-        return 0.35 + 0.35 * Math.abs(Math.sin(vizTimer.tick * 0.12));
-    }
-
-    // Fallback CLI fields
-    property string rawPlayerName: ""
-    property bool rawIsPlaying: false
-    property string rawTitle: ""
-    property string rawArtist: ""
-    property string rawAlbum: ""
-    property string rawArtUrl: ""
-    property bool rawShuffle: false
-
-    // ========================================================
-    // 2. CONTROLS & LOGIC
-    // ========================================================
-    function formatTime(totalSec) {
-        if (isNaN(totalSec) || totalSec <= 0) return "0:00";
-        var m = Math.floor(totalSec / 60);
-        var s = Math.floor(totalSec % 60);
-        return m + ":" + (s < 10 ? "0" : "") + s;
-    }
-
-    function togglePlayPause() {
-        if (activePlayer && activePlayer.canTogglePlaying) {
-            activePlayer.togglePlaying();
-        } else {
-            Quickshell.execDetached(["playerctl", "play-pause"]);
-        }
-        syncTimer.restart();
-    }
-
-    function nextTrack() {
-        if (activePlayer && activePlayer.canGoNext) {
-            activePlayer.next();
-        } else {
-            Quickshell.execDetached(["playerctl", "next"]);
-        }
-        syncTimer.restart();
-    }
-
-    function prevTrack() {
-        if (activePlayer && activePlayer.canGoPrevious) {
-            activePlayer.previous();
-        } else {
-            Quickshell.execDetached(["playerctl", "previous"]);
-        }
-        syncTimer.restart();
-    }
-
-    function toggleShuffle() {
-        if (activePlayer && activePlayer.shuffleSupported) {
-            activePlayer.shuffle = !activePlayer.shuffle;
-        } else {
-            Quickshell.execDetached(["playerctl", "shuffle", "toggle"]);
-        }
-        syncTimer.restart();
-    }
-
-    function cycleLoop() {
-        var nextLoop = "None";
-        if (loopMode === "None") nextLoop = "Track";
-        else if (loopMode === "Track") nextLoop = "Playlist";
-        else nextLoop = "None";
-        musicModule.loopMode = nextLoop;
-        Quickshell.execDetached(["playerctl", "loop", nextLoop]);
-        syncTimer.restart();
-    }
-
-    function setVolume(val) {
-        var v = Math.max(0.0, Math.min(1.0, val));
-        musicModule.volumeLevel = v;
-        Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", v.toFixed(2)]);
-        Quickshell.execDetached(["playerctl", "volume", v.toFixed(2)]);
-    }
-
-    function adjustVolume(step) {
-        setVolume(volumeLevel + step);
-    }
-
-    function toggleMute() {
-        if (volumeLevel > 0.01) {
-            previousVolume = volumeLevel;
-            setVolume(0.0);
-        } else {
-            setVolume(previousVolume > 0.05 ? previousVolume : 0.6);
-        }
-    }
-
-    function seekRelative(deltaSec) {
-        if (totalLengthSec <= 0) return;
-        var targetSec = Math.max(0, Math.min(totalLengthSec, currentPositionSec + deltaSec));
-        musicModule.currentPositionSec = targetSec;
-        Quickshell.execDetached(["playerctl", "position", targetSec.toString()]);
-    }
-
-    function commitSeekRatio(ratio) {
-        if (totalLengthSec <= 0) return;
-        var targetSec = Math.round(ratio * totalLengthSec);
-        musicModule.currentPositionSec = targetSec;
-        Quickshell.execDetached(["playerctl", "position", targetSec.toString()]);
-    }
-
-    function getAudioDeviceIcon(name, desc) {
-        var n = ((name || "") + " " + (desc || "")).toLowerCase();
-        if (n.includes("bluez") || n.includes("buds") || n.includes("headset") || n.includes("headphone") || n.includes("ear")) return "headset";
-        if (n.includes("hdmi") || n.includes("displayport") || n.includes("tv")) return "tv";
-        return "speaker";
-    }
-
-    // Audio Sinks model via audio_devices.py
-    ListModel {
-        id: sinksModel
+    readonly property var cleanAudioSinks: {
+        return (musicModule.audioSinks || []).filter(function(s) {
+            return !s.name.includes("HiFi__HDMI") && !s.name.includes("DisplayPort");
+        });
     }
 
     Process {
-        id: sinksPoller
+        id: fetchSinksProcess
         running: false
         command: ["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", "")]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     var data = JSON.parse(this.text.trim());
-                    if (data && Array.isArray(data.sinks)) {
-                        sinksModel.clear();
-                        for (var i = 0; i < data.sinks.length; i++) {
-                            sinksModel.append({
-                                devId: data.sinks[i].id || "",
-                                name: data.sinks[i].name || "",
-                                desc: data.sinks[i].desc || "Audio Sink",
-                                isDefault: !!data.sinks[i].isDefault
-                            });
+                    musicModule.audioSinks = data.sinks || [];
+                    for (var i = 0; i < musicModule.audioSinks.length; i++) {
+                        if (musicModule.audioSinks[i].isDefault) {
+                            musicModule.currentSinkName = musicModule.audioSinks[i].name;
+                            break;
                         }
                     }
                 } catch(e) {}
@@ -288,946 +340,529 @@ Item {
         }
     }
 
-    // CLI metadata sync fallback via mpris-status.py
-    Process {
-        id: metadataSyncProcess
-        running: false
-        command: ["python3", Qt.resolvedUrl("../scripts/mpris-status.py").toString().replace("file://", "")]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n");
-                if (lines.length >= 4) {
-                    var status = lines[0] ? lines[0].trim() : "";
-                    musicModule.rawIsPlaying = (status === "Playing");
-                    musicModule.rawTitle = lines[1] ? lines[1].trim() : "";
-                    musicModule.rawArtist = lines[2] ? lines[2].trim() : "";
-                    var art = lines[3] ? lines[3].trim() : "";
-                    if (art !== "") musicModule.rawArtUrl = art;
-
-                    var posMicros = parseInt(lines[4]);
-                    if (!isNaN(posMicros) && !musicModule.isDraggingSeek) {
-                        musicModule.currentPositionSec = Math.floor(posMicros / 1000000);
-                    }
-
-                    var lenMicros = parseInt(lines[5]);
-                    if (!isNaN(lenMicros)) {
-                        musicModule.totalLengthSec = Math.floor(lenMicros / 1000000);
-                    }
-                }
-            }
-        }
-    }
-
     Timer {
-        id: syncTimer
-        interval: 1000
+        id: fetchSinksTimer
+        interval: 3000
         repeat: true
         running: musicModule.visible
+        triggeredOnStart: true
         onTriggered: {
-            if (!metadataSyncProcess.running) metadataSyncProcess.running = true;
-            if (activePanel === "devices" && !sinksPoller.running) sinksPoller.running = true;
+            if (!fetchSinksProcess.running) fetchSinksProcess.running = true;
         }
     }
 
-    Timer {
-        id: localSecondTick
-        interval: 1000
-        repeat: true
-        running: musicModule.visible && musicModule.isPlaying && !musicModule.isDraggingSeek
-        onTriggered: {
-            if (musicModule.totalLengthSec > 0 && musicModule.currentPositionSec < musicModule.totalLengthSec) {
-                musicModule.currentPositionSec++;
+    function switchSink(sinkName) {
+        musicModule.currentSinkName = sinkName;
+        Quickshell.execDetached(["pactl", "set-default-sink", sinkName]);
+        Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", ""), "set-sink", sinkName]);
+        if (!fetchSinksProcess.running) fetchSinksProcess.running = true;
+    }
+
+    function cleanDeviceName(name, desc) {
+        var d = (desc && desc.length > 0) ? desc : (name || "Device");
+        d = d.replace(/^Raptor Lake-P\/U\/H cAVS\s*/i, "");
+        d = d.replace(/^Alder Lake PCH-P High Definition Audio Controller\s*/i, "");
+        return d.trim() || desc || name;
+    }
+
+    function getSinkIcon(name, desc) {
+        var n = ((name || "") + " " + (desc || "")).toLowerCase();
+        if (n.includes("bluez") || n.includes("buds") || n.includes("headset") || n.includes("headphone") || n.includes("ear") || n.includes("wh-")) return "headphones";
+        return "speaker";
+    }
+
+    // Global Pipewire stream tracker to ensure all properties are live and reactive
+    PwObjectTracker {
+        objects: {
+            if (typeof Pipewire === "undefined" || !Pipewire.nodes) return [];
+            return Pipewire.nodes.values.filter(function(n) { return n && n.isStream && n.audio; });
+        }
+    }
+
+    function setAppVolume(appLevel, vol) {
+        var clamped = Math.max(0, Math.min(1.0, vol));
+        var nodes = appLevel?.nodes || [];
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node?.audio) {
+                node.audio.volume = clamped;
+                if (clamped > 0.01 && node.audio.muted) {
+                    node.audio.muted = false;
+                }
+            }
+            var nId = Number(node?.id ?? 0);
+            if (nId > 0) {
+                Quickshell.execDetached(["wpctl", "set-volume", String(nId), clamped.toFixed(2)]);
+                if (clamped > 0.01) {
+                    Quickshell.execDetached(["wpctl", "set-mute", String(nId), "0"]);
+                }
             }
         }
     }
 
-    Component.onCompleted: {
-        metadataSyncProcess.running = true;
-        sinksPoller.running = true;
-    }
-
-    onVisibleChanged: {
-        if (visible) {
-            metadataSyncProcess.running = true;
-            sinksPoller.running = true;
-            forceActiveFocus();
-        } else {
-            activePanel = "";
-        }
-    }
-
-    // Keyboard Shortcuts
-    focus: true
-    Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape) {
-            root.collapseToIdle();
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Space) {
-            togglePlayPause();
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Left) {
-            seekRelative(-5);
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Right) {
-            seekRelative(5);
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Up) {
-            adjustVolume(0.05);
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Down) {
-            adjustVolume(-0.05);
-            event.accepted = true;
-        } else if (event.key === Qt.Key_M) {
-            toggleMute();
-            event.accepted = true;
+    function toggleAppMute(appLevel) {
+        var willMute = !appLevel.isMuted;
+        var nodes = appLevel?.nodes || [];
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node?.audio) {
+                node.audio.muted = willMute;
+            }
+            var nId = Number(node?.id ?? 0);
+            if (nId > 0) {
+                Quickshell.execDetached(["wpctl", "set-mute", String(nId), willMute ? "1" : "0"]);
+            }
         }
     }
 
     // ========================================================
-    // 3. MEDIA ARTWORK BLUR BACKDROP (DMS MediaArtBackdrop)
+    // 5. DYNAMIC SNUG HEIGHT CALCULATION (Zero bottom dead space)
     // ========================================================
-    Item {
-        id: backdropContainer
+    readonly property real calculatedHeight: {
+        let h = 18 + 68 + 12; // top pad + header + spacing
+        if (effectiveLength > 0) {
+            h += 33 + 12; // timeline + spacing
+        }
+        h += 52; // transport buttons
+        if (otherPlayers.length > 0) {
+            h += 10 + 1 + 8 + 32; // hairline + chip row + spacing
+        }
+        if (cleanAudioSinks.length > 0) {
+            h += 10 + 1 + 8 + 28; // hairline + audio output chips
+        }
+        if (streams.length > 0) {
+            const streamCount = Math.min(3, streams.length);
+            h += 10 + 1 + 8 + (streamCount * 36 - 6); // hairline + streams
+        }
+        h += 18; // bottom padding
+        return Math.round(h);
+    }
+
+    // ========================================================
+    // 6. VISUAL CARD STRUCTURE (Iris 1:1)
+    // ========================================================
+
+    // Subtle blurred artwork backdrop
+    IrisMediaBackdrop {
         anchors.fill: parent
-        clip: true
-
-        Image {
-            id: backdropImg
-            anchors.fill: parent
-            source: musicModule.albumArt
-            fillMode: Image.PreserveAspectCrop
-            visible: false
-            asynchronous: true
-            cache: true
-        }
-
-        MultiEffect {
-            anchors.fill: parent
-            source: backdropImg
-            blurEnabled: true
-            blurMax: 64
-            blur: 0.85
-            saturation: -0.15
-            brightness: -0.28
-            opacity: musicModule.albumArt !== "" ? 0.75 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutQuad } }
-        }
-
-        // Dark acrylic overlay tint
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.colors.bg ?? "#16161e"
-            opacity: musicModule.albumArt !== "" ? 0.78 : 0.95
-        }
+        source: musicModule.effectiveArtUrl
+        radius: 26
+        strength: 0.50
+        visible: musicModule.effectiveArtUrl !== ""
     }
 
-    // ========================================================
-    // 4. EMPTY STATE ("No Active Players")
-    // ========================================================
-    Column {
-        anchors.centerIn: parent
-        spacing: 14
-        visible: !musicModule.hasPlayer && !musicModule.rawIsPlaying
-
-        MaterialSymbol {
-            text: "music_note"
-            iconSize: 52
-            color: Theme.colors.text_muted ?? "#565f89"
-            anchors.horizontalCenter: parent.horizontalCenter
-        }
-
-        Text {
-            text: "No Active Players"
-            font.family: "Rubik"
-            font.pixelSize: 18
-            font.bold: true
-            color: Theme.colors.text_primary ?? "white"
-            anchors.horizontalCenter: parent.horizontalCenter
-        }
-
-        Text {
-            text: "Play media in Spotify, YouTube, or your browser"
-            font.family: "Noto Sans"
-            font.pixelSize: 12
-            color: Theme.colors.text_muted ?? "#565f89"
-            anchors.horizontalCenter: parent.horizontalCenter
-        }
-    }
-
-    // ========================================================
-    // 5. DMS MAIN CARD BODY (1:1 Carbon Copy of MediaPlayerIslandChrome)
-    // ========================================================
-    Item {
-        id: cardBody
+    // Obsidian card container plate
+    Rectangle {
         anchors.fill: parent
-        anchors.margins: 18
-        visible: musicModule.hasPlayer || musicModule.rawIsPlaying
+        topLeftRadius: 0
+        topRightRadius: 0
+        bottomLeftRadius: 26
+        bottomRightRadius: 26
+        color: musicModule.effectiveArtUrl !== "" ? Qt.rgba(0.08, 0.08, 0.09, 0.78) : "#141416"
+        border.width: 0
+        border.color: "transparent"
+    }
 
-        // ----------------------------------------------------
-        // TOP HEADER: Artwork + Info + Pill Button Cluster
-        // ----------------------------------------------------
-        Item {
-            id: header
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: 150
+    // Main Content
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.topMargin: 18
+        anchors.bottomMargin: 18
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        spacing: 12
 
-            // 0. REACTIVE AUDIO AURA / HALO (DMS MediaBlobHalo style)
-            Rectangle {
-                id: artAura
-                anchors.centerIn: artBox
-                width: artBox.width + (musicModule.isPlaying ? (10 + musicModule.auraEnergy * 14) : 0)
-                height: artBox.height + (musicModule.isPlaying ? (10 + musicModule.auraEnergy * 14) : 0)
-                radius: artBox.radius + 6
-                color: Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, musicModule.isPlaying ? 0.22 : 0.0)
-                border.width: 1.5
-                border.color: Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, musicModule.isPlaying ? (0.4 + musicModule.auraEnergy * 0.4) : 0.0)
-                opacity: musicModule.isPlaying ? 0.95 : 0.0
-                z: 0
-                Behavior on opacity { NumberAnimation { duration: 250 } }
-                Behavior on width { NumberAnimation { duration: 75; easing.type: Easing.OutQuad } }
-                Behavior on height { NumberAnimation { duration: 75; easing.type: Easing.OutQuad } }
+        // BLOCK 1: PLAYER HEADER (68px Cover, Track Info, Live Waveform)
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 14
+
+            IrisArtwork {
+                id: pageCover
+                Layout.preferredWidth: 68
+                Layout.preferredHeight: 68
+                source: musicModule.effectiveArtUrl
+                circular: true
+                radius: width / 2
             }
 
-            // 1. ALBUM ARTWORK (150x150, cornerRadius 26)
-            Rectangle {
-                id: artBox
-                z: 1
-                width: 150
-                height: 150
-                radius: 26
-                color: Qt.rgba(1, 1, 1, 0.08)
-                clip: true
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 3
 
-                // Subtle ambient drop shadow inside card
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(255, 255, 255, 0.12)
-                    z: 2
+                Text {
+                    Layout.fillWidth: true
+                    text: musicModule.effectiveTitle
+                    color: "#f5f5f7"
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                 }
 
-                // Fallback icon
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "music_note"
-                    iconSize: 56
-                    color: musicModule.accentColor
-                    visible: artImage.status !== Image.Ready
-                }
-
-                Image {
-                    id: artImage
-                    anchors.fill: parent
-                    source: musicModule.albumArt
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: true
-                    visible: status === Image.Ready
+                Text {
+                    Layout.fillWidth: true
+                    text: musicModule.effectiveArtist
+                    visible: text.length > 0
+                    color: Qt.rgba(255, 255, 255, 0.70)
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
                 }
             }
 
-            // 2. TOP-RIGHT PILL BUTTON CLUSTER (Volume, Output Devices, Players)
-            Row {
-                id: buttonGroup
-                anchors.right: parent.right
-                anchors.top: parent.top
+            IrisWaveform {
+                Layout.alignment: Qt.AlignVCenter
+                running: musicModule.effectiveIsPlaying && musicModule.visible
+                tint: musicModule.artTint
+                barHeight: 20
+            }
+        }
+
+        // BLOCK 2: TIMELINE & SCRUBBER (Elapsed & Remaining Time)
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: musicModule.effectiveLength > 0
+            spacing: 3
+
+            IrisScrubber {
+                id: timelineScrubber
+                Layout.fillWidth: true
+                seekable: musicModule.hasPlayer && musicModule.effectiveLength > 0
+                value: musicModule.effectiveLength > 0 ? Math.max(0, Math.min(1, musicModule.effectivePosition / musicModule.effectiveLength)) : 0
+                fillColor: musicModule.artTint
+                trackColor: Qt.rgba(255, 255, 255, 0.12)
+                onSeekRequested: next => musicModule.seek(next * musicModule.effectiveLength)
+                onMoved: next => { musicModule.trackedPosition = next * musicModule.effectiveLength; }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: musicModule.clockText(musicModule.effectivePosition)
+                    color: Qt.rgba(255, 255, 255, 0.65)
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    font.features: ({ "tnum": 1 })
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: "-" + musicModule.clockText(Math.max(0, musicModule.effectiveLength - musicModule.effectivePosition))
+                    color: Qt.rgba(255, 255, 255, 0.65)
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    font.features: ({ "tnum": 1 })
+                }
+            }
+        }
+
+        // BLOCK 3: TRANSPORT BUTTONS (Previous, Play/Pause, Next)
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 18
+
+            Item { Layout.fillWidth: true }
+
+            GlyphButton {
+                glyph: "fast_rewind"
+                glyphSize: 26
+                fill: 1
+                implicitWidth: 44
+                implicitHeight: 44
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 44
+                enabled: musicModule.hasPlayer
+                onClicked: musicModule.previous()
+            }
+
+            GlyphButton {
+                glyph: musicModule.effectiveIsPlaying ? "pause" : "play_arrow"
+                glyphSize: 36
+                fill: 1
+                implicitWidth: 52
+                implicitHeight: 52
+                Layout.preferredWidth: 52
+                Layout.preferredHeight: 52
+                enabled: true
+                backgroundColor: Qt.rgba(255, 255, 255, 0.14)
+                backgroundHoverColor: Qt.rgba(255, 255, 255, 0.22)
+                backgroundPressedColor: Qt.rgba(255, 255, 255, 0.30)
+                onClicked: musicModule.togglePlaying()
+            }
+
+            GlyphButton {
+                glyph: "fast_forward"
+                glyphSize: 26
+                fill: 1
+                implicitWidth: 44
+                implicitHeight: 44
+                Layout.preferredWidth: 44
+                Layout.preferredHeight: 44
+                enabled: musicModule.hasPlayer
+                onClicked: musicModule.next()
+            }
+
+            Item { Layout.fillWidth: true }
+        }
+
+        // BLOCK 4: OTHER PLAYERS (Chips Row)
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: musicModule.otherPlayers.length > 0
+            spacing: 8
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Qt.rgba(255, 255, 255, 0.08)
+            }
+
+            Flow {
+                Layout.fillWidth: true
                 spacing: 6
 
-                // Volume Button
-                Rectangle {
-                    id: volumeBtn
-                    width: 42; height: 42
-                    radius: 21
-                    color: (musicModule.activePanel === "volume") ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.24) : 
-                           (volArea.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07))
-                    border.width: 1
-                    border.color: (musicModule.activePanel === "volume") ? musicModule.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                Repeater {
+                    model: musicModule.otherPlayers
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: musicModule.volumeLevel <= 0.01 ? "volume_off" : (musicModule.volumeLevel < 0.5 ? "volume_down" : "volume_up")
-                        iconSize: 20
-                        color: (musicModule.activePanel === "volume") ? musicModule.accentColor : (Theme.colors.text_primary ?? "white")
-                    }
+                    Rectangle {
+                        id: playerChip
+                        required property var modelData
+                        implicitHeight: 32
+                        implicitWidth: chipRow.implicitWidth + 20
+                        radius: height / 2
+                        color: chipMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : Qt.rgba(255, 255, 255, 0.06)
+                        scale: chipMouse.pressed ? 0.95 : 1.0
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
 
-                    MouseArea {
-                        id: volArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: musicModule.togglePanel("volume")
-                        onWheel: function(wheel) {
-                            wheel.accepted = true;
-                            musicModule.adjustVolume(wheel.angleDelta.y > 0 ? 0.05 : -0.05);
-                        }
-                    }
-                }
+                        RowLayout {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: 6
 
-                // Audio Devices Button
-                Rectangle {
-                    id: outputBtn
-                    width: 42; height: 42
-                    radius: 21
-                    color: (musicModule.activePanel === "devices") ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.24) : 
-                           (outputArea.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07))
-                    border.width: 1
-                    border.color: (musicModule.activePanel === "devices") ? musicModule.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: {
-                            for (var i = 0; i < sinksModel.count; i++) {
-                                if (sinksModel.get(i).isDefault) {
-                                    return musicModule.getAudioDeviceIcon(sinksModel.get(i).name, sinksModel.get(i).desc);
-                                }
+                            IrisArtwork {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 20
+                                source: String(playerChip.modelData?.trackArtUrl ?? "")
+                                circular: true
+                                radius: 10
                             }
-                            return "speaker";
-                        }
-                        iconSize: 20
-                        color: (musicModule.activePanel === "devices") ? musicModule.accentColor : (Theme.colors.text_primary ?? "white")
-                    }
 
-                    MouseArea {
-                        id: outputArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            sinksPoller.running = true;
-                            musicModule.togglePanel("devices");
-                        }
-                        onWheel: function(wheel) {
-                            wheel.accepted = true;
-                            if (sinksModel.count > 1) {
-                                var currIdx = 0;
-                                for (var i = 0; i < sinksModel.count; i++) {
-                                    if (sinksModel.get(i).isDefault) { currIdx = i; break; }
-                                }
-                                var nextIdx = (currIdx + (wheel.angleDelta.y > 0 ? 1 : -1) + sinksModel.count) % sinksModel.count;
-                                var target = sinksModel.get(nextIdx);
-                                if (target) {
-                                    Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", ""), "set-sink", target.name]);
-                                    sinksPoller.running = true;
-                                }
+                            Text {
+                                text: String(playerChip.modelData?.trackTitle || playerChip.modelData?.identity || "Player")
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                                color: "#f5f5f7"
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: 150
+                            }
+
+                            MaterialSymbol {
+                                text: playerChip.modelData?.isPlaying ? "graphic_eq" : "pause"
+                                iconSize: 14
+                                fill: 1
+                                color: playerChip.modelData?.isPlaying ? musicModule.artTint : Qt.rgba(255, 255, 255, 0.45)
                             }
                         }
-                    }
-                }
 
-                // Players / Source Button
-                Rectangle {
-                    id: sourceBtn
-                    width: 42; height: 42
-                    radius: 21
-                    visible: musicModule.availablePlayers.length > 0
-                    color: (musicModule.activePanel === "players") ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.24) : 
-                           (sourceArea.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07))
-                    border.width: 1
-                    border.color: (musicModule.activePanel === "players") ? musicModule.accentColor : Qt.rgba(255, 255, 255, 0.1)
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "assistant_device"
-                        iconSize: 20
-                        color: (musicModule.activePanel === "players") ? musicModule.accentColor : (Theme.colors.text_primary ?? "white")
-                    }
-
-                    MouseArea {
-                        id: sourceArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: musicModule.togglePanel("players")
+                        MouseArea {
+                            id: chipMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                musicModule.manualPlayer = playerChip.modelData;
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            // 3. TRACK METADATA & SPECTRUM VISUALIZER
-            Column {
-                anchors.left: artBox.right
-                anchors.leftMargin: 16
-                anchors.right: buttonGroup.left
-                anchors.rightMargin: 12
-                anchors.top: parent.top
-                anchors.topMargin: 2
-                spacing: 4
+        // BLOCK 4.5: AUDIO OUTPUT DEVICE OPTIONS (Headphones / Speakers switcher)
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: musicModule.cleanAudioSinks.length > 0
+            spacing: 8
 
-                // Player Identity & Playing Badge
-                Row {
-                    spacing: 6
-                    width: parent.width
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Qt.rgba(255, 255, 255, 0.08)
+            }
 
-                    MaterialSymbol {
-                        text: "equalizer"
-                        iconSize: 13
-                        color: musicModule.accentColor
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: musicModule.isPlaying
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "OUTPUT"
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    color: Qt.rgba(255, 255, 255, 0.40)
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Repeater {
+                    model: musicModule.cleanAudioSinks
+
+                    Rectangle {
+                        id: sinkChip
+                        required property var modelData
+                        readonly property bool isSelected: (sinkChip.modelData.isDefault || sinkChip.modelData.name === musicModule.currentSinkName)
+                        implicitHeight: 26
+                        implicitWidth: sinkChipRow.implicitWidth + 16
+                        radius: 13
+                        color: isSelected 
+                            ? Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.25)
+                            : (sinkMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06))
+                        border.width: 0
+
+                        RowLayout {
+                            id: sinkChipRow
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            MaterialSymbol {
+                                text: musicModule.getSinkIcon(sinkChip.modelData.name, sinkChip.modelData.desc)
+                                iconSize: 13
+                                fill: sinkChip.isSelected ? 1 : 0
+                                color: sinkChip.isSelected ? (Theme.colors.accent ?? "#a8c7fa") : Qt.rgba(255, 255, 255, 0.70)
+                            }
+
+                            Text {
+                                text: musicModule.cleanDeviceName(sinkChip.modelData.name, sinkChip.modelData.desc)
+                                font.pixelSize: 11
+                                font.weight: sinkChip.isSelected ? Font.Bold : Font.Medium
+                                color: sinkChip.isSelected ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
+                            }
+                        }
+
+                        MouseArea {
+                            id: sinkMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                musicModule.switchSink(sinkChip.modelData.name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // BLOCK 5: APP AUDIO STREAMS / LEVELS (PipeWire per-app volume & mute)
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: musicModule.streams.length > 0
+            spacing: 8
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 1
+                color: Qt.rgba(255, 255, 255, 0.08)
+            }
+
+            Repeater {
+                model: musicModule.streams.slice(0, 3)
+
+                RowLayout {
+                    id: appLevel
+                    required property var modelData
+                    readonly property var nodes: Array.from(appLevel.modelData?.nodes ?? [])
+
+                    PwObjectTracker {
+                        objects: appLevel.nodes
+                    }
+
+                    readonly property bool isMuted: {
+                        if (!appLevel.nodes || appLevel.nodes.length === 0) return false;
+                        for (var i = 0; i < appLevel.nodes.length; i++) {
+                            if (appLevel.nodes[i]?.audio?.muted) return true;
+                        }
+                        return false;
+                    }
+                    readonly property real streamVolume: {
+                        if (!appLevel.nodes || appLevel.nodes.length === 0) return 1.0;
+                        var maxV = 0;
+                        var found = false;
+                        for (var i = 0; i < appLevel.nodes.length; i++) {
+                            var v = appLevel.nodes[i]?.audio?.volume;
+                            if (typeof v === "number" && !isNaN(v)) {
+                                found = true;
+                                if (v > maxV) maxV = v;
+                            }
+                        }
+                        return found ? Math.max(0, Math.min(1.0, maxV)) : 1.0;
+                    }
+
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Item {
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+
+                        Image {
+                            id: appImg
+                            anchors.fill: parent
+                            sourceSize: Qt.size(44, 44)
+                            source: {
+                                const iconName = musicModule.streamIconName(appLevel.nodes[0]);
+                                return Quickshell.iconPath(iconName, "") || Quickshell.iconPath("audio-x-generic", "") || "";
+                            }
+                            opacity: appLevel.isMuted ? 0.45 : 1.0
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            visible: appImg.status !== Image.Ready
+                            text: "graphic_eq"
+                            iconSize: 16
+                            fill: 1
+                            color: Qt.rgba(255, 255, 255, appLevel.isMuted ? 0.35 : 0.70)
+                        }
                     }
 
                     Text {
-                        text: (musicModule.playerName || "Media Player").toUpperCase()
-                        font.family: "Rubik"
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        font.letterSpacing: 1.1
-                        color: musicModule.accentColor
-                        opacity: 0.9
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.preferredWidth: 100
+                        text: appLevel.nodes.length > 1 ? appLevel.modelData.name + " · " + appLevel.nodes.length : appLevel.modelData.name
+                        color: appLevel.isMuted ? Qt.rgba(255, 255, 255, 0.45) : "#f5f5f7"
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
                     }
-                }
 
-                Text {
-                    width: parent.width
-                    text: musicModule.songTitle || "Unknown Title"
-                    font.family: "Rubik"
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
-                    color: Theme.colors.text_primary ?? "#ffffff"
-                    elide: Text.ElideRight
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    lineHeight: 1.15
-                }
-
-                Text {
-                    width: parent.width
-                    text: musicModule.songArtist || "Unknown Artist"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: musicModule.accentColor
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                Text {
-                    width: parent.width
-                    text: musicModule.songAlbum
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                    visible: text.length > 0
-                }
-
-                // Dynamic Audio Spectrum Visualizer (DMS AudioVisualization style)
-                Item {
-                    id: specVizContainer
-                    width: parent.width
-                    height: 22
-                    visible: musicModule.isPlaying
-
-                    Row {
-                        anchors.left: parent.left
-                        anchors.bottom: parent.bottom
-                        spacing: 3
-
-                        Repeater {
-                            model: 16
-                            Rectangle {
-                                width: 4
-                                radius: 2
-                                anchors.bottom: parent.bottom
-                                color: musicModule.accentColor
-                                opacity: 0.88
-                                height: {
-                                    if (!musicModule.isPlaying) return 3;
-                                    if (musicCava.audioSignalActive && musicCava.points.length > index) {
-                                        var lvl = Math.min(1.0, (musicCava.points[index] || 0) / Math.max(1, musicCava.normalizationCeiling));
-                                        return Math.max(3, lvl * 20);
-                                    }
-                                    // Smooth rhythmic wave fallback so visualizer is alive during playback
-                                    var wave = 0.25 + 0.65 * Math.abs(Math.sin((vizTimer.tick * 0.16) + index * 0.42));
-                                    return Math.max(3, wave * 18);
-                                }
-                                Behavior on height { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
-                            }
+                    IrisScrubber {
+                        id: appScrubber
+                        Layout.fillWidth: true
+                        seekable: true
+                        fillColor: appLevel.isMuted ? Qt.rgba(255, 255, 255, 0.35) : (Theme.colors.accent ?? "#a8c7fa")
+                        value: appLevel.streamVolume
+                        onMoved: next => {
+                            musicModule.isDraggingAnyStream = true;
+                            musicModule.setAppVolume(appLevel, next);
                         }
-                    }
-                }
-            }
-        }
-
-        // ----------------------------------------------------
-        // MIDDLE: SEEKBAR & TIMESTAMPS (DankSeekbar)
-        // ----------------------------------------------------
-        Item {
-            id: seekBlock
-            anchors.top: header.bottom
-            anchors.topMargin: 18
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 38
-
-            // Progress Bar Track
-            Rectangle {
-                id: seekTrack
-                anchors.top: parent.top
-                anchors.topMargin: 6
-                width: parent.width
-                height: 5
-                radius: 2.5
-                color: Qt.rgba(1, 1, 1, 0.14)
-
-                // Fill Bar
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: parent.width * musicModule.seekRatio
-                    radius: parent.radius
-                    color: musicModule.accentColor
-                    Behavior on width {
-                        enabled: !musicModule.isDraggingSeek
-                        NumberAnimation { duration: 120 }
-                    }
-                }
-
-                // Playhead Handle
-                Rectangle {
-                    width: 12; height: 12
-                    radius: 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: Math.max(0, Math.min(parent.width - width, (parent.width * musicModule.seekRatio) - (width / 2)))
-                    color: "#ffffff"
-                    border.width: 2
-                    border.color: musicModule.accentColor
-                    visible: seekMouse.containsMouse || musicModule.isDraggingSeek
-                    scale: musicModule.isDraggingSeek ? 1.25 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 100 } }
-                }
-
-                MouseArea {
-                    id: seekMouse
-                    anchors.fill: parent
-                    anchors.margins: -8
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: function(mouse) {
-                        musicModule.isDraggingSeek = true;
-                        var ratio = Math.max(0.0, Math.min(1.0, (mouse.x - 8) / (seekTrack.width)));
-                        musicModule.dragPositionSec = Math.round(ratio * musicModule.totalLengthSec);
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (pressed) {
-                            var ratio = Math.max(0.0, Math.min(1.0, (mouse.x - 8) / (seekTrack.width)));
-                            musicModule.dragPositionSec = Math.round(ratio * musicModule.totalLengthSec);
-                        }
-                    }
-                    onReleased: function(mouse) {
-                        if (musicModule.isDraggingSeek) {
-                            var ratio = Math.max(0.0, Math.min(1.0, (mouse.x - 8) / (seekTrack.width)));
-                            musicModule.commitSeekRatio(ratio);
-                            musicModule.isDraggingSeek = false;
-                        }
-                    }
-                }
-            }
-
-            // Time Labels
-            Text {
-                anchors.left: parent.left
-                anchors.bottom: parent.bottom
-                text: musicModule.formatTime(musicModule.displayPositionSec)
-                color: musicModule.accentColor
-                font.family: "Rubik"
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-            }
-
-            Text {
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                text: musicModule.totalLengthSec > 0 ? musicModule.formatTime(musicModule.totalLengthSec) : "--:--"
-                color: Theme.colors.text_secondary ?? "#565f89"
-                font.family: "Rubik"
-                font.pixelSize: 12
-            }
-        }
-
-        // ----------------------------------------------------
-        // BOTTOM: TRANSPORT PLAYBACK CONTROLS (DMS Layout)
-        // ----------------------------------------------------
-        Row {
-            id: transportRow
-            anchors.top: seekBlock.bottom
-            anchors.topMargin: 12
-            anchors.horizontalCenter: parent.horizontalCenter
-            height: 56
-            spacing: 14
-
-            // 1. Shuffle Button
-            Rectangle {
-                width: 48; height: 48
-                radius: 24
-                anchors.verticalCenter: parent.verticalCenter
-                color: musicModule.isShuffle ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.25) :
-                       (shuffleMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "shuffle"
-                    iconSize: 22
-                    color: musicModule.isShuffle ? musicModule.accentColor : (Theme.colors.text_secondary ?? "#8e8e93")
-                }
-
-                MouseArea {
-                    id: shuffleMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: musicModule.toggleShuffle()
-                }
-            }
-
-            // 2. Skip Previous Button
-            Rectangle {
-                width: 64; height: 54
-                radius: 16
-                anchors.verticalCenter: parent.verticalCenter
-                color: prevMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07)
-                scale: prevMouse.pressed ? 0.94 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "skip_previous"
-                    iconSize: 26
-                    color: Theme.colors.text_primary ?? "#ffffff"
-                }
-
-                MouseArea {
-                    id: prevMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: musicModule.prevTrack()
-                }
-            }
-
-            // 3. Central Play / Pause Button (96x54 rounded pill in accentColor)
-            Rectangle {
-                width: 96; height: 54
-                radius: 27
-                anchors.verticalCenter: parent.verticalCenter
-                color: musicModule.accentColor
-                scale: playMouse.pressed ? 0.93 : (playMouse.containsMouse ? 1.03 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-
-                // Elevation glow / shadow effect
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(255, 255, 255, 0.3)
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: musicModule.isPlaying ? "pause" : "play_arrow"
-                    iconSize: 32
-                    color: musicModule.onAccentColor
-                }
-
-                MouseArea {
-                    id: playMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: musicModule.togglePlayPause()
-                }
-            }
-
-            // 4. Skip Next Button
-            Rectangle {
-                width: 64; height: 54
-                radius: 16
-                anchors.verticalCenter: parent.verticalCenter
-                color: nextMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07)
-                scale: nextMouse.pressed ? 0.94 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "skip_next"
-                    iconSize: 26
-                    color: Theme.colors.text_primary ?? "#ffffff"
-                }
-
-                MouseArea {
-                    id: nextMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: musicModule.nextTrack()
-                }
-            }
-
-            // 5. Repeat / Loop Button
-            Rectangle {
-                width: 48; height: 48
-                radius: 24
-                anchors.verticalCenter: parent.verticalCenter
-                color: (musicModule.loopMode !== "None") ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.25) :
-                       (repeatMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
-                Behavior on color { ColorAnimation { duration: 120 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: musicModule.loopMode === "Track" ? "repeat_one" : "repeat"
-                    iconSize: 22
-                    color: (musicModule.loopMode !== "None") ? musicModule.accentColor : (Theme.colors.text_secondary ?? "#8e8e93")
-                }
-
-                MouseArea {
-                    id: repeatMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: musicModule.cycleLoop()
-                }
-            }
-        }
-
-        // ----------------------------------------------------
-        // EXPANDABLE DRAWER PANELS (Volume / Devices / Players)
-        // ----------------------------------------------------
-        Rectangle {
-            id: panelBox
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: transportRow.bottom
-            anchors.topMargin: 12
-            height: {
-                if (musicModule.activePanel === "volume") return 54;
-                if (musicModule.activePanel === "devices") return Math.max(1, Math.min(4, sinksModel.count)) * 46 + 12;
-                if (musicModule.activePanel === "players") return Math.max(1, Math.min(4, musicModule.availablePlayers.length)) * 46 + 12;
-                return 0;
-            }
-            radius: 18
-            color: Qt.rgba(0, 0, 0, 0.35)
-            border.width: 1
-            border.color: Qt.rgba(255, 255, 255, 0.08)
-            visible: musicModule.activePanel !== ""
-            clip: true
-            Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutQuad } }
-
-            // 1. VOLUME PANEL
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 12
-                visible: musicModule.activePanel === "volume"
-
-                Rectangle {
-                    width: 38; height: 38; radius: 19
-                    color: muteBtnArea.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.08)
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: musicModule.volumeLevel <= 0.01 ? "volume_off" : "volume_up"
-                        iconSize: 20
-                        color: musicModule.volumeLevel <= 0.01 ? "#f7768e" : musicModule.accentColor
-                    }
-                    MouseArea {
-                        id: muteBtnArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: musicModule.toggleMute()
-                    }
-                }
-
-                // Volume Slider
-                Rectangle {
-                    id: volSliderTrack
-                    Layout.fillWidth: true
-                    height: 8
-                    radius: 4
-                    color: Qt.rgba(1, 1, 1, 0.14)
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: parent.width * musicModule.volumeLevel
-                        radius: parent.radius
-                        color: musicModule.accentColor
-                    }
-
-                    Rectangle {
-                        width: 16; height: 16; radius: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: Math.max(0, Math.min(parent.width - width, (parent.width * musicModule.volumeLevel) - (width / 2)))
-                        color: "#ffffff"
-                        border.width: 2
-                        border.color: musicModule.accentColor
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        anchors.margins: -10
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onPositionChanged: function(mouse) {
-                            if (pressed) {
-                                var ratio = Math.max(0.0, Math.min(1.0, (mouse.x - 10) / volSliderTrack.width));
-                                musicModule.setVolume(ratio);
-                            }
-                        }
-                        onPressed: function(mouse) {
-                            var ratio = Math.max(0.0, Math.min(1.0, (mouse.x - 10) / volSliderTrack.width));
-                            musicModule.setVolume(ratio);
-                        }
-                    }
-                }
-
-                Text {
-                    text: Math.round(musicModule.volumeLevel * 100) + "%"
-                    font.family: "Rubik"
-                    font.pixelSize: 13
-                    font.weight: Font.Bold
-                    color: Theme.colors.text_primary ?? "#ffffff"
-                    Layout.preferredWidth: 42
-                    horizontalAlignment: Text.AlignRight
-                }
-            }
-
-            // 2. AUDIO DEVICES PANEL
-            ListView {
-                anchors.fill: parent
-                anchors.margins: 6
-                spacing: 4
-                clip: true
-                visible: musicModule.activePanel === "devices"
-                model: sinksModel
-                delegate: Rectangle {
-                    width: ListView.view.width
-                    height: 42
-                    radius: 12
-                    color: model.isDefault ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.22) :
-                           (devItemArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent")
-                    border.width: model.isDefault ? 1 : 0
-                    border.color: musicModule.accentColor
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: musicModule.getAudioDeviceIcon(model.name, model.desc)
-                            iconSize: 20
-                            color: model.isDefault ? musicModule.accentColor : (Theme.colors.text_primary ?? "white")
-                        }
-
-                        Text {
-                            text: model.desc
-                            font.family: "Noto Sans"
-                            font.pixelSize: 13
-                            font.weight: model.isDefault ? Font.Bold : Font.Normal
-                            color: model.isDefault ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_secondary ?? "#aeaeb2")
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                        }
-
-                        Rectangle {
-                            width: 8; height: 8; radius: 4
-                            color: musicModule.accentColor
-                            visible: model.isDefault
+                        onSeekRequested: next => {
+                            musicModule.isDraggingAnyStream = false;
+                            musicModule.setAppVolume(appLevel, next);
                         }
                     }
 
-                    MouseArea {
-                        id: devItemArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
+                    GlyphButton {
+                        glyph: appLevel.isMuted ? "volume_off" : "volume_up"
+                        glyphSize: 17
+                        fill: 1
+                        implicitWidth: 30
+                        implicitHeight: 30
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        glyphColor: appLevel.isMuted ? "#ff6961" : "#f5f5f7"
                         onClicked: {
-                            Quickshell.execDetached(["python3", Qt.resolvedUrl("../scripts/audio_devices.py").toString().replace("file://", ""), "set-sink", model.name]);
-                            sinksPoller.running = true;
-                        }
-                    }
-                }
-            }
-
-            // 3. PLAYERS PANEL
-            ListView {
-                anchors.fill: parent
-                anchors.margins: 6
-                spacing: 4
-                clip: true
-                visible: musicModule.activePanel === "players"
-                model: musicModule.availablePlayers
-                delegate: Rectangle {
-                    width: ListView.view.width
-                    height: 42
-                    radius: 12
-                    property bool isCur: modelData === musicModule.activePlayer
-                    color: isCur ? Qt.rgba(musicModule.accentColor.r, musicModule.accentColor.g, musicModule.accentColor.b, 0.22) :
-                           (playerItemArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent")
-                    border.width: isCur ? 1 : 0
-                    border.color: musicModule.accentColor
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: "music_note"
-                            iconSize: 20
-                            color: isCur ? musicModule.accentColor : (Theme.colors.text_primary ?? "white")
-                        }
-
-                        Column {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: modelData?.identity || modelData?.desktopEntry || "Player"
-                                font.family: "Rubik"
-                                font.pixelSize: 13
-                                font.weight: isCur ? Font.Bold : Font.Normal
-                                color: isCur ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_primary ?? "#e0e0e0")
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                text: modelData?.trackTitle || "Idle"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 11
-                                color: Theme.colors.text_muted ?? "#8e8e93"
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        Rectangle {
-                            width: 8; height: 8; radius: 4
-                            color: musicModule.accentColor
-                            visible: isCur
-                        }
-                    }
-
-                    MouseArea {
-                        id: playerItemArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            musicModule.manualActivePlayer = modelData;
+                            musicModule.toggleAppMute(appLevel);
                         }
                     }
                 }

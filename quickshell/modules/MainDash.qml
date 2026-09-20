@@ -76,7 +76,7 @@ Item {
     // Cava visualizer for music
     CavaProcess {
         id: cavaViz
-        active: dash.isMediaPlaying && root.activeMode === "idle"
+        active: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
         bars: 5
     }
 
@@ -97,11 +97,23 @@ Item {
                 if (dash.currentAlbumArt !== targetArt) {
                     dash.currentAlbumArt = targetArt;
                 }
+                if (dash.isMediaPlaying && targetArt !== "") {
+                    Theme.currentArtSource = targetArt;
+                } else if (!dash.isMediaPlaying) {
+                    Theme.currentArtSource = "";
+                }
                 
                 // Position and length in microseconds
                 dash.trackPosition = parseInt(lines[4]) / 1000000 || 0;
                 dash.trackLength = parseInt(lines[5]) / 1000000 || 0;
                 
+                var vibrantCol = lines[6] ? lines[6].trim() : "";
+                if (dash.isMediaPlaying && vibrantCol.startsWith("#")) {
+                    Theme.setMediaAccent(vibrantCol);
+                } else if (!dash.isMediaPlaying) {
+                    Theme.setMediaAccent("");
+                }
+
                 if (!dash.isMediaPlaying) dash.showMusicInfo = false;
             }
         }
@@ -320,8 +332,8 @@ Item {
                 radius: 6
                 color: Qt.rgba(0, 0, 0, 0.4)
                 clip: true
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.15)
+                border.width: 0
+                border.color: "transparent"
                 Layout.alignment: Qt.AlignVCenter
 
                 Image {
@@ -374,8 +386,8 @@ Item {
                     height: 24
                     radius: 12
                     color: annotMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.22)
-                    border.width: 1
-                    border.color: annotMouse.containsMouse ? "transparent" : Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.45)
+                    border.width: 0
+                    border.color: "transparent"
                     Behavior on color { ColorAnimation { duration: 140 } }
 
                     Row {
@@ -421,8 +433,8 @@ Item {
                     height: 24
                     radius: 12
                     color: shelfBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
-                    border.width: 1
-                    border.color: shelfBtnMouse.containsMouse ? (Theme.colors.border_hover ?? "#7aa2f7") : Qt.rgba(1, 1, 1, 0.12)
+                    border.width: 0
+                    border.color: "transparent"
                     Behavior on color { ColorAnimation { duration: 140 } }
 
                     Row {
@@ -469,8 +481,8 @@ Item {
                     height: 24
                     radius: 12
                     color: ocrBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
-                    border.width: 1
-                    border.color: ocrBtnMouse.containsMouse ? (Theme.colors.border_hover ?? "#7aa2f7") : Qt.rgba(1, 1, 1, 0.12)
+                    border.width: 0
+                    border.color: "transparent"
                     Behavior on color { ColorAnimation { duration: 140 } }
 
                     Row {
@@ -648,8 +660,8 @@ Item {
                             anchors.margins: -2
                             radius: 5
                             color: "transparent"
-                            border.width: 1
-                            border.color: Theme.colors.accent ?? "#7aa2f7"
+                            border.width: 0
+                            border.color: "transparent"
                             opacity: indicatorItem.isFocused ? 0.35 : 0.0
                             visible: opacity > 0.001
                             Behavior on opacity {
@@ -803,7 +815,7 @@ Item {
     // Iris Cava Waveform Component
     component IrisWaveform: Item {
         id: wave
-        property bool running: dash.isMediaPlaying && root.activeMode === "idle"
+        property bool running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
         property int bars: 5
         property real barHeight: 13
         
@@ -986,7 +998,7 @@ Item {
 
             // Right: Live Animated Waveform
             IrisWaveform {
-                running: dash.isMediaPlaying && root.activeMode === "idle"
+                running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
                 Layout.alignment: Qt.AlignVCenter
             }
         }
@@ -1070,7 +1082,7 @@ Item {
 
             // Live Waveform
             IrisWaveform {
-                running: dash.isMediaPlaying && root.activeMode === "idle"
+                running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
                 Layout.alignment: Qt.AlignVCenter
             }
         }
@@ -1106,8 +1118,8 @@ Item {
                     property int wsId: modelData
                     property bool isFocused: typeof Hyprland !== "undefined" && Hyprland.focusedWorkspace && (wsId === Hyprland.focusedWorkspace.id)
                     color: isFocused ? (Theme.colors.accent ?? "#7aa2f7") : (wsMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent")
-                    border.width: wsMouse.containsMouse && !isFocused ? 1 : 0
-                    border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                    border.width: 0
+                    border.color: "transparent"
                     scale: isFocused ? 1.06 : 1.0
                     Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
                     Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
@@ -1244,8 +1256,8 @@ Item {
             Rectangle {
                 width: 28; height: 26; radius: 8
                 color: utilMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: utilMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
+                border.color: "transparent"
                 Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                 Text {
                     anchors.centerIn: parent
@@ -1264,8 +1276,8 @@ Item {
             Rectangle {
                 width: battRow.implicitWidth + 16; height: 26; radius: 8
                 color: battMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: battMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
+                border.color: "transparent"
                 Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 BatteryPill {
