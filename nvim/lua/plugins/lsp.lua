@@ -48,11 +48,10 @@ vim.lsp.config("pyright", {
     capabilities = capabilities,
     settings = {
         python = {
-            pythonPath = vim.fn.getcwd() .. "/.venv/bin/python",
             analysis = {
                 autoSearchPaths = true,
                 useLibraryCodeForTypes = true,
-                diagnosticMode = "workspace",
+                diagnosticMode = "openFilesOnly",
             },
         },
     },
@@ -65,14 +64,27 @@ vim.keymap.set("n", "<leader>lr", "<cmd>lsp restart<cr>", { desc = "Restart LSP"
 -- C / C++
 ------------------------------------------------------------
 
-vim.lsp.config("clangd", {})
+vim.lsp.config("clangd", {
+    cmd = { "clangd", "--background-index", "--clang-tidy" },
+    filetypes = { "c", "cpp", "objc", "objcpp" },
+    root_markers = { ".clangd", ".clang-tidy", ".clang-format", "compile_commands.json", "compile_flags.txt", ".git" },
+    capabilities = capabilities,
+})
 
 ------------------------------------------------------------
 -- Java
 ------------------------------------------------------------
 
+local jdtls_cache = vim.fn.stdpath("cache") .. "/jdtls/workspace/"
 vim.lsp.config("jdtls", {
-    cmd = { "/usr/bin/jdtls" },
+    cmd = {
+        "jdtls",
+        "-data",
+        jdtls_cache .. vim.fn.fnamemodify(vim.fn.getcwd(), ":p:h:t"),
+    },
+    filetypes = { "java" },
+    root_markers = { "gradlew", "mvnw", "build.gradle", "pom.xml", ".git" },
+    capabilities = capabilities,
 })
 
 ------------------------------------------------------------
