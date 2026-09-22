@@ -4,7 +4,7 @@ import "../"
 Item {
     id: wave
     property bool running: false
-    property color tint: Theme.colors.accent ?? "#88c0d0"
+    property color tint: Theme.accent
     property real barHeight: 20
     readonly property int bars: 5
     implicitWidth: wave.bars * 3 + (wave.bars - 1) * 2

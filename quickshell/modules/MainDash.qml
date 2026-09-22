@@ -350,7 +350,7 @@ Item {
                     text: "󰄀"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 14
-                    color: Theme.colors.accent ?? "#7aa2f7"
+                    color: Theme.accent
                 }
             }
 
@@ -371,7 +371,7 @@ Item {
                     text: root.screenshotIslandStatus !== "" ? root.screenshotIslandStatus : "Captured & Copied"
                     font.family: "Inter"
                     font.pixelSize: 9
-                    color: root.screenshotIslandStatus !== "" ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
+                    color: root.screenshotIslandStatus !== "" ? Theme.accent : (Theme.colors.text_secondary ?? "#565f89")
                 }
             }
 
@@ -385,7 +385,7 @@ Item {
                     width: annotRow.implicitWidth + 14
                     height: 24
                     radius: 12
-                    color: annotMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.22)
+                    color: annotMouse.containsMouse ? Theme.accent : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
                     border.width: 0
                     border.color: "transparent"
                     Behavior on color { ColorAnimation { duration: 140 } }
@@ -399,7 +399,7 @@ Item {
                             text: "󰏫"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
-                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.accent ?? "#7aa2f7")
+                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : Theme.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -446,7 +446,7 @@ Item {
                             text: "󰉋"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
-                            color: Theme.colors.accent ?? "#7aa2f7"
+                            color: Theme.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -494,7 +494,7 @@ Item {
                             text: "󰬚"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
-                            color: Theme.colors.accent ?? "#7aa2f7"
+                            color: Theme.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -564,7 +564,7 @@ Item {
                 Layout.preferredWidth: 22
                 Layout.preferredHeight: 22
                 radius: 11
-                color: Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.2)
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
                 Layout.alignment: Qt.AlignVCenter
 
                 Text {
@@ -572,7 +572,7 @@ Item {
                     text: "󰂚"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    color: Theme.colors.accent ?? "#7aa2f7"
+                    color: Theme.accent
                 }
             }
 
@@ -647,7 +647,7 @@ Item {
                         anchors.fill: parent
                         radius: 4
                         color: indicatorItem.isFocused
-                            ? (Theme.colors.accent ?? "#7aa2f7")
+                            ? Theme.accent
                             : (dotMouse.containsMouse ? (Theme.colors.text_primary ?? "#c0caf5") : Qt.rgba(1, 1, 1, 0.28))
 
                         Behavior on color {
@@ -697,13 +697,13 @@ Item {
                 width: 22
                 height: 22
                 radius: 7
-                color: Qt.rgba((Theme.colors.accent ?? "#88c0d0").r, (Theme.colors.accent ?? "#88c0d0").g, (Theme.colors.accent ?? "#88c0d0").b, 0.22)
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
                 anchors.verticalCenter: parent.verticalCenter
                 Text { 
                     anchors.centerIn: parent
                     text: (dash.btDeviceName.toLowerCase().includes("bud") || dash.btDeviceName.toLowerCase().includes("headphone") || dash.btDeviceName.toLowerCase().includes("wh-")) ? "󰋋" : "󰂱"
                     font.family: "JetBrainsMono Nerd Font"
-                    color: Theme.colors.accent ?? "#88c0d0"
+                    color: Theme.accent
                     font.pixelSize: 13
                 }
             }
@@ -734,14 +734,14 @@ Item {
                         font.pixelSize: 11
                         font.bold: true
                         font.features: ({ "tnum": 1 })
-                        color: Theme.colors.accent ?? "#88c0d0"
+                        color: Theme.accent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
                         text: "󰁹"
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 11
-                        color: Theme.colors.accent ?? "#88c0d0"
+                        color: Theme.accent
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -800,7 +800,7 @@ Item {
             Text {
                 text: dash.activeNetType === "eth" ? "󰈀" : "󰤨"
                 font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
-                color: Theme.colors.accent ?? "#7aa2f7"
+                color: Theme.accent
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
@@ -833,7 +833,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 3
                     radius: width / 2
-                    color: Theme.colors.accent ?? "#88c0d0"
+                    color: Theme.accent
                     height: {
                         if (!wave.running) return 3;
                         if (cavaViz.audioSignalActive && cavaViz.points.length > index) {
@@ -857,6 +857,19 @@ Item {
         opacity: (root.activeMode === "idle" && !dash.isMediaPlaying && !dash.isIslandActive) ? 1.0 : 0.0
         visible: opacity > 0.001
         Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    root.switchMode("calendar", true);
+                } else {
+                    root.openUtility("", true);
+                }
+            }
+        }
 
         // Grouped Iris DateMark + IrisClock cluster centered in the capsule
         Row {
@@ -887,7 +900,7 @@ Item {
                     id: idleDayText
                     anchors.baseline: idleWeekdayText.baseline
                     text: Qt.formatDate(clock.date, "d")
-                    color: Theme.colors.accent ?? "#a8c7fa"
+                    color: Theme.accent
                     font.family: "Rubik"
                     font.pixelSize: 12
                     font.weight: Font.Bold
@@ -909,7 +922,7 @@ Item {
                     return hh + ":" + mm;
                 }
                 color: Theme.colors.text_primary ?? "#f5f5f7"
-                separatorColor: Theme.colors.accent ?? "#a8c7fa"
+                separatorColor: Theme.accent
                 isScreenRecording: root.isScreenRecording
             }
         }
@@ -924,6 +937,19 @@ Item {
         opacity: (root.activeMode === "idle" && dash.isMediaPlaying && !dash.showMusicInfo && !dash.isIslandActive) ? 1.0 : 0.0
         visible: opacity > 0.001
         Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.MiddleButton) {
+                    Quickshell.execDetached(["playerctl", "play-pause"]);
+                } else {
+                    root.switchMode("music", true);
+                }
+            }
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -968,7 +994,7 @@ Item {
                         id: musicIdleDayText
                         anchors.baseline: musicIdleWeekdayText.baseline
                         text: Qt.formatDate(clock.date, "d")
-                        color: Theme.colors.accent ?? "#88c0d0"
+                        color: Theme.accent
                         font.family: "Rubik"
                         font.pixelSize: 12
                         font.weight: Font.Bold
@@ -989,7 +1015,7 @@ Item {
                         return hh + ":" + mm;
                     }
                     color: Theme.colors.text_primary ?? "#f5f5f7"
-                    separatorColor: Theme.colors.accent ?? "#88c0d0"
+                    separatorColor: Theme.accent
                     isScreenRecording: root.isScreenRecording
                 }
             }
@@ -1013,6 +1039,19 @@ Item {
         opacity: (root.activeMode === "idle" && dash.isMediaPlaying && dash.showMusicInfo && !dash.isIslandActive) ? 1.0 : 0.0
         visible: opacity > 0.001
         Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.MiddleButton) {
+                    Quickshell.execDetached(["playerctl", "play-pause"]);
+                } else {
+                    root.switchMode("music", true);
+                }
+            }
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -1056,7 +1095,7 @@ Item {
                     Rectangle {
                         height: parent.height
                         radius: parent.radius
-                        color: Theme.colors.accent ?? "#88c0d0"
+                        color: Theme.accent
                         width: parent.width * dash.trackProgress
                         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                     }
@@ -1111,13 +1150,40 @@ Item {
             opacity: visible ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
+            // Arch Logo (Opens Launcher)
+            Rectangle {
+                width: 26; height: 26; radius: 8
+                color: archMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
+                border.width: 0
+                scale: archMouse.pressed ? 0.90 : (archMouse.containsMouse ? 1.06 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰣇"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 15
+                    color: archMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#c0caf5")
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                MouseArea {
+                    id: archMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.switchMode("launcher", false)
+                }
+            }
+
             Repeater {
                 model: dash.workspaceIds
                 delegate: Rectangle {
                     width: 26; height: 26; radius: 8
                     property int wsId: modelData
                     property bool isFocused: typeof Hyprland !== "undefined" && Hyprland.focusedWorkspace && (wsId === Hyprland.focusedWorkspace.id)
-                    color: isFocused ? (Theme.colors.accent ?? "#7aa2f7") : (wsMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent")
+                    color: isFocused ? Theme.accent : (wsMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent")
                     border.width: 0
                     border.color: "transparent"
                     scale: isFocused ? 1.06 : 1.0
@@ -1186,9 +1252,10 @@ Item {
                     }
 
                     Text {
+                        id: hoverDayText
                         anchors.baseline: hoverWeekdayText.baseline
                         text: Qt.formatDate(clock.date, "d")
-                        color: Theme.colors.accent ?? "#a8c7fa"
+                        color: Theme.accent
                         font.family: "Rubik"
                         font.pixelSize: 12
                         font.weight: Font.Bold
@@ -1211,7 +1278,7 @@ Item {
                         return hh + ":" + mm;
                     }
                     color: Theme.colors.text_primary ?? "#f5f5f7"
-                    separatorColor: Theme.colors.accent ?? "#a8c7fa"
+                    separatorColor: Theme.accent
                     isScreenRecording: root.isScreenRecording
                 }
             }
@@ -1258,12 +1325,15 @@ Item {
                 color: utilMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
                 border.width: 0
                 border.color: "transparent"
+                scale: utilMouse.pressed ? 0.90 : (utilMouse.containsMouse ? 1.06 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                 Text {
                     anchors.centerIn: parent
-                    text: "󱊖"
+                    text: "󰘮"
                     font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
-                    color: Theme.colors.text_primary ?? "#c0caf5"
+                    color: utilMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#c0caf5")
+                    Behavior on color { ColorAnimation { duration: 150 } }
                 }
                 MouseArea {
                     id: utilMouse

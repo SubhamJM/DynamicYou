@@ -7,6 +7,54 @@ import "../"
 ColumnLayout {
     id: wallModule
     spacing: 10
+    focus: true
+    Keys.forwardTo: [wallpaperCarousel]
+
+    Keys.onLeftPressed: (event) => {
+        wallpaperCarousel.decrementCurrentIndex();
+        event.accepted = true;
+    }
+    Keys.onRightPressed: (event) => {
+        wallpaperCarousel.incrementCurrentIndex();
+        event.accepted = true;
+    }
+    Keys.onUpPressed: (event) => {
+        wallpaperCarousel.decrementCurrentIndex();
+        event.accepted = true;
+    }
+    Keys.onDownPressed: (event) => {
+        wallpaperCarousel.incrementCurrentIndex();
+        event.accepted = true;
+    }
+    Keys.onReturnPressed: (event) => {
+        wallModule.applyWallpaper(wallpaperCarousel.currentIndex);
+        event.accepted = true;
+    }
+    Keys.onEnterPressed: (event) => {
+        wallModule.applyWallpaper(wallpaperCarousel.currentIndex);
+        event.accepted = true;
+    }
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
+
+    Connections {
+        target: root
+        function onActiveModeChanged() {
+            if (root.activeMode === "wallpaper") {
+                if (wallpaperScanner.running) wallpaperScanner.running = false;
+                wallpaperScanner.running = true;
+                Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
+            }
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
+        }
+    }
 
     property alias wallpaperGrid: wallpaperCarousel
     property string lastAppliedWallpaper: ""
@@ -19,8 +67,31 @@ ColumnLayout {
         command: ["sh", "-c", `python3 -c "
 import os, glob, subprocess
 
-theme = '${Theme.currentThemeName}'
-wall_dir = os.path.expanduser(f'~/Pictures/Wallpapers/{theme}')
+theme = '${Theme.currentThemeName}'.strip()
+theme_lower = theme.lower()
+
+# Check candidates for theme wallpaper directory
+candidates = [
+    os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/current/Wallpapers/{theme}')
+]
+wall_dir = ''
+for c in candidates:
+    if os.path.isdir(c):
+        wall_dir = c
+        break
+
+if not wall_dir:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+        if os.path.isdir(base):
+            for d in os.listdir(base):
+                if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
+                    wall_dir = os.path.join(base, d)
+                    break
+        if wall_dir:
+            break
 
 # Get current active wallpaper path from awww query
 active_wall = ''
@@ -36,13 +107,24 @@ try:
 except Exception:
     pass
 
-exts = ('*.jpg', '*.jpeg', '*.png', '*.webp')
+exts = ('.jpg', '.jpeg', '.png', '.webp')
 files = []
-if os.path.exists(wall_dir):
-    for ext in exts:
-        files.extend(glob.glob(os.path.join(wall_dir, ext)))
-    files.extend(glob.glob(os.path.join(wall_dir, '*/*.jpg')))
-    files.extend(glob.glob(os.path.join(wall_dir, '*/*.png')))
+if wall_dir and os.path.exists(wall_dir):
+    for root_dir, dirs, fnames in os.walk(wall_dir, followlinks=True):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fn in fnames:
+            if fn.lower().endswith(exts) and not fn.startswith('.'):
+                files.append(os.path.join(root_dir, fn))
+
+# Global Fallback: if theme folder is empty, missing, or has 0 wallpapers, show all wallpapers from Wallpapers directories
+if not files:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
+        if os.path.isdir(base):
+            for root_dir, dirs, fnames in os.walk(base, followlinks=True):
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for fn in fnames:
+                    if fn.lower().endswith(exts) and not fn.startswith('.'):
+                        files.append(os.path.join(root_dir, fn))
 
 sorted_files = sorted(list(set(files)))
 for f in sorted_files:
@@ -95,6 +177,7 @@ for f in sorted_files:
                 if (wallpaperModel.count > 0) {
                     wallpaperCarousel.currentIndex = targetIdx;
                     wallpaperCarousel.positionViewAtIndex(targetIdx, PathView.Center);
+                    Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
                 }
 
                 restoreAnimTimer.restart();
@@ -182,7 +265,10 @@ for f in sorted_files:
                 MouseArea {
                     id: leftArrowMouse
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    onClicked: wallpaperCarousel.decrementCurrentIndex()
+                    onClicked: {
+                        wallpaperCarousel.decrementCurrentIndex();
+                        wallpaperCarousel.forceActiveFocus();
+                    }
                 }
             }
 
@@ -203,11 +289,34 @@ for f in sorted_files:
                 readonly property real itemWidth: Math.min(270, Math.max(160, width * 0.44))
                 readonly property real itemHeight: height * 0.88
 
-                Keys.onLeftPressed: decrementCurrentIndex()
-                Keys.onRightPressed: incrementCurrentIndex()
-                Keys.onReturnPressed: applySelected()
-                Keys.onEnterPressed: applySelected()
-                Keys.onEscapePressed: root.activeMode = "idle"
+                Keys.onLeftPressed: (event) => {
+                    decrementCurrentIndex();
+                    event.accepted = true;
+                }
+                Keys.onRightPressed: (event) => {
+                    incrementCurrentIndex();
+                    event.accepted = true;
+                }
+                Keys.onUpPressed: (event) => {
+                    decrementCurrentIndex();
+                    event.accepted = true;
+                }
+                Keys.onDownPressed: (event) => {
+                    incrementCurrentIndex();
+                    event.accepted = true;
+                }
+                Keys.onReturnPressed: (event) => {
+                    applySelected();
+                    event.accepted = true;
+                }
+                Keys.onEnterPressed: (event) => {
+                    applySelected();
+                    event.accepted = true;
+                }
+                Keys.onEscapePressed: (event) => {
+                    root.collapseToIdle();
+                    event.accepted = true;
+                }
 
                 function applySelected() {
                     wallModule.applyWallpaper(currentIndex);
@@ -318,6 +427,7 @@ for f in sorted_files:
                             } else {
                                 wallpaperCarousel.currentIndex = index;
                             }
+                            wallpaperCarousel.forceActiveFocus();
                         }
                     }
                 }
@@ -342,7 +452,10 @@ for f in sorted_files:
                 MouseArea {
                     id: rightArrowMouse
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    onClicked: wallpaperCarousel.incrementCurrentIndex()
+                    onClicked: {
+                        wallpaperCarousel.incrementCurrentIndex();
+                        wallpaperCarousel.forceActiveFocus();
+                    }
                 }
             }
         }

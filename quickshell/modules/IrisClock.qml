@@ -10,7 +10,7 @@ Row {
     property real pixelSize: 15
     property int weight: Font.Bold
     property color color: Theme.colors.text_primary ?? "#f5f5f7"
-    property color separatorColor: Theme.colors.accent ?? "#a8c7fa"
+    property color separatorColor: Theme.accent
     property string family: "Rubik"
     property real minorScale: 0.58
     property bool isScreenRecording: false

@@ -42,7 +42,7 @@ Item {
     readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
     readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.12)
     readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.18)
-    readonly property color colAccent: Theme.colors.accent ?? "#a8c7fa"
+    readonly property color colAccent: Theme.accent
     readonly property color colText: "#f5f5f7"
     readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.60)
     readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)

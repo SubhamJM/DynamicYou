@@ -161,7 +161,7 @@ ColumnLayout {
         if (idx < 0 || idx >= launcher.suggestions.length) return;
         var s = launcher.suggestions[idx];
         if (s.isRunning && s.winAddress !== "") {
-            Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + s.winAddress]);
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + s.winAddress + "\" })"]);
             root.collapseToIdle();
         } else {
             launcher.recordUsageAndLaunch(s.exec);
@@ -469,9 +469,9 @@ with open(f, 'w') as file: json.dump(d, file)
     }
 
     function recordUsageAndLaunch(execCmd) {
-        appRunner.command = ["sh", "-c", execCmd + " &"];
-        appRunner.running = true;
-        usageTracker.targetExec = execCmd;
+        var cleanCmd = (execCmd || "").replace(/%[uUfFdiDnvmck]/g, "").trim();
+        Quickshell.execDetached(["systemd-run", "--user", "--scope", "sh", "-c", cleanCmd]);
+        usageTracker.targetExec = cleanCmd;
         usageTracker.running = true;
         root.collapseToIdle();
     }
@@ -775,13 +775,14 @@ with open(f, 'w') as file: json.dump(d, file)
 
         if (item.itemType === "app") {
             if (item.isRunning && item.winAddress !== "") {
-                Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + item.winAddress]);
+                Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + item.winAddress + "\" })"]);
                 root.collapseToIdle();
             } else {
                 launcher.recordUsageAndLaunch(item.execCmd);
             }
         } else if (item.itemType === "action") {
-            Quickshell.execDetached(["sh", "-c", item.execCmd + " &"]);
+            var actionCmd = (item.execCmd || "").replace(/%[uUfFdiDnvmck]/g, "").trim();
+            Quickshell.execDetached(["systemd-run", "--user", "--scope", "sh", "-c", actionCmd]);
             root.collapseToIdle();
         } else if (item.itemType === "clip") {
             Quickshell.execDetached(["sh", "-c", "echo " + JSON.stringify(item.rawVal) + " | cliphist decode | wl-copy"]);

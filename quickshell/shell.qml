@@ -148,6 +148,7 @@ ShellRoot {
     }
 
     readonly property bool isDashMode: activeMode === "idle" || activeMode === "hover"
+    readonly property color notchSurfaceColor: Theme.colors.bg ?? "#000000"
     readonly property bool isPopupMode: activeMode !== "idle" && activeMode !== "osd"
 
     function collapseToIdle() {
@@ -167,9 +168,6 @@ ShellRoot {
         } else {
             root.openedViaShortcut = fromShortcut;
             root.activeMode = newMode;
-            if (newMode !== "launcher" && (notchHoverHandler.hovered || (extendedHoverArea.enabled && extendedHoverArea.containsMouse))) {
-                root.openedViaShortcut = false;
-            }
         }
     }
 
@@ -584,6 +582,10 @@ while True:
             root.collapseToIdle();
             return "OK";
         }
+        function collapseToIdle(): string {
+            root.collapseToIdle();
+            return "OK";
+        }
         function toggleMusic(): string {
             if (root.activeMode === "music") {
                 root.collapseToIdle();
@@ -652,24 +654,32 @@ while True:
             anchors.fill: parent
         }
 
+        Item {
+            id: hoverMaskArea
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: notch.width + (root.cornerCurveRadius * 2) + 60
+            height: notch.height + 40
+        }
+
         mask: Region {
             item: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
                 ? fullMaskArea 
-                : notchContainer
+                : (root.activeMode === "hover" ? hoverMaskArea : notchContainer)
         }
 
-        WlrLayershell.keyboardFocus: root.activeMode === "launcher"
+        WlrLayershell.keyboardFocus: (root.activeMode === "launcher" || root.activeMode === "theme" || root.activeMode === "wallpaper" || root.activeMode === "transition" || root.activeMode === "clipboard" || root.activeMode === "shelf" || root.activeMode === "powermenu" || root.activeMode === "notes" || root.activeMode === "cheatsheet" || root.activeMode === "switcher")
             ? WlrKeyboardFocus.Exclusive
             : ((root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
                 ? WlrKeyboardFocus.OnDemand 
                 : WlrKeyboardFocus.None)
 
-        // Fullscreen click-away backdrop: collapses any open popup/menu when clicking anywhere outside
+        // Click-away backdrop: collapses open popups/hover when clicking outside
         MouseArea {
             id: outsideClickCatcher
             anchors.fill: parent
             z: 0
-            enabled: root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd"
+            enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
             onClicked: {
                 root.collapseToIdle();
             }
@@ -694,6 +704,23 @@ while True:
                     event.accepted = true;
                 } else {
                     root.regainFocus();
+                }
+            }
+
+            MouseArea {
+                id: notchHoverArea
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                z: -1
+                onEntered: {
+                    autoCollapseTimer.stop();
+                    if (root.activeMode === "idle") root.activeMode = "hover";
+                }
+                onExited: {
+                    if (root.activeMode !== "idle" && root.activeMode !== "osd") {
+                        autoCollapseTimer.restart();
+                    }
                 }
             }
 
@@ -729,12 +756,18 @@ while True:
                 renderTarget: Canvas.FramebufferObject
 
                 Connections { target: Theme; function onThemeReloaded() { leftWing.requestPaint(); } }
+                Connections { target: Theme; function onColorsChanged() { leftWing.requestPaint(); } }
+                Connections { target: root; function onNotchSurfaceColorChanged() { leftWing.requestPaint(); } }
+                Connections { target: root; function onActiveModeChanged() { leftWing.requestPaint(); } }
+                onAvailableChanged: if (available) requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
                 Component.onCompleted: requestPaint()
 
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.reset();
-                    ctx.fillStyle = "#000000";
+                    ctx.fillStyle = "" + root.notchSurfaceColor;
                     ctx.beginPath();
                     ctx.moveTo(width + 1, 0); ctx.lineTo(width + 1, height);
                     ctx.arcTo(width, 0, 0, 0, height);
@@ -750,33 +783,22 @@ while True:
                 renderTarget: Canvas.FramebufferObject
 
                 Connections { target: Theme; function onThemeReloaded() { rightWing.requestPaint(); } }
+                Connections { target: Theme; function onColorsChanged() { rightWing.requestPaint(); } }
+                Connections { target: root; function onNotchSurfaceColorChanged() { rightWing.requestPaint(); } }
+                Connections { target: root; function onActiveModeChanged() { rightWing.requestPaint(); } }
+                onAvailableChanged: if (available) requestPaint()
+                onWidthChanged: requestPaint()
+                onHeightChanged: requestPaint()
                 Component.onCompleted: rightWing.requestPaint()
 
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.reset();
-                    ctx.fillStyle = "#000000";
+                    ctx.fillStyle = "" + root.notchSurfaceColor;
                     ctx.beginPath();
                     ctx.moveTo(-1, 0); ctx.lineTo(-1, height);
                     ctx.arcTo(0, 0, width, 0, height);
                     ctx.closePath(); ctx.fill();
-                }
-            }
-
-            MouseArea {
-                id: extendedHoverArea
-                anchors.fill: notch
-                anchors.margins: -20
-                hoverEnabled: true
-                acceptedButtons: Qt.NoButton
-                enabled: root.isPopupMode
-                onContainsMouseChanged: {
-                    if (containsMouse) {
-                        if (root.activeMode !== "launcher") root.openedViaShortcut = false;
-                        autoCollapseTimer.stop();
-                    } else if (root.activeMode !== "launcher" && !notchHoverHandler.hovered && !root.openedViaShortcut) {
-                        autoCollapseTimer.restart();
-                    }
                 }
             }
 
@@ -787,7 +809,7 @@ while True:
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: root.targetWidth
                 height: root.targetHeight
-                color: "#000000"
+                color: root.notchSurfaceColor
                 clip: true
 
                 // Consumes clicks on empty space inside notch so they do not fall through to click-away catcher
@@ -912,12 +934,7 @@ while True:
                     interval: NotchConfig.timerAutoCollapse
                     repeat: false
                     onTriggered: {
-                        if (root.openedViaShortcut) return;
-                        if (root.activeMode === "launcher") return;
-                        if (typeof shelfMod !== "undefined" && shelfMod.isDragging) return;
-                        if (typeof utilMod !== "undefined" && (utilMod.isDraggingVolume || utilMod.isDraggingBrightness)) return;
-                        if (typeof musicMod !== "undefined" && musicMod.isDraggingSeek) return;
-                        if (!notchHoverHandler.hovered && (!extendedHoverArea.enabled || !extendedHoverArea.containsMouse) && root.activeMode !== "idle" && root.activeMode !== "osd" && !root.isWorkspacePeeking) {
+                        if (root.activeMode !== "idle" && root.activeMode !== "osd" && !notchHoverHandler.hovered && !notchHoverArea.containsMouse) {
                             root.collapseToIdle();
                         }
                     }
@@ -933,13 +950,10 @@ while True:
                         if (typeof musicMod !== "undefined" && musicMod.isDraggingSeek) return;
                         if (hovered) {
                             autoCollapseTimer.stop();
-                            if (root.activeMode !== "launcher") root.openedViaShortcut = false;
                             root.isWorkspacePeeking = false;
                             if (root.activeMode === "idle") root.activeMode = "hover";
                         } else {
-                            if (root.activeMode === "hover") {
-                                root.collapseToIdle();
-                            } else if (root.isPopupMode && root.activeMode !== "launcher" && !root.openedViaShortcut && (!extendedHoverArea.enabled || !extendedHoverArea.containsMouse)) {
+                            if (root.activeMode !== "idle" && root.activeMode !== "osd") {
                                 autoCollapseTimer.restart();
                             }
                         }

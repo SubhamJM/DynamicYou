@@ -10,6 +10,37 @@ ColumnLayout {
     spacing: 6
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.forwardTo: [searchInput]
+
+    Keys.onLeftPressed: (event) => {
+        if (carousel.currentIndex > 0) carousel.currentIndex--;
+        event.accepted = true;
+    }
+    Keys.onRightPressed: (event) => {
+        if (carousel.currentIndex < filteredThemes.length - 1) carousel.currentIndex++;
+        event.accepted = true;
+    }
+    Keys.onUpPressed: (event) => {
+        if (carousel.currentIndex > 0) carousel.currentIndex--;
+        event.accepted = true;
+    }
+    Keys.onDownPressed: (event) => {
+        if (carousel.currentIndex < filteredThemes.length - 1) carousel.currentIndex++;
+        event.accepted = true;
+    }
+    Keys.onReturnPressed: (event) => {
+        themeSelector.applyCurrentTheme();
+        event.accepted = true;
+    }
+    Keys.onEnterPressed: (event) => {
+        themeSelector.applyCurrentTheme();
+        event.accepted = true;
+    }
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     property alias searchInput: searchInput
     property alias carousel: carousel
@@ -301,6 +332,12 @@ ColumnLayout {
             }
 
             onWidthChanged: {
+                if (count > 0 && currentIndex >= 0) {
+                    positionViewAtIndex(currentIndex, ListView.Center);
+                }
+            }
+
+            onCurrentIndexChanged: {
                 if (count > 0 && currentIndex >= 0) {
                     positionViewAtIndex(currentIndex, ListView.Center);
                 }

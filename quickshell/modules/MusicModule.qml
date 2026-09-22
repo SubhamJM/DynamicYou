@@ -158,35 +158,32 @@ Item {
         }
     }
 
-    // Media actions (clean single-invocation pattern with playerctl fallback)
+    // Media actions (infallible playerctl dispatch with active player targeting)
     function togglePlaying() {
-        if (activePlayer) {
-            try {
-                activePlayer.togglePlaying();
-                return;
-            } catch(e) {}
+        const pName = (activePlayer?.identity || activePlayer?.desktopEntry || "").toLowerCase();
+        if (pName && !pName.includes("player")) {
+            Quickshell.execDetached(["playerctl", "-p", pName, "play-pause"]);
+        } else {
+            Quickshell.execDetached(["playerctl", "play-pause"]);
         }
-        Quickshell.execDetached(["playerctl", "play-pause"]);
     }
 
     function previous() {
-        if (activePlayer) {
-            try {
-                activePlayer.previous();
-                return;
-            } catch(e) {}
+        const pName = (activePlayer?.identity || activePlayer?.desktopEntry || "").toLowerCase();
+        if (pName && !pName.includes("player")) {
+            Quickshell.execDetached(["playerctl", "-p", pName, "previous"]);
+        } else {
+            Quickshell.execDetached(["playerctl", "previous"]);
         }
-        Quickshell.execDetached(["playerctl", "previous"]);
     }
 
     function next() {
-        if (activePlayer) {
-            try {
-                activePlayer.next();
-                return;
-            } catch(e) {}
+        const pName = (activePlayer?.identity || activePlayer?.desktopEntry || "").toLowerCase();
+        if (pName && !pName.includes("player")) {
+            Quickshell.execDetached(["playerctl", "-p", pName, "next"]);
+        } else {
+            Quickshell.execDetached(["playerctl", "next"]);
         }
-        Quickshell.execDetached(["playerctl", "next"]);
     }
 
     function seek(seconds) {
