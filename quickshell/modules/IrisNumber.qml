@@ -9,8 +9,8 @@ Item {
 
     property string text: ""
     property string family: "Readex Pro"
-    property int pixelSize: 14
-    property int weight: Font.DemiBold
+    property int pixelSize: 16
+    property int weight: Font.Bold
     property real letterSpacing: 0
     property color color: "#f5f5f7"
     property int renderType: Text.NativeRendering

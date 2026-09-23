@@ -707,7 +707,7 @@ while True:
                 : (root.activeMode === "hover" ? hoverMaskArea : notchContainer)
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd")
+        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher")
             ? WlrKeyboardFocus.Exclusive
             : WlrKeyboardFocus.None
 

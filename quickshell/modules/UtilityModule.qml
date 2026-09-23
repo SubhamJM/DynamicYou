@@ -593,6 +593,7 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: pill.subtitle
+                    visible: pill.subtitle !== "" && pill.width >= 105
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     font.weight: Font.Normal
@@ -603,7 +604,7 @@ Item {
             }
 
             MaterialSymbol {
-                visible: pill.isSplit
+                visible: pill.isSplit && pill.width >= 120
                 text: "chevron_right"
                 iconSize: 16
                 color: pill.isActive ? pill.activeColor : utilModule.colSubtext
@@ -1029,13 +1030,15 @@ Item {
 
             // ROW 1: Wi-Fi Pill, Hotspot Circle Button, Record Pill, Lock Circle Button
             RowLayout {
+                id: row1
                 Layout.fillWidth: true
                 spacing: 6
 
-                // Wi-Fi Pill (Split: disc toggles Wi-Fi, body opens Wi-Fi module)
+                // Wi-Fi Pill (matches Bluetooth Pill in Row 2)
                 MaterialPill {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 2
+                    id: wifiPill
+                    Layout.fillWidth: false
+                    Layout.preferredWidth: btPill.width
                     glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
                     title: (utilModule.activeNetType === "eth") ? "Ethernet" : (utilModule.wifiEnabled ? (utilModule.activeNetName !== "" ? utilModule.activeNetName : "Wi-Fi") : "Wi-Fi")
                     subtitle: {
@@ -1053,8 +1056,9 @@ Item {
                     onDetailClicked: root.switchMode("wifi", false)
                 }
 
-                // Hotspot Circular Action Button (Material You style)
+                // Hotspot Circular Action Button (Material You style) - directly to the right of Wi-Fi pill
                 MaterialCircleBtn {
+                    id: hotspotBtn
                     glyph: "wifi_tethering"
                     fill: utilModule.hotspotActive ? 1 : 0
                     customBg: utilModule.hotspotActive ? utilModule.colAccent : utilModule.colCard
@@ -1063,13 +1067,13 @@ Item {
                     onClicked: utilModule.toggleHotspot()
                 }
 
-                // Record Pill (Material You Pill)
+                // Record Pill (Material You Pill - fills space up to lock button)
                 MaterialPill {
+                    id: recordPill
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 3
                     glyph: (typeof recMod !== "undefined" && recMod.isRecording) ? "stop_circle" : "radio_button_checked"
                     title: "Record"
-                    subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording..." : "Screen Record"
+                    subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording" : "Screen"
                     isActive: typeof recMod !== "undefined" && recMod.isRecording
                     isSplit: true
                     activeColor: "#ff453a"
@@ -1085,8 +1089,9 @@ Item {
                     onDetailClicked: root.switchMode("recorder", false)
                 }
 
-                // Lock Circular Button
+                // Lock Circular Button - aligns with Power Button below!
                 MaterialCircleBtn {
+                    id: lockBtn
                     glyph: "lock"
                     onClicked: {
                         root.collapseToIdle();
@@ -1095,13 +1100,15 @@ Item {
                 }
             }
 
-            // ROW 2: Bluetooth Pill, Night Light Pill, Power Circle Button
+            // ROW 2: Bluetooth Pill, VPN Pill, Power Circle Button
             RowLayout {
+                id: row2
                 Layout.fillWidth: true
                 spacing: 6
 
                 // Bluetooth Pill (Split: disc toggles BT, body opens BT module)
                 MaterialPill {
+                    id: btPill
                     glyph: utilModule.btEnabled ? "bluetooth" : "bluetooth_disabled"
                     title: {
                         if (!utilModule.btEnabled) return "Bluetooth";

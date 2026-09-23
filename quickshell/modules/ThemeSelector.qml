@@ -14,19 +14,19 @@ ColumnLayout {
     Keys.forwardTo: [searchInput]
 
     Keys.onLeftPressed: (event) => {
-        if (carousel.currentIndex > 0) carousel.currentIndex--;
+        carousel.decrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onRightPressed: (event) => {
-        if (carousel.currentIndex < filteredThemes.length - 1) carousel.currentIndex++;
+        carousel.incrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onUpPressed: (event) => {
-        if (carousel.currentIndex > 0) carousel.currentIndex--;
+        carousel.decrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onDownPressed: (event) => {
-        if (carousel.currentIndex < filteredThemes.length - 1) carousel.currentIndex++;
+        carousel.incrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onReturnPressed: (event) => {
@@ -121,11 +121,11 @@ ColumnLayout {
         if (foundIdx >= 0) {
             if (!animate) carousel.highlightMoveDuration = 0;
             carousel.currentIndex = foundIdx;
-            carousel.positionViewAtIndex(foundIdx, ListView.Center);
-            if (!animate) Qt.callLater(() => carousel.highlightMoveDuration = 220);
+            carousel.positionViewAtIndex(foundIdx, PathView.Center);
+            if (!animate) Qt.callLater(() => carousel.highlightMoveDuration = 180);
         } else if (filteredThemes.length > 0) {
             carousel.currentIndex = 0;
-            carousel.positionViewAtIndex(0, ListView.Center);
+            carousel.positionViewAtIndex(0, PathView.Center);
         }
     }
 
@@ -229,38 +229,36 @@ ColumnLayout {
                 themeSelector.filterThemes();
                 if (themeSelector.filteredThemes.length > 0) {
                     carousel.currentIndex = 0;
-                    carousel.positionViewAtIndex(0, ListView.Center);
+                    carousel.positionViewAtIndex(0, PathView.Center);
                 }
             }
 
             Keys.onLeftPressed: (event) => {
                 if (cursorPosition === 0 || text.length === 0) {
-                    if (carousel.currentIndex > 0) carousel.currentIndex--;
+                    carousel.decrementCurrentIndex();
                     event.accepted = true;
                 }
             }
             Keys.onRightPressed: (event) => {
                 if (cursorPosition === text.length || text.length === 0) {
-                    if (carousel.currentIndex < themeSelector.filteredThemes.length - 1) carousel.currentIndex++;
+                    carousel.incrementCurrentIndex();
                     event.accepted = true;
                 }
             }
             Keys.onUpPressed: (event) => {
-                if (carousel.currentIndex > 0) carousel.currentIndex--;
+                carousel.decrementCurrentIndex();
                 event.accepted = true;
             }
             Keys.onDownPressed: (event) => {
-                if (carousel.currentIndex < themeSelector.filteredThemes.length - 1) carousel.currentIndex++;
+                carousel.incrementCurrentIndex();
                 event.accepted = true;
             }
             Keys.onTabPressed: (event) => {
-                if (carousel.currentIndex < themeSelector.filteredThemes.length - 1) carousel.currentIndex++;
-                else carousel.currentIndex = 0;
+                carousel.incrementCurrentIndex();
                 event.accepted = true;
             }
             Keys.onBacktabPressed: (event) => {
-                if (carousel.currentIndex > 0) carousel.currentIndex--;
-                else carousel.currentIndex = themeSelector.filteredThemes.length - 1;
+                carousel.decrementCurrentIndex();
                 event.accepted = true;
             }
             Keys.onReturnPressed: (event) => {
@@ -290,7 +288,7 @@ ColumnLayout {
     }
 
     // ==========================================
-    // CENTER: Horizontal Snapping Carousel
+    // CENTER: Horizontal 3D Looping Carousel
     // ==========================================
     Item {
         Layout.fillWidth: true
@@ -306,155 +304,238 @@ ColumnLayout {
             color: Theme.colors.text_secondary ?? "#6c7086"
         }
 
-        ListView {
-            id: carousel
+        RowLayout {
             anchors.fill: parent
-            orientation: ListView.Horizontal
-            spacing: 14
-            clip: true
-            model: themeSelector.filteredThemes
+            visible: themeSelector.filteredThemes.length > 0
+            spacing: 8
 
-            snapMode: ListView.SnapToItem
-            highlightRangeMode: ListView.StrictlyEnforceRange
-            preferredHighlightBegin: centerOffset
-            preferredHighlightEnd: centerOffset
-            highlightMoveDuration: 220
+            Rectangle {
+                id: leftArrow
+                Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                Layout.alignment: Qt.AlignVCenter
+                radius: 8
+                color: leftArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
+                border.width: leftArrowMouse.containsMouse ? 1 : 0
+                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                Behavior on color { ColorAnimation { duration: 80 } }
 
-            readonly property real centerOffset: Math.max(0, Math.round((width - 176) / 2))
-
-            header: Item { 
-                width: carousel.centerOffset
-                height: carousel.height 
-            }
-            footer: Item { 
-                width: carousel.centerOffset
-                height: carousel.height 
-            }
-
-            onWidthChanged: {
-                if (count > 0 && currentIndex >= 0) {
-                    positionViewAtIndex(currentIndex, ListView.Center);
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰅁"
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                    color: leftArrowMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
                 }
-            }
-
-            onCurrentIndexChanged: {
-                if (count > 0 && currentIndex >= 0) {
-                    positionViewAtIndex(currentIndex, ListView.Center);
-                }
-            }
-
-            // Mouse wheel support for horizontal scrolling
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.NoButton
-                cursorShape: Qt.PointingHandCursor
-                onWheel: (wheel) => {
-                    wheel.accepted = true;
-                    if (wheel.angleDelta.y < 0 || wheel.angleDelta.x > 0) {
-                        if (carousel.currentIndex < themeSelector.filteredThemes.length - 1) carousel.currentIndex++;
-                    } else if (wheel.angleDelta.y > 0 || wheel.angleDelta.x < 0) {
-                        if (carousel.currentIndex > 0) carousel.currentIndex--;
+                MouseArea {
+                    id: leftArrowMouse
+                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        carousel.decrementCurrentIndex();
+                        themeSelector.forceThemeFocus();
                     }
                 }
             }
 
-            delegate: Item {
-                id: cardItem
-                width: 176
-                height: 104
-                anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+            PathView {
+                id: carousel
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                focus: true
+                model: themeSelector.filteredThemes
 
-                readonly property bool isCurrent: ListView.isCurrentItem
-                readonly property bool isCurrentActive: {
-                    var cur = (Theme.currentThemeName || "").toLowerCase().trim();
-                    return ((modelData.rawName || "").toLowerCase().trim() === cur) ||
-                           ((modelData.themeName || "").toLowerCase().trim() === cur);
-                }
+                pathItemCount: 5
+                preferredHighlightBegin: 0.5
+                preferredHighlightEnd: 0.5
+                highlightRangeMode: PathView.StrictlyEnforceRange
+                highlightMoveDuration: 180
 
-                scale: isCurrent ? 1.0 : 0.94
-                opacity: isCurrent ? 1.0 : 0.65
-                transformOrigin: Item.Center
+                readonly property real itemWidth: 176
+                readonly property real itemHeight: 104
 
-                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
-                Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutQuad } }
-
-                Rectangle {
-                    id: cardRect
+                MouseArea {
                     anchors.fill: parent
-                    radius: 16
-                    color: modelData.cardBg || "#181825"
+                    acceptedButtons: Qt.NoButton
+                    cursorShape: Qt.PointingHandCursor
+                    onWheel: (wheel) => {
+                        wheel.accepted = true;
+                        if (wheel.angleDelta.y < 0 || wheel.angleDelta.x > 0) carousel.incrementCurrentIndex();
+                        else if (wheel.angleDelta.y > 0 || wheel.angleDelta.x < 0) carousel.decrementCurrentIndex();
+                    }
+                }
 
-                    border.width: cardItem.isCurrent ? 2 : 1
-                    border.color: cardItem.isCurrent 
-                        ? (Theme.colors.accent ?? "#2dd4bf") 
-                        : (cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.05))
+                path: Path {
+                    startX: -carousel.itemWidth * 0.35
+                    startY: carousel.height / 2
+                    PathAttribute { name: "itemScale"; value: 0.60 }
+                    PathAttribute { name: "itemOpacity"; value: 0.0 }
+                    PathAttribute { name: "itemZ"; value: 1 }
+                    PathAttribute { name: "itemRotationY"; value: -38.0 }
 
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-                    Behavior on border.width { NumberAnimation { duration: 120 } }
+                    PathLine {
+                        x: carousel.width * 0.22
+                        y: carousel.height / 2
+                    }
+                    PathAttribute { name: "itemScale"; value: 0.82 }
+                    PathAttribute { name: "itemOpacity"; value: 0.65 }
+                    PathAttribute { name: "itemZ"; value: 10 }
+                    PathAttribute { name: "itemRotationY"; value: -24.0 }
 
-                    // Active desktop theme indicator dot (top-right corner)
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.topMargin: 10
-                        anchors.rightMargin: 10
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: Theme.colors.accent ?? "#2dd4bf"
-                        visible: cardItem.isCurrentActive
+                    PathLine {
+                        x: carousel.width * 0.50
+                        y: carousel.height / 2
+                    }
+                    PathAttribute { name: "itemScale"; value: 1.0 }
+                    PathAttribute { name: "itemOpacity"; value: 1.0 }
+                    PathAttribute { name: "itemZ"; value: 30 }
+                    PathAttribute { name: "itemRotationY"; value: 0.0 }
+
+                    PathLine {
+                        x: carousel.width * 0.78
+                        y: carousel.height / 2
+                    }
+                    PathAttribute { name: "itemScale"; value: 0.82 }
+                    PathAttribute { name: "itemOpacity"; value: 0.65 }
+                    PathAttribute { name: "itemZ"; value: 10 }
+                    PathAttribute { name: "itemRotationY"; value: 24.0 }
+
+                    PathLine {
+                        x: carousel.width + (carousel.itemWidth * 0.35)
+                        y: carousel.height / 2
+                    }
+                    PathAttribute { name: "itemScale"; value: 0.60 }
+                    PathAttribute { name: "itemOpacity"; value: 0.0 }
+                    PathAttribute { name: "itemZ"; value: 1 }
+                    PathAttribute { name: "itemRotationY"; value: 38.0 }
+                }
+
+                delegate: Item {
+                    id: delegateRoot
+                    width: carousel.itemWidth
+                    height: carousel.itemHeight
+
+                    scale: PathView.itemScale ?? 0.8
+                    opacity: PathView.itemOpacity ?? 0.0
+                    z: PathView.itemZ ?? 1
+                    visible: opacity > 0.01
+
+                    readonly property bool isCurrent: PathView.isCurrentItem
+                    readonly property bool isCurrentActive: {
+                        var cur = (Theme.currentThemeName || "").toLowerCase().trim();
+                        return ((modelData.rawName || "").toLowerCase().trim() === cur) ||
+                               ((modelData.themeName || "").toLowerCase().trim() === cur);
                     }
 
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 12
+                    transform: Rotation {
+                        origin.x: delegateRoot.width / 2
+                        origin.y: delegateRoot.height / 2
+                        axis { x: 0; y: 1; z: 0 }
+                        angle: PathView.itemRotationY ?? 0
+                    }
 
-                        // 6 Palette Color Dots (ANSI colors 1-6)
-                        Row {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: 7
+                    Rectangle {
+                        id: cardRect
+                        anchors.fill: parent
+                        radius: 16
+                        color: modelData.cardBg || "#181825"
 
-                            Repeater {
-                                model: (modelData.palette && modelData.palette.length >= 6) 
-                                    ? modelData.palette.slice(0, 6) 
-                                    : ["#ef4444", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4"]
+                        border.width: delegateRoot.isCurrent ? 2 : 1
+                        border.color: delegateRoot.isCurrent 
+                            ? (Theme.colors.accent ?? "#2dd4bf") 
+                            : (cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.05))
 
-                                Rectangle {
-                                    width: 13
-                                    height: 13
-                                    radius: 6.5
-                                    color: modelData
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+                        Behavior on border.width { NumberAnimation { duration: 120 } }
+
+                        // Active desktop theme indicator dot (top-right corner)
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.topMargin: 10
+                            anchors.rightMargin: 10
+                            width: 6
+                            height: 6
+                            radius: 3
+                            color: Theme.colors.accent ?? "#2dd4bf"
+                            visible: delegateRoot.isCurrentActive
+                        }
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 12
+
+                            // 6 Palette Color Dots (ANSI colors 1-6)
+                            Row {
+                                Layout.alignment: Qt.AlignHCenter
+                                spacing: 7
+
+                                Repeater {
+                                    model: (modelData.palette && modelData.palette.length >= 6) 
+                                        ? modelData.palette.slice(0, 6) 
+                                        : ["#ef4444", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6", "#06b6d4"]
+
+                                    Rectangle {
+                                        width: 13
+                                        height: 13
+                                        radius: 6.5
+                                        color: modelData
+                                    }
                                 }
                             }
+
+                            // Theme Name Label
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: modelData.themeName || ""
+                                font.family: "Inter"
+                                font.pixelSize: 12
+                                font.weight: delegateRoot.isCurrent ? Font.DemiBold : Font.Normal
+                                color: delegateRoot.isCurrent ? (Theme.colors.text_primary ?? "#ffffff") : (Theme.colors.text_secondary ?? "#9399b2")
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
                         }
 
-                        // Theme Name Label
-                        Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: modelData.themeName || ""
-                            font.family: "Inter"
-                            font.pixelSize: 12
-                            font.weight: cardItem.isCurrent ? Font.DemiBold : Font.Normal
-                            color: cardItem.isCurrent ? (Theme.colors.text_primary ?? "#ffffff") : (Theme.colors.text_secondary ?? "#9399b2")
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
-                            Behavior on color { ColorAnimation { duration: 150 } }
+                        MouseArea {
+                            id: cardMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (carousel.currentIndex === index) {
+                                    themeSelector.applyCurrentTheme();
+                                } else {
+                                    carousel.currentIndex = index;
+                                }
+                                themeSelector.forceThemeFocus();
+                            }
                         }
                     }
+                }
+            }
 
-                    MouseArea {
-                        id: cardMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (carousel.currentIndex === index) {
-                                themeSelector.applyCurrentTheme();
-                            } else {
-                                carousel.currentIndex = index;
-                            }
-                            themeSelector.forceThemeFocus();
-                        }
+            Rectangle {
+                id: rightArrow
+                Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                Layout.alignment: Qt.AlignVCenter
+                radius: 8
+                color: rightArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
+                border.width: rightArrowMouse.containsMouse ? 1 : 0
+                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                Behavior on color { ColorAnimation { duration: 80 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰅂"
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
+                    color: rightArrowMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
+                }
+                MouseArea {
+                    id: rightArrowMouse
+                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        carousel.incrementCurrentIndex();
+                        themeSelector.forceThemeFocus();
                     }
                 }
             }

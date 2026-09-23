@@ -7,8 +7,8 @@ Row {
     id: root
 
     property string text: ""
-    property int pixelSize: 14
-    property int weight: Font.DemiBold
+    property int pixelSize: 16
+    property int weight: Font.Bold
     property color color: Theme.colors.text_primary ?? "#f5f5f7"
     property color separatorColor: Theme.accent
     property string family: "Readex Pro"

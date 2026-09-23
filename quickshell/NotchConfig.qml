@@ -40,7 +40,7 @@ QtObject {
     readonly property int baseExclusiveZone: 32     // Wayland layer shell exclusive reservation
 
     readonly property var modeDimensions: ({
-        "idle":          { width: 168, height: 32,  radius: 16 },
+        "idle":          { width: 184, height: 32,  radius: 16 },
 		"hover":         { width: 460, height: 42,  radius: 21 },
 		"switcher":      { width: 800, height: 420, radius: 14 },
         "launcher":      { width: 560, height: 246, radius: 22 },
