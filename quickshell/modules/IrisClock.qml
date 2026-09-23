@@ -7,11 +7,11 @@ Row {
     id: root
 
     property string text: ""
-    property real pixelSize: 15
-    property int weight: Font.Bold
+    property int pixelSize: 14
+    property int weight: Font.DemiBold
     property color color: Theme.colors.text_primary ?? "#f5f5f7"
     property color separatorColor: Theme.accent
-    property string family: "Rubik"
+    property string family: "Readex Pro"
     property real minorScale: 0.58
     property bool isScreenRecording: false
 
@@ -37,7 +37,7 @@ Row {
         font.pixelSize: root.pixelSize
         font.weight: root.weight
         font.features: ({ "tnum": 1 })
-        font.letterSpacing: -root.pixelSize * 0.02
+        font.letterSpacing: 0
         color: root.color
         renderType: Text.NativeRendering
     }
@@ -45,7 +45,7 @@ Row {
     component Minor: Text {
         font.family: root.family
         font.pixelSize: Math.round(root.pixelSize * root.minorScale)
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
         font.features: ({ "tnum": 1 })
         color: Qt.alpha(root.color, 0.55)
         renderType: Text.NativeRendering
@@ -58,7 +58,7 @@ Row {
         family: root.family
         pixelSize: root.pixelSize
         weight: root.weight
-        letterSpacing: -root.pixelSize * 0.02
+        letterSpacing: 0
         color: root.color
     }
 
@@ -67,9 +67,9 @@ Row {
         visible: root.parts.minutes.length > 0
         color: root.separatorColor
         anchors.baseline: hoursText.baseline
-        anchors.baselineOffset: -root.pixelSize * 0.06
-        leftPadding: root.pixelSize * 0.03
-        rightPadding: root.pixelSize * 0.03
+        anchors.baselineOffset: -root.pixelSize * 0.04
+        leftPadding: 1.5
+        rightPadding: 1.5
     }
 
     IrisNumber {
@@ -78,7 +78,7 @@ Row {
         family: root.family
         pixelSize: root.pixelSize
         weight: root.weight
-        letterSpacing: -root.pixelSize * 0.02
+        letterSpacing: 0
         color: root.color
     }
 
@@ -94,7 +94,7 @@ Row {
             text: root.parts.seconds
             family: root.family
             pixelSize: Math.round(root.pixelSize * root.minorScale)
-            weight: Font.DemiBold
+            weight: Font.Medium
             color: Qt.alpha(root.color, 0.55)
         }
     }

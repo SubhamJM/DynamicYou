@@ -45,22 +45,39 @@ ColumnLayout {
         if (clientsModel.count > 0) windowCarousel.decrementCurrentIndex();
     }
 
+    property bool pendingQuickSwitch: false
+
+    function quickSwitchToLast() {
+        if (clientScanner.running) {
+            pendingQuickSwitch = true;
+            return;
+        }
+
+        if (clientsModel.count > 1) {
+            var item = clientsModel.get(1);
+            var rawAddr = item.address.trim();
+            var formattedAddr = rawAddr.startsWith("0x") ? rawAddr : ("0x" + rawAddr);
+
+            var cmd = `hl.dsp.focus({ window = 'address:${formattedAddr}' })`;
+            if (typeof Hyprland !== "undefined") {
+                Hyprland.dispatch(cmd);
+            }
+            Quickshell.execDetached(["hyprctl", "dispatch", cmd]);
+        }
+    }
+
     // Delay buffer to allow Wayland layer surface grab release prior to dispatch
     Timer {
         id: focusDelayTimer
-        interval: 50
+        interval: 40
         repeat: false
         property string targetAddress: ""
         onTriggered: {
+            var cmd = `hl.dsp.focus({ window = 'address:${targetAddress}' })`;
             if (typeof Hyprland !== "undefined") {
-                if (Hyprland.usingLua) {
-                    Hyprland.dispatch(`hl.dsp.focus({ window = 'address:${targetAddress}' })`);
-                } else {
-                    Hyprland.dispatch(`focuswindow address:${targetAddress}`);
-                }
-            } else {
-                Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + targetAddress]);
+                Hyprland.dispatch(cmd);
             }
+            Quickshell.execDetached(["hyprctl", "dispatch", cmd]);
         }
     }
 
@@ -79,6 +96,12 @@ ColumnLayout {
             var formattedAddr = rawAddr.startsWith("0x") ? rawAddr : ("0x" + rawAddr);
 
             root.collapseToIdle();
+
+            var cmd = `hl.dsp.focus({ window = 'address:${formattedAddr}' })`;
+            if (typeof Hyprland !== "undefined") {
+                Hyprland.dispatch(cmd);
+            }
+            Quickshell.execDetached(["hyprctl", "dispatch", cmd]);
 
             focusDelayTimer.targetAddress = formattedAddr;
             focusDelayTimer.restart();
@@ -150,6 +173,13 @@ ColumnLayout {
                 }
 
                 restoreAnimTimer.restart();
+
+                // If a quick-tap Alt-Tab was released while scanning, trigger quick switch directly
+                if (pendingQuickSwitch) {
+                    pendingQuickSwitch = false;
+                    quickSwitchToLast();
+                    return;
+                }
 
                 // If a super-fast Alt+Tab release was queued while we were scanning, trigger it now!
                 if (pendingActivation) {
@@ -267,6 +297,12 @@ ColumnLayout {
                 Keys.onReturnPressed: winSwitcher.activateSelected()
                 Keys.onEnterPressed: winSwitcher.activateSelected()
                 Keys.onEscapePressed: root.collapseToIdle()
+                Keys.onReleased: (event) => {
+                    if (event.key === Qt.Key_Alt || event.key === Qt.Key_Meta) {
+                        winSwitcher.activateSelected();
+                        event.accepted = true;
+                    }
+                }
 
                 MouseArea {
                     anchors.fill: parent

@@ -22,7 +22,7 @@ QtObject {
     // ==========================================
     // 3. AUTO-COLLAPSE & POPUP TIMERS (ms)
     // ==========================================
-    readonly property int timerAutoCollapse: 250    // Delay before collapsing after mouse leave
+    readonly property int timerAutoCollapse: 0      // Instantaneous collapse on mouse leave
     readonly property int timerNotifPopup: 1600     // How long the notification popup island remains visible
     readonly property int timerStartupGrace: 600    // Grace window on startup to suppress notification replays
     readonly property int timerOsdSettle: 150       // OSD transition settle debounce
@@ -40,7 +40,7 @@ QtObject {
     readonly property int baseExclusiveZone: 32     // Wayland layer shell exclusive reservation
 
     readonly property var modeDimensions: ({
-        "idle":          { width: 156, height: 32,  radius: 16 },
+        "idle":          { width: 168, height: 32,  radius: 16 },
 		"hover":         { width: 460, height: 42,  radius: 21 },
 		"switcher":      { width: 800, height: 420, radius: 14 },
         "launcher":      { width: 560, height: 246, radius: 22 },

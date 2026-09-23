@@ -8,9 +8,9 @@ Item {
     id: root
 
     property string text: ""
-    property string family: "Rubik"
-    property real pixelSize: 15
-    property int weight: Font.Bold
+    property string family: "Readex Pro"
+    property int pixelSize: 14
+    property int weight: Font.DemiBold
     property real letterSpacing: 0
     property color color: "#f5f5f7"
     property int renderType: Text.NativeRendering
@@ -42,6 +42,7 @@ Item {
 
     Row {
         id: row
+        spacing: 0
         Repeater {
             model: root.text.length
             Item {
@@ -50,7 +51,7 @@ Item {
                 readonly property string character: root.text.charAt(slot.index)
                 property real roll: 1
                 property string previous: ""
-                width: Math.max(current.implicitWidth, slot.roll < 1 ? leaving.implicitWidth : 0)
+                width: Math.ceil(Math.max(current.implicitWidth, slot.roll < 1 ? leaving.implicitWidth : 0))
                 height: probe.implicitHeight
                 clip: true
 
@@ -68,6 +69,7 @@ Item {
                 Glyph {
                     id: leaving
                     text: slot.previous
+                    anchors.horizontalCenter: parent.horizontalCenter
                     y: -slot.travel * slot.roll
                     opacity: 1 - slot.roll
                 }
@@ -76,6 +78,7 @@ Item {
                     property string shown: ""
                     Component.onCompleted: current.shown = slot.character
                     text: slot.character
+                    anchors.horizontalCenter: parent.horizontalCenter
                     y: slot.travel * (1 - slot.roll)
                     opacity: slot.roll
                 }

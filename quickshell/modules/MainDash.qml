@@ -58,7 +58,7 @@ Item {
             if (dash.showMusicInfo) return 340;
             return 240;
         }
-        return 156;  // Iris compact idle width (DateMark + IrisClock)
+        return 168;  // Iris compact idle width (DateMark + IrisClock)
     }
 
     property string playbackStatus: ""
@@ -871,12 +871,12 @@ Item {
             }
         }
 
-        // Grouped Iris DateMark + IrisClock cluster centered in the capsule
+        // Grouped Iris DateMark + Separator + IrisClock cluster centered in the capsule
         Row {
             id: idleCluster
             anchors.centerIn: parent
             anchors.verticalCenterOffset: -0.5
-            spacing: 11
+            spacing: 7
 
             // DateMark: weekday quiet, day number carrying accent,
             // sharing optical baseline directly with IrisClock figures
@@ -890,7 +890,7 @@ Item {
                     id: idleWeekdayText
                     text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
                     color: Theme.colors.text_muted ?? "#8e8e93"
-                    font.family: "Noto Sans"
+                    font.family: "Readex Pro"
                     font.pixelSize: 11
                     font.weight: Font.Medium
                     renderType: Text.NativeRendering
@@ -901,23 +901,34 @@ Item {
                     anchors.baseline: idleWeekdayText.baseline
                     text: Qt.formatDate(clock.date, "d")
                     color: Theme.accent
-                    font.family: "Rubik"
+                    font.family: "Readex Pro"
                     font.pixelSize: 12
-                    font.weight: Font.Bold
-                    font.features: ({ "tnum": 1 })
+                    font.weight: Font.DemiBold
                     renderType: Text.NativeRendering
                 }
             }
 
-            // IrisClock: bold Rubik numbers, colon with optical centering
+            // Material You subtle separator bullet
+            Text {
+                text: "•"
+                anchors.baseline: idleIrisClock.baseline
+                anchors.baselineOffset: -0.5
+                color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                font.family: "Readex Pro"
+                font.pixelSize: 9
+                renderType: Text.NativeRendering
+            }
+
+            // IrisClock: clean Readex Pro numbers, accent colon, no leading zero in 12h
             IrisClock {
                 id: idleIrisClock
                 pixelSize: 14
-                family: "Rubik"
+                family: "Readex Pro"
+                weight: Font.DemiBold
                 text: {
                     var h = clock.date.getHours() % 12 || 12;
                     var m = clock.date.getMinutes();
-                    var hh = (h < 10 ? "0" : "") + h;
+                    var hh = String(h);
                     var mm = (m < 10 ? "0" : "") + m;
                     return hh + ":" + mm;
                 }
@@ -968,10 +979,10 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Center: DateMark + IrisClock cluster
+            // Center: DateMark + Separator + IrisClock cluster
             Row {
                 id: musicIdleCluster
-                spacing: 9
+                spacing: 7
                 Layout.alignment: Qt.AlignVCenter
 
                 Row {
@@ -984,7 +995,7 @@ Item {
                         id: musicIdleWeekdayText
                         text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
                         color: Theme.colors.text_muted ?? "#8e8e93"
-                        font.family: "Noto Sans"
+                        font.family: "Readex Pro"
                         font.pixelSize: 11
                         font.weight: Font.Medium
                         renderType: Text.NativeRendering
@@ -995,22 +1006,32 @@ Item {
                         anchors.baseline: musicIdleWeekdayText.baseline
                         text: Qt.formatDate(clock.date, "d")
                         color: Theme.accent
-                        font.family: "Rubik"
+                        font.family: "Readex Pro"
                         font.pixelSize: 12
-                        font.weight: Font.Bold
-                        font.features: ({ "tnum": 1 })
+                        font.weight: Font.DemiBold
                         renderType: Text.NativeRendering
                     }
+                }
+
+                Text {
+                    text: "•"
+                    anchors.baseline: musicIdleClock.baseline
+                    anchors.baselineOffset: -0.5
+                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                    font.family: "Readex Pro"
+                    font.pixelSize: 9
+                    renderType: Text.NativeRendering
                 }
 
                 IrisClock {
                     id: musicIdleClock
                     pixelSize: 14
-                    family: "Rubik"
+                    family: "Readex Pro"
+                    weight: Font.DemiBold
                     text: {
                         var h = clock.date.getHours() % 12 || 12;
                         var m = clock.date.getMinutes();
-                        var hh = (h < 10 ? "0" : "") + h;
+                        var hh = String(h);
                         var mm = (m < 10 ? "0" : "") + m;
                         return hh + ":" + mm;
                     }
@@ -1107,12 +1128,12 @@ Item {
                 text: {
                     var h = clock.date.getHours() % 12 || 12;
                     var m = clock.date.getMinutes();
-                    var hh = (h < 10 ? "0" : "") + h;
+                    var hh = String(h);
                     var mm = (m < 10 ? "0" : "") + m;
                     return hh + ":" + mm;
                 }
                 color: Theme.colors.text_secondary ?? "#aeaeb2"
-                font.family: "Rubik"
+                font.family: "Readex Pro"
                 font.pixelSize: 11
                 font.weight: Font.Medium
                 font.features: ({ "tnum": 1 })
@@ -1232,7 +1253,7 @@ Item {
             Row {
                 id: hoverCenterRow
                 anchors.centerIn: parent
-                spacing: 9
+                spacing: 7
 
                 // Iris DateMark component
                 Row {
@@ -1245,7 +1266,7 @@ Item {
                         id: hoverWeekdayText
                         text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
                         color: Theme.colors.text_muted ?? "#8e8e93"
-                        font.family: "Noto Sans"
+                        font.family: "Readex Pro"
                         font.pixelSize: 11
                         font.weight: Font.Medium
                         renderType: Text.NativeRendering
@@ -1256,24 +1277,34 @@ Item {
                         anchors.baseline: hoverWeekdayText.baseline
                         text: Qt.formatDate(clock.date, "d")
                         color: Theme.accent
-                        font.family: "Rubik"
+                        font.family: "Readex Pro"
                         font.pixelSize: 12
-                        font.weight: Font.Bold
-                        font.features: ({ "tnum": 1 })
+                        font.weight: Font.DemiBold
                         renderType: Text.NativeRendering
                     }
+                }
+
+                Text {
+                    text: "•"
+                    anchors.baseline: hoverClock.baseline
+                    anchors.baselineOffset: -0.5
+                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                    font.family: "Readex Pro"
+                    font.pixelSize: 9
+                    renderType: Text.NativeRendering
                 }
 
                 // Iris Clock with accent separator
                 IrisClock {
                     id: hoverClock
                     anchors.verticalCenter: parent.verticalCenter
-                    pixelSize: 15
-                    family: "Rubik"
+                    pixelSize: 14
+                    family: "Readex Pro"
+                    weight: Font.DemiBold
                     text: {
                         var h = clock.date.getHours() % 12 || 12;
                         var m = clock.date.getMinutes();
-                        var hh = (h < 10 ? "0" : "") + h;
+                        var hh = String(h);
                         var mm = (m < 10 ? "0" : "") + m;
                         return hh + ":" + mm;
                     }

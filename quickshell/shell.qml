@@ -544,12 +544,34 @@ while True:
             if (typeof dashMod !== "undefined") dashMod.startOcr();
         }
     }
+    property bool switcherQuickTapArmed: false
+
+    Timer {
+        id: switcherOpenTimer
+        interval: 180
+        repeat: false
+        onTriggered: {
+            if (root.switcherQuickTapArmed) {
+                root.switcherQuickTapArmed = false;
+                root.switchMode("switcher", true);
+            }
+        }
+    }
+
 	GlobalShortcut { 
         name: "cycleWindowNext"
         onPressed: {
             if (root.activeMode !== "switcher") {
-                root.switchMode("switcher", true);
-                switcherMod.refreshClients();
+                if (!switcherOpenTimer.running) {
+                    root.switcherQuickTapArmed = true;
+                    switcherOpenTimer.restart();
+                    switcherMod.refreshClients();
+                } else {
+                    switcherOpenTimer.stop();
+                    root.switcherQuickTapArmed = false;
+                    root.switchMode("switcher", true);
+                    switcherMod.cycleNext();
+                }
             } else {
                 switcherMod.cycleNext();
             }
@@ -559,7 +581,18 @@ while True:
     GlobalShortcut { 
         name: "cycleWindowPrev"
         onPressed: {
-            if (root.activeMode === "switcher") {
+            if (root.activeMode !== "switcher") {
+                if (!switcherOpenTimer.running) {
+                    root.switcherQuickTapArmed = true;
+                    switcherOpenTimer.restart();
+                    switcherMod.refreshClients();
+                } else {
+                    switcherOpenTimer.stop();
+                    root.switcherQuickTapArmed = false;
+                    root.switchMode("switcher", true);
+                    switcherMod.cyclePrev();
+                }
+            } else {
                 switcherMod.cyclePrev();
             }
         }
@@ -568,7 +601,11 @@ while True:
 	GlobalShortcut {
         name: "confirmAltRelease"
         onPressed: {
-            if (root.activeMode === "switcher") {
+            if (switcherOpenTimer.running && root.switcherQuickTapArmed) {
+                switcherOpenTimer.stop();
+                root.switcherQuickTapArmed = false;
+                switcherMod.quickSwitchToLast();
+            } else if (root.activeMode === "switcher") {
                 switcherMod.activateSelected();
             }
         }
@@ -706,6 +743,12 @@ while True:
                     root.regainFocus();
                 }
             }
+            Keys.onReleased: (event) => {
+                if (root.activeMode === "switcher" && (event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)) {
+                    switcherMod.activateSelected();
+                    event.accepted = true;
+                }
+            }
 
             MouseArea {
                 id: notchHoverArea
@@ -718,8 +761,8 @@ while True:
                     if (root.activeMode === "idle") root.activeMode = "hover";
                 }
                 onExited: {
-                    if (root.activeMode === "hover") {
-                        autoCollapseTimer.restart();
+                    if (root.activeMode === "hover" && !notchHoverHandler.hovered) {
+                        root.collapseToIdle();
                     }
                 }
             }
@@ -953,8 +996,8 @@ while True:
                             root.isWorkspacePeeking = false;
                             if (root.activeMode === "idle") root.activeMode = "hover";
                         } else {
-                            if (root.activeMode === "hover") {
-                                autoCollapseTimer.restart();
+                            if (root.activeMode === "hover" && !notchHoverArea.containsMouse) {
+                                root.collapseToIdle();
                             }
                         }
                     }

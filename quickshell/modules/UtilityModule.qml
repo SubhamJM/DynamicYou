@@ -111,6 +111,46 @@ Item {
         wifiSettleTimer.restart();
     }
 
+    // 1b. Hotspot Toggle & Monitoring
+    property bool hotspotActive: (typeof wifiMod !== "undefined" && wifiMod.hotspotActive !== undefined) ? wifiMod.hotspotActive : false
+
+    Process {
+        id: checkHotspotStatus
+        running: true
+        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '^802-11-wireless.*:Hotspot|^wifi.*:Hotspot' || true"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var isActive = (this.text.trim().length > 0);
+                utilModule.hotspotActive = isActive;
+                if (typeof wifiMod !== "undefined") wifiMod.hotspotActive = isActive;
+            }
+        }
+    }
+
+    Process {
+        id: utilHotspotRunner
+        running: false
+        onExited: {
+            checkHotspotStatus.running = true;
+            if (typeof wifiMod !== "undefined") wifiMod.refreshStatus();
+        }
+    }
+
+    function toggleHotspot() {
+        if (typeof wifiMod !== "undefined") {
+            wifiMod.toggleHotspot(!utilModule.hotspotActive);
+            utilModule.hotspotActive = !utilModule.hotspotActive;
+        } else {
+            if (!utilModule.hotspotActive) {
+                utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.5 && nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001'"];
+            } else {
+                utilHotspotRunner.command = ["sh", "-c", "nmcli connection down Hotspot || true"];
+            }
+            utilHotspotRunner.running = true;
+            utilModule.hotspotActive = !utilModule.hotspotActive;
+        }
+    }
+
     // 2. Bluetooth Toggle & Open
     function toggleBluetooth() {
         if (typeof Bluetooth !== "undefined" && Bluetooth.defaultAdapter) {
@@ -591,6 +631,7 @@ Item {
     component MaterialCircleBtn: Rectangle {
         id: cbtn
         property string glyph: ""
+        property int fill: 0
         property color iconColor: utilModule.colText
         property color customBg: utilModule.colCard
         property color hoverBg: utilModule.colCardHover
@@ -609,6 +650,7 @@ Item {
         MaterialSymbol {
             anchors.centerIn: parent
             text: cbtn.glyph
+            fill: cbtn.fill
             iconSize: 19
             color: cbtn.iconColor
         }
@@ -985,13 +1027,15 @@ Item {
             spacing: 6
             visible: utilModule.activeSection === ""
 
-            // ROW 1: Wi-Fi Pill, Focus Pill, Lock Circle Button
+            // ROW 1: Wi-Fi Pill, Hotspot Circle Button, Record Pill, Lock Circle Button
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
 
                 // Wi-Fi Pill (Split: disc toggles Wi-Fi, body opens Wi-Fi module)
                 MaterialPill {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 2
                     glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
                     title: (utilModule.activeNetType === "eth") ? "Ethernet" : (utilModule.wifiEnabled ? (utilModule.activeNetName !== "" ? utilModule.activeNetName : "Wi-Fi") : "Wi-Fi")
                     subtitle: {
@@ -1009,8 +1053,20 @@ Item {
                     onDetailClicked: root.switchMode("wifi", false)
                 }
 
+                // Hotspot Circular Action Button (Material You style)
+                MaterialCircleBtn {
+                    glyph: "wifi_tethering"
+                    fill: utilModule.hotspotActive ? 1 : 0
+                    customBg: utilModule.hotspotActive ? utilModule.colAccent : utilModule.colCard
+                    hoverBg: utilModule.hotspotActive ? Qt.lighter(utilModule.colAccent, 1.15) : utilModule.colCardHover
+                    iconColor: utilModule.hotspotActive ? "#101318" : utilModule.colText
+                    onClicked: utilModule.toggleHotspot()
+                }
+
                 // Record Pill (Material You Pill)
                 MaterialPill {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 3
                     glyph: (typeof recMod !== "undefined" && recMod.isRecording) ? "stop_circle" : "radio_button_checked"
                     title: "Record"
                     subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording..." : "Screen Record"

@@ -27,6 +27,14 @@ hl.bind(mainMod .. " + slash", hl.dsp.global("quickshell:toggleCheatsheetNotch")
 hl.bind(mainMod .. " + U", hl.dsp.global("quickshell:toggleUtilityNotch"))
 hl.bind("ALT + TAB", hl.dsp.global("quickshell:cycleWindowNext"))
 hl.bind("ALT + SHIFT + TAB", hl.dsp.global("quickshell:cycleWindowPrev"))
+hl.bind("ALT + Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("ALT + Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("ALT + SHIFT + Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("ALT + SHIFT + Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("SHIFT + Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("SHIFT + Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
+hl.bind("Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
 hl.bind("Print", hl.dsp.exec_cmd('grimblast --notify copysave area'))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
 
@@ -102,7 +110,7 @@ hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/qu
 -- 3. Active Window
 hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd([[sh -c 'hyprctl activewindow -j | jq -r "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" | grim -g - - | wl-copy && notify-send "Screenshot" "Window copied to clipboard"']]))
 
-hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("fuzzel"), { on_release = true })
+hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("fuzzel"), { release = true })
 
 hl.bind("SUPER + M", hl.dsp.workspace.toggle_special("music"))
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("extra"))
