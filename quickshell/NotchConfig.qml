@@ -56,7 +56,7 @@ QtObject {
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 460, height: 380, radius: 12 },
         "shelf":         { width: 460, height: 380, radius: 12 },
-        "utility":       { width: 460, height: 318, radius: 26 },
+        "utility":       { width: 484, height: 342, radius: 26 },
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
@@ -64,9 +64,9 @@ QtObject {
     })
 
     function calculateUtilityHeight(activeSection) {
-        if (activeSection === "audio") return 360;
-        if (activeSection === "vpn") return 236;
-        return 318;
+        if (activeSection === "audio") return 384;
+        if (activeSection === "vpn") return 254;
+        return 342;
     }
 
     // ==========================================

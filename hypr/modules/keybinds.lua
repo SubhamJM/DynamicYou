@@ -111,7 +111,5 @@ hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/qu
 -- 3. Active Window
 hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd([[sh -c 'hyprctl activewindow -j | jq -r "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" | grim -g - - | wl-copy && notify-send "Screenshot" "Window copied to clipboard"']]))
 
-hl.bind(mainMod .. " + SUPER_L", hl.dsp.exec_cmd("fuzzel"), { release = true })
-
 hl.bind("SUPER + M", hl.dsp.workspace.toggle_special("music"))
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("extra"))

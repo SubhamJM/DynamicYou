@@ -529,8 +529,8 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 44
-        radius: 22
+        implicitHeight: 46
+        radius: 23
 
         color: (discMouse.containsMouse || pillBodyMouse.containsMouse) ? utilModule.colCardHover : utilModule.colCard
         border.width: 0
@@ -539,16 +539,16 @@ Item {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 4
-            anchors.rightMargin: 10
-            spacing: 8
+            anchors.leftMargin: 5
+            anchors.rightMargin: 12
+            spacing: 10
 
             // Left: Circular Icon Disc
             Rectangle {
                 id: discRect
-                width: 36
-                height: 36
-                radius: 18
+                width: 38
+                height: 38
+                radius: 19
                 color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.085))
 
                 scale: discMouse.pressed ? 0.90 : 1.0
@@ -615,7 +615,7 @@ Item {
         MouseArea {
             id: pillBodyMouse
             anchors.fill: parent
-            anchors.leftMargin: 42
+            anchors.leftMargin: 46
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
@@ -638,9 +638,9 @@ Item {
         property color hoverBg: utilModule.colCardHover
         signal clicked()
 
-        implicitWidth: 44
-        implicitHeight: 44
-        radius: 22
+        implicitWidth: 46
+        implicitHeight: 46
+        radius: 23
         color: cmouse.containsMouse ? cbtn.hoverBg : cbtn.customBg
         border.width: 0
 
@@ -652,7 +652,7 @@ Item {
             anchors.centerIn: parent
             text: cbtn.glyph
             fill: cbtn.fill
-            iconSize: 19
+            iconSize: 20
             color: cbtn.iconColor
         }
 
@@ -683,8 +683,8 @@ Item {
         readonly property real currentRatio: Math.max(0.0, Math.min(1.0, scard.dragVal >= 0 ? scard.dragVal : scard.value))
 
         Layout.fillWidth: true
-        implicitHeight: 44
-        radius: 22
+        implicitHeight: 46
+        radius: 23
         color: Qt.rgba(255, 255, 255, 0.085)
         border.width: 0
 
@@ -724,7 +724,7 @@ Item {
                 anchors.centerIn: parent
                 text: scard.icon
                 fill: 1
-                iconSize: 19
+                iconSize: 20
                 color: scard.muted ? "#ff6961" : (scard.currentRatio > 0.08 ? "#101318" : utilModule.colText)
                 Behavior on color { ColorAnimation { duration: 90 } }
             }
@@ -733,9 +733,9 @@ Item {
         // Right Percentage Label + Optional Chevron
         RowLayout {
             anchors.right: parent.right
-            anchors.rightMargin: 14
+            anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+            spacing: 8
             z: 5
 
             Text {
@@ -822,8 +822,8 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 36
-        radius: 12
+        implicitHeight: 38
+        radius: 13
 
         color: chip.lit
             ? chip.tint
@@ -838,7 +838,7 @@ Item {
             anchors.centerIn: parent
             text: chip.glyph
             fill: chip.lit ? 1 : 0
-            iconSize: 18
+            iconSize: 19
             color: chip.lit ? "#101318" : (chipMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
         }
 
@@ -860,9 +860,9 @@ Item {
         property color hoverBg: utilModule.colCardHover
         signal clicked()
 
-        width: 28
-        height: 28
-        radius: 14
+        width: 30
+        height: 30
+        radius: 15
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
         border.width: 0
 
@@ -873,7 +873,7 @@ Item {
         MaterialSymbol {
             anchors.centerIn: parent
             text: hbtn.glyph
-            iconSize: 15
+            iconSize: 16
             color: hmouse.containsMouse ? "#f5f5f7" : hbtn.iconColor
         }
 
@@ -891,18 +891,18 @@ Item {
     // ========================================================
     ColumnLayout {
         anchors.fill: parent
-        anchors.topMargin: 3
-        spacing: 7
+        anchors.topMargin: 4
+        spacing: 9
 
         // ── TOP HEADER BAR ─────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 28
-            spacing: 8
+            Layout.preferredHeight: 30
+            spacing: 10
 
             // Tactile Back / Exit Button
             Rectangle {
-                width: 28; height: 28; radius: 14
+                width: 30; height: 30; radius: 15
                 color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
                 border.width: 0
                 scale: headerBackMouse.pressed ? 0.90 : 1.0
@@ -911,7 +911,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: utilModule.activeSection !== "" ? "arrow_back" : "close"
-                    iconSize: 15
+                    iconSize: 16
                     color: utilModule.activeSection !== "" ? utilModule.colAccent : "#f5f5f7"
                 }
 
@@ -954,7 +954,7 @@ Item {
 
             // Quick Shortcut Badges (Shelf, OCR, Notes, Clipboard, Theme, Lock, Power)
             RowLayout {
-                spacing: 5
+                spacing: 7
                 Layout.alignment: Qt.AlignRight
                 visible: utilModule.activeSection === ""
 
@@ -1024,15 +1024,15 @@ Item {
             id: mainViewContainer
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: 4
-            spacing: 6
+            Layout.topMargin: 6
+            spacing: 8
             visible: utilModule.activeSection === ""
 
             // ROW 1: Wi-Fi Pill, Hotspot Circle Button, Record Pill, Lock Circle Button
             RowLayout {
                 id: row1
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: 8
 
                 // Wi-Fi Pill (matches Bluetooth Pill in Row 2)
                 MaterialPill {
@@ -1104,7 +1104,7 @@ Item {
             RowLayout {
                 id: row2
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: 8
 
                 // Bluetooth Pill (Split: disc toggles BT, body opens BT module)
                 MaterialPill {
@@ -1160,7 +1160,7 @@ Item {
 
             // ROW 3: Sound Slider (with chevron to audio devices subview)
             MaterialSliderCard {
-                Layout.topMargin: 4
+                Layout.topMargin: 5
                 value: utilModule.audioVolume
                 icon: utilModule.audioMuted ? "volume_off" : (utilModule.audioVolume > 0.5 ? "volume_up" : (utilModule.audioVolume > 0 ? "volume_down" : "volume_mute"))
                 percentText: utilModule.audioMuted ? "Muted" : (Math.round(utilModule.audioVolume * 100) + "%")
@@ -1195,8 +1195,8 @@ Item {
             // ROW 5: Secondary Hardware Tools Squircle Row (Mic, Caffeine, Night Light, Capture, Record, Picker)
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 4
-                spacing: 6
+                Layout.topMargin: 6
+                spacing: 8
 
                 // 1. Microphone Mute
                 MaterialChipBtn {
@@ -1274,7 +1274,7 @@ Item {
                 ColumnLayout {
                     id: audioContentCol
                     width: audioScroll.width
-                    spacing: 6
+                    spacing: 8
 
                     Text {
                         text: "OUTPUT AUDIO SINKS"
@@ -1305,8 +1305,8 @@ Item {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12; anchors.rightMargin: 12
-                                spacing: 10
+                                anchors.leftMargin: 14; anchors.rightMargin: 14
+                                spacing: 12
 
                                 MaterialSymbol {
                                     text: utilModule.getSinkIcon(modelData.name, modelData.desc)
@@ -1375,8 +1375,8 @@ Item {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12; anchors.rightMargin: 12
-                                spacing: 10
+                                anchors.leftMargin: 14; anchors.rightMargin: 14
+                                spacing: 12
 
                                 MaterialSymbol {
                                     text: "mic"
@@ -1443,7 +1443,7 @@ Item {
                 ColumnLayout {
                     id: vpnContentCol
                     width: vpnScroll.width
-                    spacing: 6
+                    spacing: 8
 
                     Repeater {
                         model: utilModule.vpnProviders
@@ -1464,8 +1464,8 @@ Item {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12; anchors.rightMargin: 12
-                                spacing: 10
+                                anchors.leftMargin: 14; anchors.rightMargin: 14
+                                spacing: 12
 
                                 // Provider Icon Disc
                                 Rectangle {
