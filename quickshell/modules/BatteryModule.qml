@@ -10,6 +10,11 @@ Item {
     id: batteryModule
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     // ========================================================
     // MATERIAL YOU / M3 COLOR TOKENS

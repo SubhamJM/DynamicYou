@@ -868,11 +868,7 @@ with open(f, 'w') as file: json.dump(d, file)
                     event.accepted = true;
                 }
                 Keys.onEscapePressed: {
-                    if (text.length > 0) {
-                        text = "";
-                    } else {
-                        root.collapseToIdle();
-                    }
+                    root.collapseToIdle();
                 }
 
                 Keys.onReturnPressed: (event) => {

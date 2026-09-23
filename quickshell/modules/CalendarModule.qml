@@ -9,6 +9,11 @@ ColumnLayout {
     spacing: 12
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     property date viewDate: new Date()
     readonly property date today: new Date()

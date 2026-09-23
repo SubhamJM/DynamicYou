@@ -78,7 +78,7 @@ ColumnLayout {
 
         boundsBehavior: Flickable.DragAndOvershootBounds
 
-        Keys.onEscapePressed: root.activeMode = "idle"
+        Keys.onEscapePressed: root.collapseToIdle()
         Keys.onLeftPressed: if (currentIndex > 0) currentIndex--
         Keys.onRightPressed: if (currentIndex < count - 1) currentIndex++
         Keys.onUpPressed: if (currentIndex - 3 >= 0) currentIndex -= 3

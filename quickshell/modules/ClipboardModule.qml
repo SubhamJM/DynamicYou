@@ -10,6 +10,11 @@ ColumnLayout {
     spacing: 10
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     property alias searchInput: searchInput
     property var allClips: []

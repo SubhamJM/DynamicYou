@@ -9,6 +9,15 @@ Item {
     id: notesRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        if (notesRoot.isSaveDrawerOpen) {
+            notesRoot.isSaveDrawerOpen = false;
+        } else {
+            root.collapseToIdle();
+        }
+        event.accepted = true;
+    }
 
     property int activeTab: 0 // 0: Scratchpad, 1: Todos
     property string scratchpadText: ""
@@ -644,6 +653,10 @@ Item {
                     background: Item {}
 
                     onAccepted: notesRoot.exportScratchpadToDisk(text)
+                    Keys.onEscapePressed: (event) => {
+                        notesRoot.isSaveDrawerOpen = false;
+                        event.accepted = true;
+                    }
                 }
 
                 // Browse Button (kdialog)

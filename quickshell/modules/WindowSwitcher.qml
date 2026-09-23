@@ -266,7 +266,7 @@ ColumnLayout {
                 Keys.onRightPressed: incrementCurrentIndex()
                 Keys.onReturnPressed: winSwitcher.activateSelected()
                 Keys.onEnterPressed: winSwitcher.activateSelected()
-                Keys.onEscapePressed: root.activeMode = "idle"
+                Keys.onEscapePressed: root.collapseToIdle()
 
                 MouseArea {
                     anchors.fill: parent

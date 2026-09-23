@@ -8,6 +8,15 @@ import "../"
 ColumnLayout {
     id: wifiMaster
     spacing: 10
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        if (wifiMaster.activeTab === "hotspot") {
+            wifiMaster.activeTab = "wifi";
+        } else {
+            root.collapseToIdle();
+        }
+        event.accepted = true;
+    }
 
     property string activeTab: "wifi"
     property bool wifiEnabled: true
@@ -1115,6 +1124,10 @@ ColumnLayout {
                                 }
                                 Keys.onReturnPressed: joinBtn.submit()
                                 Keys.onEnterPressed: joinBtn.submit()
+                                Keys.onEscapePressed: (event) => {
+                                    row.isExpanded = false;
+                                    event.accepted = true;
+                                }
                             }
 
                             Rectangle {

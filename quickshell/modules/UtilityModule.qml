@@ -10,6 +10,15 @@ Item {
     id: utilModule
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        if (utilModule.activeSection !== "") {
+            utilModule.activeSection = "";
+        } else {
+            root.collapseToIdle();
+        }
+        event.accepted = true;
+    }
 
     // ========================================================
     // STATE PROPERTIES & CONTROLS

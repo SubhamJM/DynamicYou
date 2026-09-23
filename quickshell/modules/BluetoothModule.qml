@@ -9,6 +9,11 @@ ColumnLayout {
     id: btModule
     spacing: 8
     Layout.fillWidth: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     // Material UI Neutral Deep Black Tokens
     readonly property color colSurface: "#000000"

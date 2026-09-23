@@ -9,6 +9,15 @@ ColumnLayout {
     id: recModule
     spacing: 8
     Layout.fillWidth: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        if (recModule.isMicDropdownOpen) {
+            recModule.isMicDropdownOpen = false;
+        } else {
+            root.collapseToIdle();
+        }
+        event.accepted = true;
+    }
 
     // Material UI Neutral Deep Black Tokens
     readonly property color colSurface: "#000000"

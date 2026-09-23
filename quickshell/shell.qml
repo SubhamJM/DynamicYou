@@ -196,6 +196,8 @@ ShellRoot {
         else if (activeMode === "notes" && typeof notesMod !== "undefined") notesMod.forceNotesFocus();
         else if (activeMode === "cheatsheet" && typeof cheatsheetMod !== "undefined") cheatsheetMod.forceSearchFocus();
         else if (activeMode === "music" && typeof musicMod !== "undefined") musicMod.forceActiveFocus();
+        else if (typeof contentStack !== "undefined" && contentStack.currentItem) contentStack.currentItem.forceActiveFocus();
+        else notchContainer.forceActiveFocus();
     }
 
     onActiveModeChanged: {
@@ -668,11 +670,9 @@ while True:
                 : (root.activeMode === "hover" ? hoverMaskArea : notchContainer)
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode === "launcher" || root.activeMode === "theme" || root.activeMode === "wallpaper" || root.activeMode === "transition" || root.activeMode === "clipboard" || root.activeMode === "shelf" || root.activeMode === "powermenu" || root.activeMode === "notes" || root.activeMode === "cheatsheet" || root.activeMode === "switcher")
+        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd")
             ? WlrKeyboardFocus.Exclusive
-            : ((root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
-                ? WlrKeyboardFocus.OnDemand 
-                : WlrKeyboardFocus.None)
+            : WlrKeyboardFocus.None
 
         // Click-away backdrop: collapses open popups/hover when clicking outside
         MouseArea {
@@ -718,7 +718,7 @@ while True:
                     if (root.activeMode === "idle") root.activeMode = "hover";
                 }
                 onExited: {
-                    if (root.activeMode !== "idle" && root.activeMode !== "osd") {
+                    if (root.activeMode === "hover") {
                         autoCollapseTimer.restart();
                     }
                 }
@@ -934,7 +934,7 @@ while True:
                     interval: NotchConfig.timerAutoCollapse
                     repeat: false
                     onTriggered: {
-                        if (root.activeMode !== "idle" && root.activeMode !== "osd" && !notchHoverHandler.hovered && !notchHoverArea.containsMouse) {
+                        if (root.activeMode === "hover" && !notchHoverHandler.hovered && !notchHoverArea.containsMouse) {
                             root.collapseToIdle();
                         }
                     }
@@ -953,7 +953,7 @@ while True:
                             root.isWorkspacePeeking = false;
                             if (root.activeMode === "idle") root.activeMode = "hover";
                         } else {
-                            if (root.activeMode !== "idle" && root.activeMode !== "osd") {
+                            if (root.activeMode === "hover") {
                                 autoCollapseTimer.restart();
                             }
                         }

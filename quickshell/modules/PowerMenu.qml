@@ -16,7 +16,7 @@ FocusScope {
     Keys.onRightPressed: { currentIndex = (currentIndex + 1) % 5; }
     Keys.onReturnPressed: { triggerSelected(); }
     Keys.onSpacePressed: { triggerSelected(); }
-    Keys.onEscapePressed: { root.activeMode = "idle"; }
+    Keys.onEscapePressed: { root.collapseToIdle(); }
 
     function triggerSelected() {
         var cmds = [

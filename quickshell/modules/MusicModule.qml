@@ -13,6 +13,11 @@ Item {
     id: musicModule
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+    Keys.onEscapePressed: (event) => {
+        root.collapseToIdle();
+        event.accepted = true;
+    }
 
     // ========================================================
     // 1. MPRIS PLAYER DISCOVERY & SELECTION ENGINE (Iris 1:1)
