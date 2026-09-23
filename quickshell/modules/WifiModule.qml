@@ -462,6 +462,7 @@ ColumnLayout {
                     text: {
                         if (typeof dashMod === "undefined") return "Network status";
                         if (dashMod.activeNetName === "") return dashMod.activeNetType === "eth" ? "Ethernet disconnected" : "Wi-Fi disconnected";
+                        if (dashMod.activeNetType === "eth" && (dashMod.activeNetName === "Wired connection 1" || dashMod.activeNetName === "")) return "Ethernet";
                         return dashMod.activeNetName;
                     }
                     font.family: "Noto Sans"

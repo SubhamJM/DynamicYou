@@ -189,21 +189,51 @@ Item {
 
     Process {
         id: netPoller
-        command: ["sh", "-c", "nmcli -t -f TYPE,CONNECTION,STATE dev | grep connected | head -n 1; nmcli -t -f IN-USE,SIGNAL dev wifi list 2>/dev/null | grep '^\\*' | cut -d: -f2"]
+        command: ["sh", "-c", "nmcli -t -f TYPE,CONNECTION,STATE dev | grep -E '^(ethernet|wifi):.*:connected'; echo '---'; nmcli -t -f IN-USE,SIGNAL dev wifi list 2>/dev/null | grep '^\\*' | cut -d: -f2"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n");
-                var line = lines[0] ? lines[0].trim() : "";
-                var sigStr = lines[1] ? lines[1].trim() : "0";
-                
-                if (line.length > 0) {
-                    var parts = line.split(":");
-                    if (parts.length >= 3) {
-                        if (parts[0].indexOf("ethernet") !== -1) dash.activeNetType = "eth";
-                        else if (parts[0].indexOf("wifi") !== -1 || parts[0].indexOf("wireless") !== -1) dash.activeNetType = "wifi";
-                        dash.activeNetName = parts[1];
-                        dash.activeNetSignal = parseInt(sigStr) || 0;
+                var rawText = this.text.trim();
+                var sections = rawText.split("---");
+                var devSection = sections[0] ? sections[0].trim() : "";
+                var sigStr = sections[1] ? sections[1].trim() : "0";
+
+                var devLines = devSection.length > 0 ? devSection.split("\n") : [];
+                var ethConn = null;
+                var wifiClientConn = null;
+                var hotspotConn = null;
+
+                for (var i = 0; i < devLines.length; i++) {
+                    var l = devLines[i].trim();
+                    if (l.length === 0) continue;
+                    var parts = l.split(":");
+                    if (parts.length >= 3 && parts[2].indexOf("connected") !== -1) {
+                        var type = parts[0].toLowerCase();
+                        var conName = parts[1];
+                        if (type.indexOf("ethernet") !== -1) {
+                            ethConn = conName;
+                        } else if (type.indexOf("wifi") !== -1 || type.indexOf("wireless") !== -1) {
+                            if (conName.toLowerCase().indexOf("hotspot") !== -1) {
+                                hotspotConn = conName;
+                            } else {
+                                wifiClientConn = conName;
+                            }
+                        }
                     }
+                }
+
+                // Prioritize: 1. Ethernet (wired) > 2. Wi-Fi Client > 3. Hotspot AP
+                if (ethConn !== null) {
+                    dash.activeNetType = "eth";
+                    dash.activeNetName = ethConn;
+                    dash.activeNetSignal = 100;
+                } else if (wifiClientConn !== null) {
+                    dash.activeNetType = "wifi";
+                    dash.activeNetName = wifiClientConn;
+                    dash.activeNetSignal = parseInt(sigStr) || 0;
+                } else if (hotspotConn !== null) {
+                    dash.activeNetType = "wifi";
+                    dash.activeNetName = hotspotConn;
+                    dash.activeNetSignal = 100;
                 } else {
                     dash.activeNetType = "wifi";
                     dash.activeNetName = "";
