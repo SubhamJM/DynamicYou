@@ -16,6 +16,7 @@ hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized", action
 hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exec_cmd("~/.config/quickshell/reload.sh"))
 hl.bind(mainMod .. " + Space", hl.dsp.global("quickshell:toggleNotchLauncher"))
 hl.bind(mainMod .. " + T", hl.dsp.global("quickshell:toggleThemeNotch"))
+hl.bind(mainMod .. " + SHIFT + T", hl.dsp.global("quickshell:toggleTaskManagerNotch"))
 hl.bind(mainMod .. " + W", hl.dsp.global("quickshell:toggleWallpaperNotch"))
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.global("quickshell:toggleTransitionNotch"))
 hl.bind(mainMod .. " + SHIFT + M", hl.dsp.global("quickshell:toggleMusicInfoNotch"))

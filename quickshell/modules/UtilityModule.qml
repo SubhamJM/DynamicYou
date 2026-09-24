@@ -987,6 +987,12 @@ Item {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
                 }
+
+                // 6. Task Manager
+                HeaderQuickBtn {
+                    glyph: "monitoring"
+                    onClicked: root.switchMode("taskmanager", false)
+                }
             }
 
             // Quick Disconnect Button in Header when in VPN subview

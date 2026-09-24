@@ -60,7 +60,8 @@ QtObject {
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
-        "notifications": { width: 460, height: 380, radius: 26 }
+        "notifications": { width: 460, height: 380, radius: 26 },
+        "taskmanager":   { width: 800, height: 540, radius: 18 }
     })
 
     function calculateUtilityHeight(activeSection) {

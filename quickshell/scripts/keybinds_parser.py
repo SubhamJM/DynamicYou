@@ -202,6 +202,9 @@ def parse_hypr_lua(path):
             elif "quickshell:toggleCheatsheetNotch" in clean_dsp:
                 desc = "Open Hyprland Keybind Cheat Sheet"
                 cat = "Launchers"
+            elif "quickshell:toggleTaskManagerNotch" in clean_dsp:
+                desc = "Open Task Manager (Process Monitor)"
+                cat = "System"
             elif "exec_cmd" in clean_dsp:
                 cat = "Launchers"
                 if vars_map.get("browser", "zen-browser") in clean_dsp:

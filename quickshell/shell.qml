@@ -195,6 +195,7 @@ ShellRoot {
         else if (activeMode === "powermenu" && typeof powerMod !== "undefined") powerMod.forceActiveFocus();
         else if (activeMode === "notes" && typeof notesMod !== "undefined") notesMod.forceNotesFocus();
         else if (activeMode === "cheatsheet" && typeof cheatsheetMod !== "undefined") cheatsheetMod.forceSearchFocus();
+        else if (activeMode === "taskmanager" && typeof taskMgrMod !== "undefined") taskMgrMod.forceSearchFocus();
         else if (activeMode === "music" && typeof musicMod !== "undefined") musicMod.forceActiveFocus();
         else if (typeof contentStack !== "undefined" && contentStack.currentItem) contentStack.currentItem.forceActiveFocus();
         else notchContainer.forceActiveFocus();
@@ -226,6 +227,7 @@ ShellRoot {
             if (activeMode !== "theme" && typeof themeMod !== "undefined") themeMod.resetSearch();
             if (activeMode !== "clipboard" && typeof clipMod !== "undefined") clipMod.searchInput.text = "";
             if (activeMode !== "shelf" && typeof shelfMod !== "undefined") shelfMod.searchInput.text = "";
+            if (activeMode !== "taskmanager" && typeof taskMgrMod !== "undefined") taskMgrMod.searchInput.text = "";
         });
     }
 
@@ -448,6 +450,8 @@ while True:
                     if (typeof launcherMod !== "undefined") {
                         launcherMod.searchInput.text = m.substring(7);
                     }
+                } else if (m === "taskmanager") {
+                    root.switchMode("taskmanager", true);
                 } else if (m !== "") {
                     root.openedViaShortcut = true;
                     root.activeMode = m;
@@ -523,6 +527,7 @@ while True:
     }
     GlobalShortcut { name: "toggleNotesNotch"; onPressed: root.switchMode("notes", true) }
     GlobalShortcut { name: "toggleCheatsheetNotch"; onPressed: root.switchMode("cheatsheet", true) }
+    GlobalShortcut { name: "toggleTaskManagerNotch"; onPressed: root.switchMode("taskmanager", true) }
     GlobalShortcut { 
         name: "toggleWifiNotch"
         onPressed: root.switchMode("wifi", true)
@@ -927,6 +932,7 @@ while True:
                                 case "music":         return 15;
                                 case "notes":         return 16;
                                 case "cheatsheet":    return 17;
+                                case "taskmanager":   return 18;
                                 default:              return 0;
                             }
                         }
@@ -949,6 +955,7 @@ while True:
                         MusicModule        { id: musicMod }
                         NotesModule        { id: notesMod }
                         KeybindsModule     { id: cheatsheetMod }
+                        TaskManagerModule  { id: taskMgrMod }
                     }
                 }
 
