@@ -3,6 +3,9 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Services.Mpris
+import Quickshell.Bluetooth
+import Quickshell.Services.UPower
 import "../"
 
 Item {
@@ -10,11 +13,18 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
+    readonly property var upowerDev: (typeof UPower !== "undefined") ? UPower.displayDevice : null
+    readonly property int currentBatteryLevel: (upowerDev && upowerDev.percentage !== undefined) ? Math.round(upowerDev.percentage * 100) : 100
+    readonly property bool isBatteryCharging: (upowerDev && upowerDev.state !== undefined) ? (upowerDev.state === UPowerDevice.Charging) : false
+
     property bool netIslandExpanded: false
     property bool powerIslandExpanded: false
-    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive
+    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive || root.isDictationActive || root.isPomoFinishedIslandActive || root.isQrScannedIslandActive
 
     readonly property string currentIslandType: {
+        if (root.isDictationActive) return "dictation";
+        if (root.isPomoFinishedIslandActive) return "pomo_done";
+        if (root.isQrScannedIslandActive) return "qr_scanned";
         if (root.isScreenshotIslandActive) return "screenshot";
         if (root.isNotifPopupActive) return "notif";
         if (btIslandExpanded) return "bluetooth";
@@ -33,6 +43,15 @@ Item {
     }
 
     property int activeIslandWidth: {
+        if (displayedIslandType === "pomo_done" || root.isPomoFinishedIslandActive) {
+            return Math.max(380, pomoDonePopupRow.implicitWidth + 36);
+        }
+        if (displayedIslandType === "qr_scanned" || root.isQrScannedIslandActive) {
+            return Math.max(360, qrScannedPopupRow.implicitWidth + 36);
+        }
+        if (displayedIslandType === "dictation" || root.isDictationActive) {
+            return Math.max(340, dictationPopupRow.implicitWidth + 36);
+        }
         if (displayedIslandType === "screenshot" || root.isScreenshotIslandActive) {
             return Math.max(400, screenshotPopupRow.implicitWidth + 36);
         }
@@ -55,20 +74,31 @@ Item {
             return Math.max(160, dashRow.implicitWidth + 32);
         }
         if (dash.isMediaPlaying && root.activeMode === "idle") {
-            if (dash.showMusicInfo) return 340;
-            return 240;
+            var baseMusic = dash.showMusicInfo ? 340 : 240;
+            if (root.pomoRunning) baseMusic += 80;
+            return baseMusic;
         }
         return Math.max(184, idleCluster.implicitWidth + 36);  // Iris idle width (DateMark + IrisClock)
     }
 
-    property string playbackStatus: ""
-    property bool isMediaPlaying: false
     property bool showMusicInfo: false
-    property string currentSongTitle: ""
-    property string currentSongArtist: ""
-    property string currentAlbumArt: ""
-    property real trackPosition: 0
-    property real trackLength: 0
+    property string playbackStatus: activeMprisPlayer ? (activeMprisPlayer.playbackState === MprisPlaybackState.Playing ? "Playing" : "Paused") : ""
+    property bool isMediaPlaying: activeMprisPlayer ? (activeMprisPlayer.playbackState === MprisPlaybackState.Playing || activeMprisPlayer.isPlaying) : false
+    property string currentSongTitle: (activeMprisPlayer && activeMprisPlayer.trackTitle) ? activeMprisPlayer.trackTitle.trim() : ""
+    property string currentSongArtist: {
+        if (!activeMprisPlayer) return "";
+        if (Array.isArray(activeMprisPlayer.trackArtists) && activeMprisPlayer.trackArtists.length > 0) return activeMprisPlayer.trackArtists.join(", ").trim();
+        if (typeof activeMprisPlayer.trackArtists === "string" && activeMprisPlayer.trackArtists.trim() !== "") return activeMprisPlayer.trackArtists.trim();
+        if (typeof activeMprisPlayer.trackArtist === "string" && activeMprisPlayer.trackArtist.trim() !== "") return activeMprisPlayer.trackArtist.trim();
+        return activeMprisPlayer.identity || "";
+    }
+    property string currentAlbumArt: {
+        if (!activeMprisPlayer) return "";
+        var art = activeMprisPlayer.trackArtUrl || activeMprisPlayer.artUrl || "";
+        return (art.startsWith("file://") || art.startsWith("http://") || art.startsWith("https://") || art.length > 0) ? art : "";
+    }
+    property real trackPosition: (activeMprisPlayer && activeMprisPlayer.position) ? activeMprisPlayer.position : 0
+    property real trackLength: (activeMprisPlayer && activeMprisPlayer.length) ? activeMprisPlayer.length : 0
     property real trackProgress: trackLength > 0 ? Math.max(0, Math.min(1, trackPosition / trackLength)) : 0
 
     readonly property var motionCurve: [0.16, 1, 0.3, 1, 1, 1]  // Iris liquid morph curve
@@ -80,52 +110,40 @@ Item {
         bars: 5
     }
 
-    Process {
-        id: mprisPoller
-        command: ["python3", Qt.resolvedUrl("../scripts/mpris-status.py").toString().replace("file://", "")]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n");
-                var status = lines[0] ? lines[0].trim() : "";
-                dash.playbackStatus = status;
-                dash.isMediaPlaying = (status === "Playing");
-                dash.currentSongTitle = lines[1] ? lines[1].trim() : "";
-                dash.currentSongArtist = lines[2] ? lines[2].trim() : "";
-                
-                var art = lines[3] ? lines[3].trim() : "";
-                var targetArt = (art.startsWith("file://") || art.length > 0) ? art : "";
-                if (dash.currentAlbumArt !== targetArt) {
-                    dash.currentAlbumArt = targetArt;
-                }
-                if (dash.isMediaPlaying && targetArt !== "") {
-                    Theme.currentArtSource = targetArt;
-                } else if (!dash.isMediaPlaying) {
-                    Theme.currentArtSource = "";
-                }
-                
-                // Position and length in microseconds
-                dash.trackPosition = parseInt(lines[4]) / 1000000 || 0;
-                dash.trackLength = parseInt(lines[5]) / 1000000 || 0;
-                
-                var vibrantCol = lines[6] ? lines[6].trim() : "";
-                if (dash.isMediaPlaying && vibrantCol.startsWith("#")) {
-                    Theme.setMediaAccent(vibrantCol);
-                } else if (!dash.isMediaPlaying) {
-                    Theme.setMediaAccent("");
-                }
+    // Native Event-Driven MPRIS Tracking (Section 1.1)
+    readonly property var allMprisPlayers: (typeof Mpris !== "undefined" && Mpris.players) ? Mpris.players.values : []
 
-                if (!dash.isMediaPlaying) dash.showMusicInfo = false;
+    readonly property var activeMprisPlayer: {
+        var list = allMprisPlayers;
+        if (!list || list.length === 0) return null;
+        for (var i = 0; i < list.length; i++) {
+            var p = list[i];
+            if (p && (p.playbackState === MprisPlaybackState.Playing || p.isPlaying)) {
+                return p;
             }
         }
-    }
-    Timer {
-        interval: 1000
-        running: true
-        repeat: true
-        onTriggered: {
-            if (!mprisPoller.running) {
-                mprisPoller.running = true;
+        for (var j = 0; j < list.length; j++) {
+            var q = list[j];
+            if (q && q.trackTitle && q.trackTitle.trim() !== "") {
+                return q;
             }
+        }
+        return list[0] || null;
+    }
+
+    onIsMediaPlayingChanged: {
+        if (isMediaPlaying && currentAlbumArt !== "") {
+            Theme.currentArtSource = currentAlbumArt;
+        } else if (!isMediaPlaying) {
+            Theme.currentArtSource = "";
+            Theme.setMediaAccent("");
+            dash.showMusicInfo = false;
+        }
+    }
+
+    onCurrentAlbumArtChanged: {
+        if (isMediaPlaying && currentAlbumArt !== "") {
+            Theme.currentArtSource = currentAlbumArt;
         }
     }
 
@@ -166,24 +184,20 @@ Item {
     Timer { id: netTextTimer; interval: NotchConfig.timerIslandText; onTriggered: triggerNetText = false }
     Timer { id: btTextTimer; interval: NotchConfig.timerIslandText; onTriggered: triggerBtText = false }
 
-    Connections {
-        target: typeof battMod !== "undefined" ? battMod : null
-        function onIsChargingChanged() {
-            if (battMod.isCharging) {
-                dash.powerIslandExpanded = true;
-                powerPopupTimer.restart();
-            }
+    onIsBatteryChargingChanged: {
+        if (isBatteryCharging) {
+            dash.powerIslandExpanded = true;
+            powerPopupTimer.restart();
         }
     }
 
     Timer {
-        interval: 3000
+        interval: 20000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: {
             netPoller.running = true;
-            btPoller.running = true;
         }
     }
 
@@ -244,37 +258,36 @@ Item {
         }
     }
 
-    Process {
-        id: btPoller
-        command: ["python3", Qt.resolvedUrl("../scripts/bt-status.py").toString().replace("file://", "")]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var parts = this.text.trim().split("|");
-                if (parts.length >= 4 && parts[0] === "1") {
-                    var newMac = parts[1].trim();
-                    var newName = parts[2].trim();
-                    var newBat = parts[3].trim();
+    // Native Event-Driven Bluetooth Tracking (Section 1.2)
+    readonly property var connectedBtDevice: {
+        if (typeof Bluetooth === "undefined" || !Bluetooth.devices) return null;
+        var list = Bluetooth.devices.values;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].connected) return list[i];
+        }
+        return null;
+    }
 
-                    var isNewDevice = (!dash.btConnected || dash.btConnectedMac !== newMac);
-                    dash.btConnected = true;
-                    dash.btConnectedMac = newMac;
-                    dash.btDeviceName = newName;
-                    dash.btIslandBattery = newBat;
-
-                    if (isNewDevice) {
-                        dash.btIslandExpanded = true;
-                        btPopupTimer.restart();
-                        dash.triggerBtText = true;
-                        btTextTimer.restart();
-                    }
-                } else {
-                    dash.btConnected = false;
-                    dash.btConnectedMac = "";
-                    dash.btDeviceName = "";
-                    dash.btIslandBattery = "";
-                    dash.btIslandExpanded = false;
-                }
+    onConnectedBtDeviceChanged: {
+        if (connectedBtDevice) {
+            var newMac = connectedBtDevice.address || "";
+            var newName = connectedBtDevice.name ? connectedBtDevice.name.trim() : newMac;
+            var isNewDevice = (!dash.btConnected || dash.btConnectedMac !== newMac);
+            dash.btConnected = true;
+            dash.btConnectedMac = newMac;
+            dash.btDeviceName = newName;
+            if (isNewDevice) {
+                dash.btIslandExpanded = true;
+                btPopupTimer.restart();
+                dash.triggerBtText = true;
+                btTextTimer.restart();
             }
+        } else {
+            dash.btConnected = false;
+            dash.btConnectedMac = "";
+            dash.btDeviceName = "";
+            dash.btIslandBattery = "";
+            dash.btIslandExpanded = false;
         }
     }
 
@@ -287,7 +300,7 @@ Item {
     Process {
         id: ocrRunner
         running: false
-        command: ["/bin/sh", "-c", "$HOME/.config/quickshell/my_own/scripts/snip_ocr.sh"]
+        command: ["/bin/sh", "-c", Qt.resolvedUrl("../scripts/snip_ocr.sh").toString().replace("file://", "")]
     }
 
     // Stable workspace model tracking
@@ -345,6 +358,206 @@ Item {
         onOpacityChanged: {
             if (opacity <= 0.01 && !dash.isIslandActive) {
                 dash.displayedIslandType = "";
+            }
+        }
+
+        // Voice Dictation / AI Speech Island (Section 5.4)
+        RowLayout {
+            id: dictationPopupRow
+            anchors.centerIn: parent
+            spacing: 10
+            visible: dash.displayedIslandType === "dictation" || root.isDictationActive
+
+            // 1. Microphone Status Pill / Icon with breathing pulse
+            Rectangle {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                radius: 13
+                color: {
+                    if (root.dictationState === "done") return Qt.rgba(0.18, 0.82, 0.34, 0.22);
+                    if (root.dictationState === "transcribing") return Qt.alpha(Theme.accent, 0.24);
+                    return Qt.rgba(1.0, 0.27, 0.23, 0.22);
+                }
+                Layout.alignment: Qt.AlignVCenter
+                Behavior on color { ColorAnimation { duration: 160 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: {
+                        if (root.dictationState === "done") return "󰄬";
+                        if (root.dictationState === "transcribing") return "󰚩";
+                        return "󰍬";
+                    }
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 13
+                    color: {
+                        if (root.dictationState === "done") return "#30d158";
+                        if (root.dictationState === "transcribing") return Theme.accent;
+                        return "#ff453a";
+                    }
+                    Behavior on color { ColorAnimation { duration: 160 } }
+                }
+
+                SequentialAnimation on scale {
+                    running: root.isDictationActive && root.dictationState === "listening"
+                    loops: Animation.Infinite
+                    NumberAnimation { from: 1.0; to: 1.14; duration: 500; easing.type: Easing.InOutQuad }
+                    NumberAnimation { from: 1.14; to: 1.0; duration: 500; easing.type: Easing.InOutQuad }
+                }
+            }
+
+            // 2. Center Content - Dynamic per State
+            // A. State: "listening" -> Waveform + "Listening" + Timer
+            RowLayout {
+                spacing: 8
+                visible: root.dictationState === "listening"
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    text: "Listening"
+                    font.family: "Readex Pro"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    color: Theme.colors.text_primary ?? "#f8fafc"
+                }
+
+                // 7 Fluid Waveform Bars
+                Row {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignVCenter
+                    Repeater {
+                        model: 7
+                        Rectangle {
+                            required property int index
+                            width: 3
+                            radius: 1.5
+                            color: Theme.accent
+                            height: {
+                                var pts = root.dictationWavePoints;
+                                var val = (pts && pts.length > index) ? pts[index] : 0.2;
+                                return Math.max(4, Math.min(22, val * 22));
+                            }
+                            Behavior on height { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
+                        }
+                    }
+                }
+
+                Text {
+                    text: {
+                        var s = root.dictationSeconds;
+                        var m = Math.floor(s / 60);
+                        var rem = s % 60;
+                        return (m < 10 ? "0" : "") + m + ":" + (rem < 10 ? "0" : "") + rem;
+                    }
+                    font.family: "Readex Pro"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                    font.features: ({ "tnum": 1 })
+                    color: Qt.alpha(Theme.colors.text_primary ?? "#f8fafc", 0.6)
+                }
+            }
+
+            // B. State: "transcribing" -> Sparkle + "Transcribing..."
+            RowLayout {
+                spacing: 8
+                visible: root.dictationState === "transcribing"
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    text: "Transcribing..."
+                    font.family: "Readex Pro"
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    color: Theme.colors.text_primary ?? "#f8fafc"
+                }
+
+                Row {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignVCenter
+                    Repeater {
+                        model: 3
+                        Rectangle {
+                            required property int index
+                            width: 4
+                            height: 4
+                            radius: 2
+                            color: Theme.accent
+                            opacity: 0.3
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
+                                PauseAnimation { duration: index * 160 }
+                                NumberAnimation { to: 1.0; duration: 280 }
+                                NumberAnimation { to: 0.3; duration: 280 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // C. State: "done" or "empty" -> Text snippet + "Typed" badge
+            RowLayout {
+                spacing: 8
+                visible: root.dictationState === "done" || root.dictationState === "empty"
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    Layout.maximumWidth: 260
+                    elide: Text.ElideRight
+                    text: root.dictationText !== "" ? ('"' + root.dictationText + '"') : "No speech detected"
+                    font.family: "Readex Pro"
+                    font.pixelSize: 13
+                    font.weight: Font.Normal
+                    font.italic: true
+                    color: Theme.colors.text_primary ?? "#f8fafc"
+                }
+
+                Rectangle {
+                    Layout.preferredHeight: 18
+                    Layout.preferredWidth: badgeText.implicitWidth + 10
+                    radius: 9
+                    color: root.dictationState === "done" ? Qt.rgba(0.18, 0.82, 0.34, 0.18) : Qt.rgba(1, 1, 1, 0.1)
+                    visible: root.dictationState === "done"
+
+                    Text {
+                        id: badgeText
+                        anchors.centerIn: parent
+                        text: "Typed"
+                        font.family: "Readex Pro"
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        color: "#30d158"
+                    }
+                }
+            }
+
+            // 3. Interactive Stop / Cancel button
+            MouseArea {
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                cursorShape: Qt.PointingHandCursor
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    if (root.dictationState === "listening") {
+                        root.stopDictation();
+                    } else {
+                        root.cancelDictation();
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: parent.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.dictationState === "listening" ? "󰅙" : "󰅖"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 13
+                        color: Qt.alpha(Theme.colors.text_primary ?? "#f8fafc", 0.6)
+                    }
+                }
             }
         }
 
@@ -496,8 +709,10 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (typeof shelfMod !== "undefined") {
-                                shelfMod.addFiles([root.screenshotIslandPath]);
+                            if (root.shelfMod) {
+                                root.shelfMod.addFiles([root.screenshotIslandPath]);
+                            } else {
+                                root.pendingDropUrls = [root.screenshotIslandPath];
                             }
                             root.screenshotIslandStatus = "Pinned to Shelf!";
                             screenshotActionFeedbackTimer.restart();
@@ -578,6 +793,232 @@ Item {
                             root.screenshotIslandPath = "";
                             root.screenshotIslandStatus = "";
                         }
+                    }
+                }
+            }
+        }
+
+        // Pomodoro Completed Celebration Island (Section 4.4)
+        RowLayout {
+            id: pomoDonePopupRow
+            anchors.centerIn: parent
+            spacing: 10
+            visible: dash.displayedIslandType === "pomo_done" || root.isPomoFinishedIslandActive
+
+            Rectangle {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                radius: 13
+                color: Qt.rgba(0.18, 0.82, 0.34, 0.22)
+                border.width: 1
+                border.color: Qt.rgba(0.18, 0.82, 0.34, 0.45)
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰄬"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 13
+                    color: "#30d158"
+                }
+            }
+
+            ColumnLayout {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 0
+
+                Text {
+                    text: root.pomoFinishedTitle !== "" ? root.pomoFinishedTitle : "Sprint Complete!"
+                    font.family: "Readex Pro"
+                    font.pixelSize: 12
+                    font.weight: Font.Bold
+                    color: "#ffffff"
+                    renderType: Text.NativeRendering
+                }
+
+                Text {
+                    text: root.pomoFinishedMessage !== "" ? root.pomoFinishedMessage : "Take a well-deserved break"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    color: Theme.colors.text_secondary ?? "#8e8e93"
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            // Quick transition action button
+            Rectangle {
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: pomoNextActionText.implicitWidth + 16
+                radius: 12
+                color: pomoNextMouse.containsMouse ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.accent, 0.20)
+                border.width: 1
+                border.color: Qt.alpha(Theme.accent, 0.40)
+                scale: pomoNextMouse.pressed ? 0.94 : 1.0
+                Behavior on scale { NumberAnimation { duration: 90 } }
+
+                Text {
+                    id: pomoNextActionText
+                    anchors.centerIn: parent
+                    text: root.pomoMode === "focus" ? "5m Break" : "25m Focus"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: Theme.accent
+                }
+
+                MouseArea {
+                    id: pomoNextMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.pomoMode === "focus") {
+                            root.startPomodoro(5, "short_break");
+                        } else {
+                            root.startPomodoro(25, "focus");
+                        }
+                        root.isPomoFinishedIslandActive = false;
+                    }
+                }
+            }
+
+            // Dismiss
+            Rectangle {
+                Layout.preferredWidth: 22
+                Layout.preferredHeight: 22
+                radius: 11
+                color: pomoDismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
+                scale: pomoDismissMouse.pressed ? 0.90 : 1.0
+                Behavior on scale { NumberAnimation { duration: 90 } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "close"
+                    iconSize: 13
+                    color: Theme.colors.text_secondary ?? "#8e8e93"
+                }
+
+                MouseArea {
+                    id: pomoDismissMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.isPomoFinishedIslandActive = false;
+                        root.collapseToIdle();
+                    }
+                }
+            }
+        }
+
+        // QR Code Scanned Island (Section 4.3)
+        RowLayout {
+            id: qrScannedPopupRow
+            anchors.centerIn: parent
+            spacing: 10
+            visible: dash.displayedIslandType === "qr_scanned" || root.isQrScannedIslandActive
+
+            Rectangle {
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                radius: 13
+                color: Qt.alpha(Theme.accent, 0.22)
+                border.width: 1
+                border.color: Qt.alpha(Theme.accent, 0.45)
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰐳"
+                    font.family: "JetBrainsMono Nerd Font"
+                    font.pixelSize: 13
+                    color: Theme.accent
+                }
+            }
+
+            ColumnLayout {
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 0
+
+                Text {
+                    text: "QR Scanned & Copied"
+                    font.family: "Readex Pro"
+                    font.pixelSize: 12
+                    font.weight: Font.Bold
+                    color: "#ffffff"
+                    renderType: Text.NativeRendering
+                }
+
+                Text {
+                    text: root.qrScannedText !== "" ? root.qrScannedText : "Copied to clipboard"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    color: Theme.colors.text_secondary ?? "#8e8e93"
+                    elide: Text.ElideMiddle
+                    Layout.maximumWidth: 160
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            // Open Link if URL
+            Rectangle {
+                visible: root.qrScannedText.trim().startsWith("http://") || root.qrScannedText.trim().startsWith("https://")
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: qrOpenActionText.implicitWidth + 16
+                radius: 12
+                color: qrOpenMouse.containsMouse ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.accent, 0.20)
+                border.width: 1
+                border.color: Qt.alpha(Theme.accent, 0.40)
+                scale: qrOpenMouse.pressed ? 0.94 : 1.0
+                Behavior on scale { NumberAnimation { duration: 90 } }
+
+                Text {
+                    id: qrOpenActionText
+                    anchors.centerIn: parent
+                    text: "Open"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: Theme.accent
+                }
+
+                MouseArea {
+                    id: qrOpenMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        Quickshell.execDetached(["xdg-open", root.qrScannedText.trim()]);
+                        root.isQrScannedIslandActive = false;
+                        root.collapseToIdle();
+                    }
+                }
+            }
+
+            // Dismiss
+            Rectangle {
+                Layout.preferredWidth: 22
+                Layout.preferredHeight: 22
+                radius: 11
+                color: qrDismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
+                scale: qrDismissMouse.pressed ? 0.90 : 1.0
+                Behavior on scale { NumberAnimation { duration: 90 } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "close"
+                    iconSize: 13
+                    color: Theme.colors.text_secondary ?? "#8e8e93"
+                }
+
+                MouseArea {
+                    id: qrDismissMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.isQrScannedIslandActive = false;
+                        root.collapseToIdle();
                     }
                 }
             }
@@ -813,7 +1254,7 @@ Item {
             }
 
             Text {
-                text: typeof battMod !== "undefined" ? battMod.batteryLevel + "% Charging" : "Charging"
+                text: dash.currentBatteryLevel + "% Charging"
                 color: "#4caf50"
                 font.pixelSize: 14; font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
@@ -966,6 +1407,70 @@ Item {
                 separatorColor: Theme.accent
                 isScreenRecording: root.isScreenRecording
             }
+
+            // Ambient Pomodoro Countdown Indicator (Section 4.4)
+            Row {
+                id: idlePomoContainer
+                visible: root.pomoRunning
+                spacing: 7
+                anchors.verticalCenter: parent.verticalCenter
+
+                Text {
+                    text: "•"
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                    font.family: "Readex Pro"
+                    font.pixelSize: 11
+                    renderType: Text.NativeRendering
+                }
+
+                Rectangle {
+                    height: 20
+                    width: idlePomoRow.implicitWidth + 12
+                    radius: 10
+                    color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
+                    border.width: 1
+                    border.color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.15) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.40) : Qt.rgba(0.18, 0.82, 0.34, 0.40))
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Row {
+                        id: idlePomoRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            text: root.pomoPaused ? "󰏤" : (root.pomoMode === "focus" ? "󱎫" : "󰄉")
+                            color: root.pomoPaused ? (Theme.colors.text_muted ?? "#8e8e93") : (root.pomoMode === "focus" ? Theme.accent : "#30d158")
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        Text {
+                            text: root.formatPomoTime(root.pomoSecondsRemaining)
+                            color: Theme.colors.text_primary ?? "#f5f5f7"
+                            font.family: "Readex Pro"
+                            font.pixelSize: 12
+                            font.weight: Font.Bold
+                            anchors.verticalCenter: parent.verticalCenter
+                            renderType: Text.NativeRendering
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) {
+                                root.togglePomodoroPause();
+                            } else {
+                                root.openUtility("pomo", false);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1068,6 +1573,70 @@ Item {
                     color: Theme.colors.text_primary ?? "#f5f5f7"
                     separatorColor: Theme.accent
                     isScreenRecording: root.isScreenRecording
+                }
+
+                // Ambient Pomodoro Countdown Indicator (Look 2: Music Idle)
+                Row {
+                    id: musicIdlePomoContainer
+                    visible: root.pomoRunning
+                    spacing: 7
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        text: "•"
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                        font.family: "Readex Pro"
+                        font.pixelSize: 11
+                        renderType: Text.NativeRendering
+                    }
+
+                    Rectangle {
+                        height: 20
+                        width: musicIdlePomoRow.implicitWidth + 12
+                        radius: 10
+                        color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
+                        border.width: 1
+                        border.color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.15) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.40) : Qt.rgba(0.18, 0.82, 0.34, 0.40))
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Row {
+                            id: musicIdlePomoRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            Text {
+                                text: root.pomoPaused ? "󰏤" : (root.pomoMode === "focus" ? "󱎫" : "󰄉")
+                                color: root.pomoPaused ? (Theme.colors.text_muted ?? "#8e8e93") : (root.pomoMode === "focus" ? Theme.accent : "#30d158")
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 11
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: root.formatPomoTime(root.pomoSecondsRemaining)
+                                color: Theme.colors.text_primary ?? "#f5f5f7"
+                                font.family: "Readex Pro"
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                                anchors.verticalCenter: parent.verticalCenter
+                                renderType: Text.NativeRendering
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    root.togglePomodoroPause();
+                                } else {
+                                    root.openUtility("pomo", false);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

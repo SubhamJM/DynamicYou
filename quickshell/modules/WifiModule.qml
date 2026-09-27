@@ -329,7 +329,7 @@ ColumnLayout {
         command: ["sh", "-c", "nmcli radio wifi"]
         stdout: StdioCollector {
             onStreamFinished: {
-                if (typeof utilMod !== "undefined" && utilMod.isTogglingWifi) return;
+                if (root.utilMod && root.utilMod.isTogglingWifi) return;
                 wifiMaster.wifiEnabled = (this.text.trim() === "enabled");
             }
         }

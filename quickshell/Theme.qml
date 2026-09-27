@@ -98,14 +98,6 @@ QtObject {
 
     Component.onCompleted: theme.reload()
 
-    property Timer pollTimer: Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        triggeredOnStart: false
-        onTriggered: theme.reload()
-    }
-
     property Process themeLoader: Process {
         running: false
         command: ["sh", "-c", "cat $HOME/.config/active-theme/quickshell-colors.json"]

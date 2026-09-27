@@ -61,12 +61,14 @@ QtObject {
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
         "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 800, height: 540, radius: 18 }
+        "taskmanager":   { width: 800, height: 540, radius: 18 },
+        "qr":            { width: 340, height: 390, radius: 26 }
     })
 
     function calculateUtilityHeight(activeSection) {
         if (activeSection === "audio") return 384;
         if (activeSection === "vpn") return 254;
+        if (activeSection === "pomo") return 360;
         return 342;
     }
 

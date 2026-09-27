@@ -6,10 +6,7 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     [ -n "$HYPR_SIG" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
 fi
 
-quickshell kill 2>/dev/null
-pkill -9 quickshell 2>/dev/null
-pkill -9 qs 2>/dev/null
-while pgrep -x quickshell >/dev/null || pgrep -x qs >/dev/null; do sleep 0.05; done
-sleep 0.1
-hyprctl dispatch "hl.dsp.exec_cmd('quickshell')" >/dev/null 2>&1 || setsid quickshell >/dev/null 2>&1 &
-
+killall -9 qs quickshell 2>/dev/null
+while pgrep -x qs >/dev/null || pgrep -x quickshell >/dev/null; do sleep 0.05; done
+sleep 0.15
+qs -d >/dev/null 2>&1

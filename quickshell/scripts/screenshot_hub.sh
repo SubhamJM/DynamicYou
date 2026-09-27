@@ -24,19 +24,8 @@ fi
 # Copy image bytes to system clipboard
 wl-copy < "$FILE"
 
-# Send notification / notify Quickshell
-# Non-blocking write to /tmp/notch_mode FIFO
-python3 -c "
-import os
-try:
-    p = '/tmp/notch_mode'
-    if os.path.exists(p):
-        fd = os.open(p, os.O_WRONLY | os.O_NONBLOCK)
-        os.write(fd, f'screenshot {FILE}\n'.encode())
-        os.close(fd)
-except Exception:
-    pass
-"
+# Direct native Quickshell IPC trigger (zero Python FIFO overhead)
+qs ipc call notch showScreenshot "$FILE" >/dev/null 2>&1 &
 
 # Desktop notification fallback with icon preview
 notify-send -a "Screenshot Hub" -i "$FILE" "Screenshot Captured" "Saved to Screenshots. Click notch action to Annotate, Pin to Shelf, or OCR."

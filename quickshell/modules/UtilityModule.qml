@@ -84,7 +84,7 @@ Item {
                 if (utilModule.isTogglingWifi) return;
                 var isEnabled = this.text.trim() === "enabled";
                 utilModule.wifiEnabled = isEnabled;
-                if (typeof wifiMod !== "undefined") wifiMod.wifiEnabled = isEnabled;
+                if (root.wifiMod) root.wifiMod.wifiEnabled = isEnabled;
             }
         }
     }
@@ -96,7 +96,7 @@ Item {
         onTriggered: {
             utilModule.isTogglingWifi = false;
             checkWifiRadio.running = true;
-            if (typeof wifiMod !== "undefined") wifiMod.refreshStatus();
+            if (root.wifiMod) root.wifiMod.refreshStatus();
         }
     }
 
@@ -104,15 +104,15 @@ Item {
         var targetState = !utilModule.wifiEnabled;
         utilModule.isTogglingWifi = true;
         utilModule.wifiEnabled = targetState;
-        if (typeof wifiMod !== "undefined") {
-            wifiMod.wifiEnabled = targetState;
+        if (root.wifiMod) {
+            root.wifiMod.wifiEnabled = targetState;
         }
         Quickshell.execDetached(["nmcli", "radio", "wifi", targetState ? "on" : "off"]);
         wifiSettleTimer.restart();
     }
 
     // 1b. Hotspot Toggle & Monitoring
-    property bool hotspotActive: (typeof wifiMod !== "undefined" && wifiMod.hotspotActive !== undefined) ? wifiMod.hotspotActive : false
+    property bool hotspotActive: root.wifiMod ? root.wifiMod.hotspotActive : false
 
     Process {
         id: checkHotspotStatus
@@ -122,8 +122,18 @@ Item {
             onStreamFinished: {
                 var isActive = (this.text.trim().length > 0);
                 utilModule.hotspotActive = isActive;
-                if (typeof wifiMod !== "undefined") wifiMod.hotspotActive = isActive;
+                if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
             }
+        }
+    }
+
+    Timer {
+        id: hotspotSettleTimer
+        interval: 1200
+        repeat: false
+        onTriggered: {
+            checkHotspotStatus.running = true;
+            if (root.wifiMod) root.wifiMod.refreshStatus();
         }
     }
 
@@ -132,22 +142,23 @@ Item {
         running: false
         onExited: {
             checkHotspotStatus.running = true;
-            if (typeof wifiMod !== "undefined") wifiMod.refreshStatus();
+            if (root.wifiMod) root.wifiMod.refreshStatus();
         }
     }
 
     function toggleHotspot() {
-        if (typeof wifiMod !== "undefined") {
-            wifiMod.toggleHotspot(!utilModule.hotspotActive);
-            utilModule.hotspotActive = !utilModule.hotspotActive;
+        var targetState = !utilModule.hotspotActive;
+        utilModule.hotspotActive = targetState;
+        if (root.wifiMod) {
+            root.wifiMod.toggleHotspot(targetState);
         } else {
-            if (!utilModule.hotspotActive) {
-                utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.5 && nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001'"];
+            if (targetState) {
+                utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.5 && (nmcli connection up Hotspot 2>/dev/null || nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001')"];
             } else {
-                utilHotspotRunner.command = ["sh", "-c", "nmcli connection down Hotspot || true"];
+                utilHotspotRunner.command = ["sh", "-c", "nmcli connection down Hotspot 2>/dev/null || nmcli connection down id 'SubhamLaptop' 2>/dev/null || true"];
             }
             utilHotspotRunner.running = true;
-            utilModule.hotspotActive = !utilModule.hotspotActive;
+            hotspotSettleTimer.restart();
         }
     }
 
@@ -491,11 +502,12 @@ Item {
 
     Timer {
         interval: 3000
-        running: true
+        running: utilModule.visible && root.activeMode === "utility"
         repeat: true
         triggeredOnStart: true
         onTriggered: {
             checkWifiRadio.running = true;
+            checkHotspotStatus.running = true;
             checkNightLight.running = true;
             checkCaffeineState.running = true;
             fetchVolumeProcess.running = true;
@@ -935,7 +947,7 @@ Item {
                 spacing: 0
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : "Control Center")
+                    text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : (utilModule.activeSection === "pomo" ? "Focus & Pomodoro" : "Control Center"))
                     font.family: "Noto Sans"
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
@@ -943,7 +955,7 @@ Item {
                 }
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Select preferred output & input" : (utilModule.activeSection === "vpn" ? "Select VPN provider or quick-connect" : Qt.formatDate(clock.date, "dddd, d MMMM"))
+                    text: utilModule.activeSection === "audio" ? "Select preferred output & input" : (utilModule.activeSection === "vpn" ? "Select VPN provider or quick-connect" : (utilModule.activeSection === "pomo" ? "Distraction-Free Focus & Productivity Timer" : Qt.formatDate(clock.date, "dddd, d MMMM")))
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: utilModule.colSubtext
@@ -952,7 +964,7 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Quick Shortcut Badges (Shelf, OCR, Notes, Clipboard, Theme, Lock, Power)
+            // Quick Shortcut Badges (Shelf, OCR, QR, Timer, Notes, Clipboard, Theme, Task Manager)
             RowLayout {
                 spacing: 7
                 Layout.alignment: Qt.AlignRight
@@ -970,25 +982,40 @@ Item {
                     onClicked: utilModule.triggerOcr()
                 }
 
-                // 3. Notes
+                // 3. QR Code Scanner
+                HeaderQuickBtn {
+                    glyph: "qr_code_scanner"
+                    onClicked: {
+                        root.collapseToIdle();
+                        root.scanQr();
+                    }
+                }
+
+                // 4. Focus & Pomodoro Timer
+                HeaderQuickBtn {
+                    glyph: "timer"
+                    onClicked: utilModule.activeSection = "pomo"
+                }
+
+                // 5. Notes
                 HeaderQuickBtn {
                     glyph: "edit_note"
                     onClicked: root.switchMode("notes", false)
                 }
 
-                // 4. Clipboard History
+                // 6. Clipboard History
                 HeaderQuickBtn {
                     glyph: "assignment"
                     onClicked: root.switchMode("clipboard", false)
                 }
 
-                // 5. Theme Selector
+                // 7. Theme Selector
                 HeaderQuickBtn {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
                 }
 
-                // 6. Task Manager
+                // 8. Task Manager
                 HeaderQuickBtn {
                     glyph: "monitoring"
                     onClicked: root.switchMode("taskmanager", false)
@@ -1077,19 +1104,17 @@ Item {
                 MaterialPill {
                     id: recordPill
                     Layout.fillWidth: true
-                    glyph: (typeof recMod !== "undefined" && recMod.isRecording) ? "stop_circle" : "radio_button_checked"
+                    glyph: root.isScreenRecording ? "stop_circle" : "radio_button_checked"
                     title: "Record"
-                    subtitle: (typeof recMod !== "undefined" && recMod.isRecording) ? "Recording" : "Screen"
-                    isActive: typeof recMod !== "undefined" && recMod.isRecording
+                    subtitle: root.isScreenRecording ? "Recording" : "Screen"
+                    isActive: root.isScreenRecording
                     isSplit: true
                     activeColor: "#ff453a"
                     onToggleClicked: {
-                        if (typeof recMod !== "undefined") {
-                            if (recMod.isRecording) {
-                                recMod.stopRecording();
-                            } else {
-                                recMod.startRecording(false);
-                            }
+                        if (root.isScreenRecording) {
+                            root.stopRecording();
+                        } else {
+                            root.startRecording(false);
                         }
                     }
                     onDetailClicked: root.switchMode("recorder", false)
@@ -1250,6 +1275,17 @@ Item {
                     lit: false
                     tint: "#30b0c7"
                     onClicked: utilModule.triggerColorPicker()
+                }
+
+                // 7. Voice Dictation (AI Speech Island)
+                MaterialChipBtn {
+                    glyph: "record_voice_over"
+                    lit: root.isDictationActive
+                    tint: "#ff375f"
+                    onClicked: {
+                        root.collapseToIdle();
+                        root.startDictation();
+                    }
                 }
             }
         }
@@ -1561,6 +1597,394 @@ Item {
                                 onClicked: {
                                     utilModule.toggleVpn(modelData.id);
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 4. FOCUS & POMODORO TIMER SUBVIEW ─────────────────────────
+        Item {
+            id: pomoSubviewContainer
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: utilModule.activeSection === "pomo"
+            clip: true
+
+            property int customMinutes: 25
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 12
+
+                // 1. Big Timer Hero Card
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 136
+                    radius: 18
+                    color: utilModule.colCard
+                    border.width: 1
+                    border.color: root.pomoRunning
+                        ? (root.pomoPaused ? Qt.rgba(1, 1, 1, 0.12) : Qt.alpha(Theme.accent, 0.35))
+                        : Qt.rgba(255, 255, 255, 0.05)
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        // Mode Tag Pill
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            height: 22
+                            width: pomoModeTagText.implicitWidth + 16
+                            radius: 11
+                            color: root.pomoRunning
+                                ? (root.pomoPaused ? Qt.rgba(1, 1, 1, 0.1) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.2) : Qt.rgba(0.18, 0.82, 0.34, 0.2)))
+                                : Qt.rgba(255, 255, 255, 0.08)
+
+                            Text {
+                                id: pomoModeTagText
+                                anchors.centerIn: parent
+                                text: root.pomoRunning
+                                    ? (root.pomoPaused ? "PAUSED" : root.pomoTag.toUpperCase())
+                                    : "READY TO FOCUS"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                                color: root.pomoRunning
+                                    ? (root.pomoPaused ? utilModule.colMuted : (root.pomoMode === "focus" ? Theme.accent : "#30d158"))
+                                    : utilModule.colMuted
+                            }
+                        }
+
+                        // Big Time Digits
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.pomoRunning
+                                ? root.formatPomoTime(root.pomoSecondsRemaining)
+                                : root.formatPomoTime(pomoSubviewContainer.customMinutes * 60)
+                            font.family: "Readex Pro"
+                            font.pixelSize: 42
+                            font.weight: Font.Bold
+                            color: utilModule.colText
+                            renderType: Text.NativeRendering
+                        }
+
+                        // DND Status Indicator
+                        Row {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 5
+                            visible: root.pomoRunning && root.pomoMode === "focus"
+
+                            MaterialSymbol {
+                                text: "notifications_off"
+                                iconSize: 13
+                                color: Theme.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: "Do Not Disturb Active"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                                color: Theme.accent
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        // Progress bar when running
+                        Rectangle {
+                            Layout.preferredWidth: 240
+                            Layout.preferredHeight: 4
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: 4
+                            radius: 2
+                            color: Qt.rgba(255, 255, 255, 0.08)
+                            visible: root.pomoRunning
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: {
+                                    if (!root.pomoRunning || root.pomoTotalSeconds <= 0) return 0;
+                                    var pct = 1.0 - (root.pomoSecondsRemaining / root.pomoTotalSeconds);
+                                    return Math.max(0, Math.min(parent.width, parent.width * pct));
+                                }
+                                radius: 2
+                                color: root.pomoMode === "focus" ? Theme.accent : "#30d158"
+                            }
+                        }
+                    }
+                }
+
+                // 2. Preset Chips Row
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Repeater {
+                        model: [
+                            { label: "25m Focus", mins: 25, mode: "focus", tag: "Focus Sprint", icon: "timer" },
+                            { label: "50m Deep", mins: 50, mode: "focus", tag: "Deep Work", icon: "bolt" },
+                            { label: "5m Break", mins: 5, mode: "short_break", tag: "Short Break", icon: "coffee" },
+                            { label: "15m Rest", mins: 15, mode: "long_break", tag: "Long Break", icon: "self_improvement" }
+                        ]
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            radius: 12
+                            color: chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+                            border.width: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? 1.5 : 0
+                            border.color: Theme.accent
+                            scale: chipMouse.pressed ? 0.96 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 90 } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                MaterialSymbol {
+                                    text: modelData.icon
+                                    iconSize: 15
+                                    color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? Theme.accent : utilModule.colText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                Text {
+                                    text: modelData.label
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? Theme.accent : utilModule.colText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            MouseArea {
+                                id: chipMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.startPomodoro(modelData.mins, modelData.mode, modelData.tag);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Actions Row (Pause/Resume/Stop or Stepper/Start)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    // When Running: Pause/Resume + Stop
+                    Rectangle {
+                        visible: root.pomoRunning
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        radius: 14
+                        color: root.pomoPaused ? Qt.alpha(Theme.accent, 0.22) : utilModule.colCard
+                        border.width: 1
+                        border.color: root.pomoPaused ? Theme.accent : Qt.rgba(255, 255, 255, 0.08)
+                        scale: pauseMouse.pressed ? 0.97 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90 } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: root.pomoPaused ? "play_arrow" : "pause"
+                                iconSize: 18
+                                color: root.pomoPaused ? Theme.accent : utilModule.colText
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: root.pomoPaused ? "Resume" : "Pause"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                color: root.pomoPaused ? Theme.accent : utilModule.colText
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: pauseMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.togglePomodoroPause()
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.pomoRunning
+                        Layout.preferredWidth: 90
+                        Layout.preferredHeight: 40
+                        radius: 14
+                        color: add5Mouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+                        scale: add5Mouse.pressed ? 0.97 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "+5 min"
+                            font.family: "Noto Sans"
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            color: utilModule.colText
+                        }
+
+                        MouseArea {
+                            id: add5Mouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.pomoSecondsRemaining += 300;
+                                root.pomoTotalSeconds += 300;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: root.pomoRunning
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        radius: 14
+                        color: stopMouse.containsMouse ? Qt.rgba(255, 69, 58, 0.25) : Qt.rgba(255, 69, 58, 0.15)
+                        scale: stopMouse.pressed ? 0.97 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90 } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: "stop"
+                                iconSize: 18
+                                color: "#ff453a"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: "Reset"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                color: "#ff453a"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: stopMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.stopPomodoro()
+                        }
+                    }
+
+                    // When Idle: Stepper [- / +] + Big Start Button
+                    Rectangle {
+                        visible: !root.pomoRunning
+                        Layout.preferredWidth: 120
+                        Layout.preferredHeight: 40
+                        radius: 14
+                        color: utilModule.colCard
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 0
+
+                            Rectangle {
+                                width: 28; height: 28; radius: 14
+                                color: stepMinusMouse.containsMouse ? utilModule.colCardHover : "transparent"
+                                MaterialSymbol { anchors.centerIn: parent; text: "remove"; iconSize: 16 }
+                                MouseArea {
+                                    id: stepMinusMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        pomoSubviewContainer.customMinutes = Math.max(1, pomoSubviewContainer.customMinutes - 5);
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: pomoSubviewContainer.customMinutes + "m"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                                color: utilModule.colText
+                            }
+
+                            Rectangle {
+                                width: 28; height: 28; radius: 14
+                                color: stepPlusMouse.containsMouse ? utilModule.colCardHover : "transparent"
+                                MaterialSymbol { anchors.centerIn: parent; text: "add"; iconSize: 16 }
+                                MouseArea {
+                                    id: stepPlusMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        pomoSubviewContainer.customMinutes = Math.min(120, pomoSubviewContainer.customMinutes + 5);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        visible: !root.pomoRunning
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        radius: 14
+                        color: startCustomMouse.containsMouse ? Qt.lighter(utilModule.colAccent, 1.1) : utilModule.colAccent
+                        scale: startCustomMouse.pressed ? 0.97 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90 } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            MaterialSymbol {
+                                text: "play_arrow"
+                                iconSize: 18
+                                color: "#101318"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            Text {
+                                text: "Start Focus (" + pomoSubviewContainer.customMinutes + "m)"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 13
+                                font.weight: Font.Bold
+                                color: "#101318"
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: startCustomMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.startPomodoro(pomoSubviewContainer.customMinutes, "focus", "Custom Focus");
                             }
                         }
                     }

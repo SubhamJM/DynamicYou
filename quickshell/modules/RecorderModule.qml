@@ -32,13 +32,21 @@ ColumnLayout {
     readonly property color colGreen: ({ nord: "#a3be8c", dracula: "#50fa7b", catppuccin: "#a6e3a1", everforest: "#a7c080", "rose-pine": "#9ccfd8" })[Theme.currentThemeName] ?? "#30d158"
     readonly property color colRed: ({ nord: "#bf616a", dracula: "#ff5555", catppuccin: "#f38ba8", everforest: "#e67e80", "rose-pine": "#eb6f92" })[Theme.currentThemeName] ?? "#ff453a"
 
-    property string saveDirectory: "~/Videos"
-    property bool recordAudio: false
-    property string selectedSourceId: ""
-    property string selectedSourceName: "Default Microphone"
+    property string saveDirectory: (typeof root !== "undefined" && root.recSaveDirectory) ? root.recSaveDirectory : "~/Videos"
+    onSaveDirectoryChanged: if (typeof root !== "undefined") root.recSaveDirectory = saveDirectory
+
+    property bool recordAudio: (typeof root !== "undefined" && root.recAudioEnabled !== undefined) ? root.recAudioEnabled : false
+    onRecordAudioChanged: if (typeof root !== "undefined") root.recAudioEnabled = recordAudio
+
+    property string selectedSourceId: (typeof root !== "undefined" && root.recAudioSourceId) ? root.recAudioSourceId : ""
+    onSelectedSourceIdChanged: if (typeof root !== "undefined") root.recAudioSourceId = selectedSourceId
+
+    property string selectedSourceName: (typeof root !== "undefined" && root.recAudioSourceName) ? root.recAudioSourceName : "Default Microphone"
+    onSelectedSourceNameChanged: if (typeof root !== "undefined") root.recAudioSourceName = selectedSourceName
+
     property bool isMicDropdownOpen: false
-    property bool isRecording: false
-    property int recordSeconds: 0
+    property bool isRecording: (typeof root !== "undefined" && root.isScreenRecording !== undefined) ? root.isScreenRecording : false
+    property int recordSeconds: (typeof root !== "undefined" && root.screenRecordSeconds !== undefined) ? root.screenRecordSeconds : 0
     property string freeDiskSpace: "114G Free"
 
     ListModel { id: micSourcesModel }
@@ -46,7 +54,7 @@ ColumnLayout {
     // Query available audio input sources
     Process {
         id: micScanner
-        running: root.activeMode === "recorder" || (root.activeMode === "utility" && typeof utilMod !== "undefined" && utilMod.activeSection === "recorder")
+        running: root.activeMode === "recorder"
         command: ["sh", "-c", `
             python3 -c "
 import subprocess
@@ -124,12 +132,11 @@ except Exception:
     // Check background recording status
     Process {
         id: statusChecker
-        running: root.activeMode === "recorder" || root.activeMode === "idle" || root.activeMode === "hover"
+        running: root.activeMode === "recorder"
         command: ["sh", "-c", "pgrep -x wf-recorder > /dev/null && echo 'running' || echo 'stopped'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var running = (this.text.trim() === "running");
-                recModule.isRecording = running;
                 root.isScreenRecording = running;
             }
         }
@@ -145,14 +152,6 @@ except Exception:
         }
     }
 
-    Timer {
-        id: recordingTimer
-        interval: 1000
-        running: recModule.isRecording
-        repeat: true
-        onTriggered: recModule.recordSeconds++
-    }
-
     function formatTime(totalSec) {
         var mins = Math.floor(totalSec / 60);
         var secs = totalSec % 60;
@@ -160,35 +159,12 @@ except Exception:
     }
 
     function startRecording(regionMode) {
-        var expandedDir = saveDirectory.replace(/^~/, Quickshell.env("HOME"));
-        var filename = "recording_" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmss") + ".mp4";
-        
-        var audioCmd = "";
-        if (recModule.recordAudio) {
-            var targetSrc = recModule.selectedSourceId !== "" ? recModule.selectedSourceId : "@DEFAULT_SOURCE@";
-            audioCmd = "--audio=" + targetSrc;
-        }
-        
-        var recordCmd = "";
-        if (regionMode) {
-            recordCmd = `mkdir -p "${expandedDir}" && wf-recorder ${audioCmd} -g "$(slurp)" -f "${expandedDir}/${filename}"`;
-        } else {
-            recordCmd = `mkdir -p "${expandedDir}" && wf-recorder ${audioCmd} -f "${expandedDir}/${filename}"`;
-        }
-
-        Quickshell.execDetached(["sh", "-c", recordCmd]);
-        recModule.isRecording = true;
-        root.isScreenRecording = true;
-        recModule.recordSeconds = 0;
         recModule.isMicDropdownOpen = false;
-        root.activeMode = "idle";
+        root.startRecording(regionMode);
     }
 
     function stopRecording() {
-        Quickshell.execDetached(["sh", "-c", "killall -s SIGINT wf-recorder || killall wf-recorder"]);
-        recModule.isRecording = false;
-        root.isScreenRecording = false;
-        recModule.recordSeconds = 0;
+        root.stopRecording();
     }
 
     // ========================================================

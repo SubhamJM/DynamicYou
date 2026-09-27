@@ -6,7 +6,7 @@ This document details architectural improvements, background process optimizatio
 
 ---
 
-## 1. Background Process Architecture: Eliminating Polling & Subprocess Bloat
+## 1. Background Process Architecture: Eliminating Polling & Subprocess Bloat *(Implemented)*
 
 Currently, several parts of the notch rely on recurring `QML Timer` components spawning Python interpreters and shell commands in a loop. Moving to an **event-driven, native C++ architecture** dramatically reduces CPU wakeups, eliminates lag, and extends laptop battery life.
 
@@ -61,7 +61,7 @@ Quickshell native IpcHandler / Hyprland events ───────────
 
 ---
 
-## 2. QML Lifecycle & Memory Optimization (Lazy Loading vs. Eager Bloat)
+## 2. QML Lifecycle & Memory Optimization (Lazy Loading vs. Eager Bloat) *(Implemented)*
 
 Currently, in `shell.qml` (lines 780–798), **all 18 expanded modules are eagerly instantiated inside a `StackLayout` on boot**:
 - `Launcher.qml` (1,519 lines)
@@ -169,10 +169,11 @@ Beyond the existing modules, here are extra utilities designed specifically for 
   - Control individual volume sliders for Discord, Spotify, Firefox, or games independently without launching external mixers like `pavucontrol`.
 
 ### 5.4 Voice Dictation / AI Speech Island
-- **Concept**: Push-to-talk system dictation using local Whisper or Vosk.
+- **Status**: Implemented (`quickshell/scripts/voice_dictation.sh` + `voice_dictation_core.py` + `MainDash.qml` + `shell.qml`)
+- **Concept**: Push-to-talk & toggle system dictation using local offline `faster-whisper` (`tiny.en`).
 - **Workflow**:
-  - Pressing a shortcut (e.g. `Super + Space` hold, or `Super + H`) morphs the notch into a fluid, pulsing voice wave.
-  - Speaks naturally; speech is transcribed in real-time and pasted straight into the focused text input upon key release.
+  - Pressing or holding `Super + H` morphs the notch into a fluid, pulsing voice wave with real-time FFT audio spectrum bars.
+  - Speaks naturally; speech is transcribed locally in <500ms, typed straight into the focused text input via `wtype`, and copied to system clipboard via `wl-copy`.
 
 ### 5.5 Battery Conservation & Charge Threshold Manager
 - **Concept**: Laptop battery lifespan optimization module.

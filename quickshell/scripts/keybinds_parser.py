@@ -108,6 +108,8 @@ def parse_hypr_lua(path):
         line = line_raw.strip()
         if not line.startswith("hl.bind"):
             continue
+        if "release = true" in line or "release=true" in line:
+            continue
 
         m = re.match(r'hl\.bind\s*\(\s*(.+?)\s*,\s*(.+?)(?:,\s*(\{.*?\}))?\s*\)', line)
         if not m:
@@ -115,6 +117,9 @@ def parse_hypr_lua(path):
 
         raw_key = m.group(1).strip()
         raw_dsp = m.group(2).strip()
+        raw_opts = m.group(3) or ""
+        if "release = true" in raw_opts or "release=true" in raw_opts:
+            continue
 
         # Check if preceding line is a custom metadata comment
         custom_desc = None
@@ -205,6 +210,9 @@ def parse_hypr_lua(path):
             elif "quickshell:toggleTaskManagerNotch" in clean_dsp:
                 desc = "Open Task Manager (Process Monitor)"
                 cat = "System"
+            elif "quickshell:voiceDictationPress" in clean_dsp or "quickshell:toggleDictation" in clean_dsp:
+                desc = "Voice Dictation (Push-to-Talk / Toggle)"
+                cat = "Media"
             elif "exec_cmd" in clean_dsp:
                 cat = "Launchers"
                 if vars_map.get("browser", "zen-browser") in clean_dsp:

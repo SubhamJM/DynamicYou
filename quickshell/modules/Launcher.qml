@@ -106,6 +106,11 @@ ColumnLayout {
         { name: "Shut Down", cmd: "systemctl poweroff", icon: "power_settings_new", action: "shutdown" },
         { name: "Screen Snip / Capture", cmd: "grim -g \"$(slurp)\" - | wl-copy", icon: "screenshot_monitor", action: "screenshot" },
         { name: "Text OCR Capture", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/snip_ocr.sh", icon: "document_scanner", action: "ocr" },
+        { name: "Scan Screen QR Code", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh scan", icon: "qr_code_scanner", action: "qrscan" },
+        { name: "Generate QR from Clipboard", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh encode", icon: "qr_code_2", action: "qr" },
+        { name: "Pomodoro: 25m Focus Sprint", cmd: "qs ipc call notch startPomo 25 focus", icon: "timer", action: "pomo" },
+        { name: "Pomodoro: 5m Short Break", cmd: "qs ipc call notch startPomo 5 short_break", icon: "coffee", action: "break" },
+        { name: "Stop Pomodoro Timer", cmd: "qs ipc call notch stopPomo", icon: "timer_off", action: "pomostop" },
         { name: "Toggle Do Not Disturb", cmd: "notify-send 'DND toggled'", icon: "notifications_off", action: "dnd" },
         { name: "Reload Shell", cmd: "~/.config/quickshell/reload.sh &", icon: "refresh", action: "reload" },
         { name: "Open Terminal", cmd: "kitty", icon: "terminal", action: "terminal" },
@@ -613,7 +618,10 @@ with open(f, 'w') as file: json.dump(d, file)
                 "!?":     { label: "Open Hyprland Keybind Cheat Sheet", icon: "󰌌", type: "keys" },
                 "!note":  { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
                 "!notes": { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
-                "!todo":  { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" }
+                "!todo":  { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
+                "!qr":     { label: "Generate QR Code" + (bQuery ? (" for \"" + bQuery + "\"") : " from clipboard"), icon: "󰐳", type: "qr" },
+                "!qrscan": { label: "Scan QR Code from Screen", icon: "󰐳", type: "qrscan" },
+                "!pomo":   { label: "Start Focus Sprint (25m)", icon: "󱎫", type: "pomo" }
             };
 
             if (bangMap[bang]) {
@@ -742,6 +750,17 @@ with open(f, 'w') as file: json.dump(d, file)
             root.switchMode("cheatsheet", true);
         } else if (launcher.bangType === "notes") {
             root.switchMode("notes", true);
+        } else if (launcher.bangType === "qr") {
+            if (launcher.bangQuery !== "") {
+                Quickshell.execDetached(["bash", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh", "encode", launcher.bangQuery]);
+            } else {
+                root.generateQrFromClipboard();
+            }
+        } else if (launcher.bangType === "qrscan") {
+            root.scanQr();
+        } else if (launcher.bangType === "pomo") {
+            var pMins = parseInt(launcher.bangQuery) || 25;
+            root.startPomodoro(pMins, "focus");
         } else if (launcher.bangType === "google") {
             Quickshell.execDetached(["xdg-open", "https://www.google.com/search?q=" + encoded]);
         } else if (launcher.bangType === "github") {
@@ -761,6 +780,32 @@ with open(f, 'w') as file: json.dump(d, file)
         var cmd = launcher.cmdText.trim();
         if (cmd === "") return;
         root.collapseToIdle();
+
+        var lower = cmd.toLowerCase();
+        if (lower === "qrscan") {
+            root.scanQr();
+            return;
+        }
+        if (lower === "qr" || lower.startsWith("qr ")) {
+            var qrArg = cmd.substring(2).trim();
+            if (qrArg !== "") {
+                Quickshell.execDetached(["bash", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh", "encode", qrArg]);
+            } else {
+                root.generateQrFromClipboard();
+            }
+            return;
+        }
+        if (lower === "pomo" || lower.startsWith("pomo ") || lower.startsWith("pomostop")) {
+            var pParts = lower.split(/\s+/);
+            if (lower === "pomostop" || (pParts.length > 1 && pParts[1] === "stop")) {
+                root.stopPomodoro();
+            } else {
+                var pMins = (pParts.length > 1 && !isNaN(parseInt(pParts[1]))) ? parseInt(pParts[1]) : 25;
+                var pMode = (pParts.length > 2 && pParts[2].includes("break")) ? "short_break" : "focus";
+                root.startPomodoro(pMins, pMode);
+            }
+            return;
+        }
 
         if (forceTerminal || launcher.isCmdInteractive) {
             Quickshell.execDetached(["kitty", "-e", "sh", "-c", cmd]);

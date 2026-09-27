@@ -78,6 +78,7 @@ EOF
     hyprctl reload
     killall -SIGUSR1 kitty 2>/dev/null
 	killall -SIGUSR1 nvim 2>/dev/null
+    qs ipc call notch reloadTheme >/dev/null 2>&1 &
 
     # Read active transition (fallback to "simple" if file doesn't exist)
     TRANSITION="simple"

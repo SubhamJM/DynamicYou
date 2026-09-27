@@ -14,6 +14,7 @@ ColumnLayout {
     Layout.fillHeight: true
 
     focus: true
+    Component.onCompleted: refreshClients()
 
     Keys.onReleased: (event) => {
         if (event.key === Qt.Key_Alt || event.key === Qt.Key_Meta) {

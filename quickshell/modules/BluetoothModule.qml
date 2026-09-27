@@ -62,7 +62,7 @@ ColumnLayout {
     // Refresh scanner periodically when Bluetooth popup is active
     Timer {
         interval: 2500
-        running: (root.activeMode === "bluetooth" || (root.activeMode === "utility" && typeof utilMod !== "undefined" && utilMod.activeSection === "bluetooth")) && btModule.isEnabled
+        running: (root.activeMode === "bluetooth" || (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "bluetooth")) && btModule.isEnabled
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -73,7 +73,7 @@ ColumnLayout {
     Connections {
         target: root
         function onActiveModeChanged() {
-            if ((root.activeMode === "bluetooth" || (root.activeMode === "utility" && typeof utilMod !== "undefined" && utilMod.activeSection === "bluetooth")) && btModule.isEnabled) {
+            if ((root.activeMode === "bluetooth" || (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "bluetooth")) && btModule.isEnabled) {
                 btBatchBatteryScanner.running = true;
             }
         }
