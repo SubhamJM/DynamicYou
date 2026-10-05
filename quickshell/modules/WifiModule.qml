@@ -48,9 +48,8 @@ ColumnLayout {
     readonly property color colText: "#f8fafc"
     readonly property color colSubtext: "#94a3b8"
     readonly property color colMuted: "#64748b"
-    readonly property color colAccent: Theme.colors.accent ?? "#88c0d0"
-    readonly property color colGreen: ({ nord: "#a3be8c", dracula: "#50fa7b", catppuccin: "#a6e3a1", everforest: "#a7c080", "rose-pine": "#9ccfd8" })[Theme.currentThemeName] ?? "#30d158"
-    readonly property color colRed: ({ nord: "#bf616a", dracula: "#ff5555", catppuccin: "#f38ba8", everforest: "#e67e80", "rose-pine": "#eb6f92" })[Theme.currentThemeName] ?? "#ff453a"
+    readonly property color colGreen: ({ afterglow: "#a78bfa", crimson: "#ef4444", solstice: "#f59e0b", verdant: "#34d399", frost: "#cbd5e1", cyber: "#d946ef", astral: "#818cf8", abyss: "#38bdf8", serenity: "#86efac", cloudscape: "#22d3ee", nord: "#a3be8c", dracula: "#50fa7b", catppuccin: "#a6e3a1", everforest: "#a7c080", "rose-pine": "#9ccfd8" })[Theme.currentThemeName] ?? "#30d158"
+    readonly property color colRed: ({ afterglow: "#f43f5e", crimson: "#ff453a", solstice: "#ea580c", verdant: "#e67e80", frost: "#f43f5e", cyber: "#f43f5e", astral: "#f43f5e", abyss: "#f43f5e", serenity: "#fb7185", cloudscape: "#f43f5e", nord: "#bf616a", dracula: "#ff5555", catppuccin: "#f38ba8", everforest: "#e67e80", "rose-pine": "#eb6f92" })[Theme.currentThemeName] ?? "#ff453a"
     readonly property color colYellow: "#ebcb8b"
 
     readonly property alias model: wifiModel

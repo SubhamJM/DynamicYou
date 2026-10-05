@@ -534,6 +534,9 @@ Item {
                 value: musicModule.effectiveLength > 0 ? Math.max(0, Math.min(1, musicModule.effectivePosition / musicModule.effectiveLength)) : 0
                 fillColor: musicModule.artTint
                 trackColor: Qt.rgba(255, 255, 255, 0.12)
+                wavy: true
+                isPlaying: musicModule.effectiveIsPlaying
+                knob: true
                 onSeekRequested: next => musicModule.seek(next * musicModule.effectiveLength)
                 onMoved: next => { musicModule.trackedPosition = next * musicModule.effectiveLength; }
             }

@@ -40,6 +40,8 @@ Item {
     property int tasksTotalCount: 0
     property int tasksAppsCount: 0
     property int tasksBgCount: 0
+    property var cpuHistory: [12, 16, 14, 20, 18, 22, 19, 25, 21, 24, 28, 20]
+    property var memHistory: [42, 42, 43, 43, 44, 44, 43, 44, 45, 45, 45, 46]
 
     property var rawProcesses: []
     property int activeTab: 0 // 0: Apps, 1: Background, 2: All
@@ -202,6 +204,17 @@ Item {
                         taskManagerRoot.tasksAppsCount = data.tasks_apps;
                         taskManagerRoot.tasksBgCount = data.tasks_bg;
                         taskManagerRoot.rawProcesses = data.processes || [];
+
+                        var newCpu = (taskManagerRoot.cpuHistory || []).slice();
+                        newCpu.push(data.cpu_total);
+                        if (newCpu.length > 20) newCpu.shift();
+                        taskManagerRoot.cpuHistory = newCpu;
+
+                        var newMem = (taskManagerRoot.memHistory || []).slice();
+                        newMem.push(data.mem_percent);
+                        if (newMem.length > 20) newMem.shift();
+                        taskManagerRoot.memHistory = newMem;
+
                         taskManagerRoot.applyFilterAndSort();
                     }
                 } catch (e) {
@@ -291,20 +304,39 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // CPU Gauge Capsule
+            // CPU Gauge Capsule with Live Rolling Sparkline
             Rectangle {
                 Layout.preferredHeight: 32
-                Layout.preferredWidth: cpuRow.implicitWidth + 24
+                Layout.preferredWidth: cpuRow.implicitWidth + 56
                 radius: 16
+                clip: true
                 color: taskManagerRoot.cpuTotal > 70 
                     ? Qt.rgba(255, 84, 73, 0.20) 
                     : (taskManagerRoot.cpuTotal > 40 ? Qt.rgba(245, 159, 0, 0.18) : taskManagerRoot.colCard)
-                border.width: 0
+                border.width: 1
+                border.color: Qt.rgba(255, 255, 255, 0.06)
+
+                Sparkline {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 4
+                    anchors.bottomMargin: 4
+                    width: 46
+                    values: taskManagerRoot.cpuHistory
+                    maximum: 100
+                    strokeColor: taskManagerRoot.cpuTotal > 70 ? taskManagerRoot.colDanger : (taskManagerRoot.cpuTotal > 40 ? taskManagerRoot.colWarning : taskManagerRoot.colAccent)
+                    fillOpacity: 0.18
+                    strokeWidth: 1.6
+                }
 
                 RowLayout {
                     id: cpuRow
-                    anchors.centerIn: parent
-                    spacing: 7
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
 
                     MaterialSymbol {
                         text: "memory"
@@ -323,20 +355,39 @@ Item {
                 }
             }
 
-            // RAM Gauge Capsule
+            // RAM Gauge Capsule with Live Rolling Sparkline
             Rectangle {
                 Layout.preferredHeight: 32
-                Layout.preferredWidth: ramRow.implicitWidth + 24
+                Layout.preferredWidth: ramRow.implicitWidth + 56
                 radius: 16
+                clip: true
                 color: taskManagerRoot.memPercent > 85 
                     ? Qt.rgba(255, 84, 73, 0.20) 
                     : (taskManagerRoot.memPercent > 70 ? Qt.rgba(245, 159, 0, 0.18) : taskManagerRoot.colCard)
-                border.width: 0
+                border.width: 1
+                border.color: Qt.rgba(255, 255, 255, 0.06)
+
+                Sparkline {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.topMargin: 4
+                    anchors.bottomMargin: 4
+                    width: 46
+                    values: taskManagerRoot.memHistory
+                    maximum: 100
+                    strokeColor: taskManagerRoot.memPercent > 85 ? taskManagerRoot.colDanger : (taskManagerRoot.memPercent > 70 ? taskManagerRoot.colWarning : taskManagerRoot.colAccent)
+                    fillOpacity: 0.18
+                    strokeWidth: 1.6
+                }
 
                 RowLayout {
                     id: ramRow
-                    anchors.centerIn: parent
-                    spacing: 7
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
 
                     MaterialSymbol {
                         text: "storage"
@@ -346,7 +397,7 @@ Item {
                     }
 
                     Text {
-                        text: "RAM " + taskManagerRoot.memUsedGb.toFixed(1) + " / " + taskManagerRoot.memTotalGb.toFixed(0) + " GB (" + Math.round(taskManagerRoot.memPercent) + "%)"
+                        text: "RAM " + taskManagerRoot.memUsedGb.toFixed(1) + " GB (" + Math.round(taskManagerRoot.memPercent) + "%)"
                         font.family: "Noto Sans"
                         font.pixelSize: 11
                         font.weight: Font.DemiBold

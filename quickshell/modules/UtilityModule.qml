@@ -538,10 +538,18 @@ Item {
         implicitHeight: 46
         radius: 23
 
-        color: (discMouse.containsMouse || pillBodyMouse.containsMouse) ? utilModule.colCardHover : utilModule.colCard
-        border.width: 0
+        color: pill.isActive
+            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.14)
+            : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? utilModule.colCardHover : utilModule.colCard)
+        border.width: 1
+        border.color: pill.isActive
+            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.28)
+            : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
 
+        scale: pillBodyMouse.pressed ? 0.982 : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? 1.008 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: 120 } }
 
         RowLayout {
             anchors.fill: parent
@@ -552,10 +560,10 @@ Item {
             // Left: Circular Icon Disc
             Rectangle {
                 id: discRect
-                width: 38
-                height: 38
-                radius: 19
-                color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.085))
+                width: 36
+                height: 36
+                radius: 18
+                color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.085))
 
                 scale: discMouse.pressed ? 0.90 : 1.0
                 Behavior on scale { NumberAnimation { duration: 90 } }
@@ -614,14 +622,14 @@ Item {
                 text: "chevron_right"
                 iconSize: 16
                 color: pill.isActive ? pill.activeColor : utilModule.colSubtext
-                opacity: 0.6
+                opacity: 0.65
             }
         }
 
         MouseArea {
             id: pillBodyMouse
             anchors.fill: parent
-            anchors.leftMargin: 46
+            anchors.leftMargin: 44
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
@@ -671,7 +679,7 @@ Item {
         }
     }
 
-    // 3. Material You Capsule Slider (integrated icon, dynamic fill, percentage & chevron)
+    // 3. Material 3 Unified Stadium Slider (split track, tactile icon button, auto-inverting labels, chevron routing)
     component MaterialSliderCard: Rectangle {
         id: scard
         property string title: ""
@@ -690,14 +698,16 @@ Item {
 
         Layout.fillWidth: true
         implicitHeight: 46
-        radius: 23
-        color: Qt.rgba(255, 255, 255, 0.085)
-        border.width: 0
+        radius: height / 2
+        color: Qt.rgba(255, 255, 255, 0.08)
+        border.width: 1
+        border.color: scardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
 
-        scale: scardMouse.pressed ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 90 } }
+        scale: scardMouse.pressed ? 0.985 : (scardMouse.containsMouse ? 1.006 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on border.color { ColorAnimation { duration: 150 } }
 
-        // Dynamic Fill Track
+        // Dynamic Fill Stadium Track
         Item {
             anchors.fill: parent
             clip: true
@@ -706,64 +716,93 @@ Item {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                width: (scard.muted || scard.currentRatio <= 0.001) ? 0 : Math.max(parent.height, parent.height + (parent.width - parent.height) * scard.currentRatio)
+                width: scard.muted ? 0 : Math.max(0, Math.min(parent.width, parent.width * scard.currentRatio))
                 radius: scard.radius
-                color: scard.muted ? Qt.rgba(255, 255, 255, 0.16) : scard.activeColor
+                color: scard.muted ? Qt.rgba(255, 255, 255, 0.15) : scard.activeColor
 
                 Behavior on width {
                     enabled: scard.dragVal < 0
-                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
                 }
             }
         }
 
-        // Left Icon Container
-        Item {
-            id: iconArea
+        // Left Icon Interactive Button Circle
+        Rectangle {
+            id: iconBtn
             anchors.left: parent.left
+            anchors.leftMargin: 5
             anchors.verticalCenter: parent.verticalCenter
-            width: scard.height
-            height: scard.height
-            z: 5
+            width: 36
+            height: 36
+            radius: 18
+            z: 6
+            color: iconMouse.containsMouse ? (scard.currentRatio >= 0.14 ? Qt.rgba(0, 0, 0, 0.14) : Qt.rgba(255, 255, 255, 0.10)) : "transparent"
+            scale: iconMouse.pressed ? 0.90 : 1.0
+            Behavior on scale { NumberAnimation { duration: 75 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: scard.icon
                 fill: 1
                 iconSize: 20
-                color: scard.muted ? "#ff6961" : (scard.currentRatio > 0.08 ? "#101318" : utilModule.colText)
-                Behavior on color { ColorAnimation { duration: 90 } }
+                color: scard.muted
+                    ? "#ff6961"
+                    : (scard.currentRatio >= 0.12 ? "#101318" : utilModule.colText)
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
+
+            MouseArea {
+                id: iconMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: scard.iconClicked()
             }
         }
 
-        // Right Percentage Label + Optional Chevron
+        // Right Percentage Readout + Chevron Row
         RowLayout {
             anchors.right: parent.right
             anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
-            z: 5
+            spacing: 6
+            z: 6
 
             Text {
                 text: scard.percentText
                 font.family: "Noto Sans"
                 font.pixelSize: 11
                 font.weight: Font.Bold
-                color: scard.muted ? "#ff6961" : (scard.currentRatio > 0.84 ? "#101318" : "#ffffff")
-                Behavior on color { ColorAnimation { duration: 90 } }
+                font.features: ({ "tnum": 1 })
+                color: scard.muted
+                    ? "#ff6961"
+                    : (scard.currentRatio >= 0.85 ? "#101318" : "#ffffff")
+                Behavior on color { ColorAnimation { duration: 120 } }
             }
 
-            MaterialSymbol {
+            Rectangle {
                 visible: scard.showChevron
-                text: "chevron_right"
-                iconSize: 17
-                color: chevronMouse.containsMouse ? "#ffffff" : (scard.currentRatio > 0.94 ? "#101318" : utilModule.colSubtext)
-                Behavior on color { ColorAnimation { duration: 90 } }
+                Layout.preferredWidth: 26
+                Layout.preferredHeight: 26
+                radius: 13
+                color: chevronMouse.containsMouse ? (scard.currentRatio >= 0.94 ? Qt.rgba(0, 0, 0, 0.14) : Qt.rgba(255, 255, 255, 0.12)) : "transparent"
+                scale: chevronMouse.pressed ? 0.88 : 1.0
+                Behavior on scale { NumberAnimation { duration: 75 } }
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "chevron_right"
+                    iconSize: 17
+                    color: scard.currentRatio >= 0.94 ? "#101318" : (chevronMouse.containsMouse ? "#ffffff" : utilModule.colSubtext)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
 
                 MouseArea {
                     id: chevronMouse
                     anchors.fill: parent
-                    anchors.margins: -4
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: scard.headerClicked()
@@ -771,6 +810,7 @@ Item {
             }
         }
 
+        // Tactile Drag & Wheel Handler for the whole slider
         MouseArea {
             id: scardMouse
             anchors.fill: parent
@@ -779,22 +819,12 @@ Item {
             preventStealing: true
 
             function calcRatio(mouseX) {
-                var startX = scard.height;
-                var endX = width - (scard.showChevron ? 44 : 28);
-                if (mouseX <= startX) return 0.0;
-                if (mouseX >= endX) return 1.0;
-                return (mouseX - startX) / (endX - startX);
+                return Math.max(0.0, Math.min(1.0, mouseX / Math.max(1, width)));
             }
 
             onPressed: (mouse) => {
-                if (mouse.x <= scard.height) {
-                    scard.iconClicked();
-                    return;
-                }
-                if (scard.showChevron && mouse.x >= width - 32) {
-                    scard.headerClicked();
-                    return;
-                }
+                if (mouse.x <= 44) return; // Handled by iconBtn
+                if (scard.showChevron && mouse.x >= width - 44) return; // Handled by chevron
                 scard.dragVal = calcRatio(mouse.x);
                 scard.moved(scard.dragVal);
             }
@@ -958,37 +988,37 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Quick Shortcut Badges (Timer, Notes, Clipboard, Theme, Task Manager)
+            // Quick Shortcut Badges & System Actions (Timer, Notes, Clipboard, Theme, Tasks | Lock, Power)
             RowLayout {
-                spacing: 7
+                spacing: 6
                 Layout.alignment: Qt.AlignRight
                 visible: utilModule.activeSection === ""
 
-                // 4. Focus & Pomodoro Timer
+                // 1. Focus & Pomodoro Timer
                 HeaderQuickBtn {
                     glyph: "timer"
                     onClicked: utilModule.activeSection = "pomo"
                 }
 
-                // 5. Notes
+                // 2. Notes
                 HeaderQuickBtn {
                     glyph: "edit_note"
                     onClicked: root.switchMode("notes", false)
                 }
 
-                // 6. Clipboard History
+                // 3. Clipboard History
                 HeaderQuickBtn {
                     glyph: "assignment"
                     onClicked: root.switchMode("clipboard", false)
                 }
 
-                // 7. Theme Selector
+                // 4. Theme Selector
                 HeaderQuickBtn {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
                 }
 
-                // 8. Task Manager
+                // 5. Task Manager
                 HeaderQuickBtn {
                     glyph: "monitoring"
                     onClicked: root.switchMode("taskmanager", false)
@@ -1025,12 +1055,12 @@ Item {
             }
         }
 
-        // ── 1. MAIN CONTROL CENTER VIEW (MATERIAL YOU) ─────────────
+        // ── 1. MAIN CONTROL CENTER VIEW (MATERIAL 3 BENTO GRID) ─────────────
         ColumnLayout {
             id: mainViewContainer
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: 6
+            Layout.topMargin: 8
             spacing: 8
             visible: utilModule.activeSection === ""
 
@@ -1135,6 +1165,7 @@ Item {
 
                 // VPN Pill (Split: disc quick-toggles default VPN, body opens VPN provider list)
                 MaterialPill {
+                    id: vpnPill
                     glyph: (utilModule.vpnActive || utilModule.vpnConnecting) ? "shield" : "vpn_key"
                     title: "VPN"
                     subtitle: {
@@ -1154,6 +1185,7 @@ Item {
 
                 // Power Circular Button
                 MaterialCircleBtn {
+                    id: powerBtn
                     glyph: "power_settings_new"
                     iconColor: "#ff453a"
                     customBg: utilModule.colCard
@@ -1162,9 +1194,9 @@ Item {
                 }
             }
 
-            // ROW 3: Sound Slider (with chevron to audio devices subview)
+            // BENTO ROW 3: Sound Stadium Slider (with chevron to audio devices subview)
             MaterialSliderCard {
-                Layout.topMargin: 5
+                Layout.topMargin: 2
                 value: utilModule.audioVolume
                 icon: utilModule.audioMuted ? "volume_off" : (utilModule.audioVolume > 0.5 ? "volume_up" : (utilModule.audioVolume > 0 ? "volume_down" : "volume_mute"))
                 percentText: utilModule.audioMuted ? "Muted" : (Math.round(utilModule.audioVolume * 100) + "%")
@@ -1182,7 +1214,7 @@ Item {
                 }
             }
 
-            // ROW 4: Display Slider
+            // BENTO ROW 4: Display Brightness Stadium Slider
             MaterialSliderCard {
                 value: utilModule.displayBrightness
                 icon: "light_mode"
@@ -1196,10 +1228,10 @@ Item {
                 onIconClicked: utilModule.setBrightness(utilModule.displayBrightness > 0.5 ? 0.2 : 0.8)
             }
 
-            // ROW 5: Secondary Hardware Tools Squircle Row (Mic, Caffeine, Night Light, Capture, Record, Picker)
+            // ROW 5: Secondary Hardware Tools (6 Squircles: Mic, Caffeine, Night Light, Capture, DND, Picker)
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 6
+                Layout.topMargin: 5
                 spacing: 8
 
                 // 1. Microphone Mute

@@ -65,6 +65,16 @@ EOF
     # Map active theme to the Neovim colorscheme name (case-insensitive)
     THEME_LOWER="$(echo "$TARGET_THEME" | tr '[:upper:]' '[:lower:]')"
     case "$THEME_LOWER" in
+      "afterglow")                NVIM_THEME="rose-pine" ;;
+      "crimson")                  NVIM_THEME="monokai-pro" ;;
+      "solstice")                 NVIM_THEME="gruvbox" ;;
+      "verdant")                  NVIM_THEME="everforest" ;;
+      "frost")                    NVIM_THEME="e-ink" ;;
+      "cyber")                    NVIM_THEME="tokyonight-night" ;;
+      "astral")                   NVIM_THEME="nord" ;;
+      "abyss")                    NVIM_THEME="tokyonight-night" ;;
+      "serenity")                 NVIM_THEME="ayu-mirage" ;;
+      "cloudscape")               NVIM_THEME="onedark" ;;
       "catppuccin")               NVIM_THEME="catppuccin-mocha" ;;
       "gruvbox")                  NVIM_THEME="gruvbox" ;;
       "tokyo-night"|"tokyonight")  NVIM_THEME="tokyonight-night" ;;
@@ -78,7 +88,7 @@ EOF
       "e-ink"|"eink")            NVIM_THEME="e-ink" ;;
       "emerald")                  NVIM_THEME="emerald" ;;
       "gloaming")                 NVIM_THEME="gloaming" ;;
-      *)                          NVIM_THEME="catppuccin" ;;
+      *)                          NVIM_THEME="catppuccin-mocha" ;;
     esac
 
     # 1. Save current colorscheme to a dedicated state file

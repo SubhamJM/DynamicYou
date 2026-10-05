@@ -1,0 +1,15 @@
+@define-color accent_color #22d3ee;
+@define-color accent_bg_color #22d3ee;
+@define-color accent_fg_color #0c141c;
+@define-color window_bg_color #0c141c;
+@define-color window_fg_color #ecfeff;
+@define-color view_bg_color #121e2b;
+@define-color view_fg_color #ecfeff;
+@define-color headerbar_bg_color #0c141c;
+@define-color headerbar_fg_color #ecfeff;
+@define-color headerbar_border_color #28415c;
+@define-color card_bg_color #121e2b;
+@define-color card_fg_color #ecfeff;
+@define-color card_border_color #28415c;
+@define-color popover_bg_color #121e2b;
+@define-color popover_fg_color #ecfeff;
