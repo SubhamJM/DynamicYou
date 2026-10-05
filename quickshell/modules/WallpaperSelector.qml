@@ -10,19 +10,25 @@ ColumnLayout {
     focus: true
     Keys.forwardTo: [wallpaperCarousel]
 
+    property bool userInteracted: false
+
     Keys.onLeftPressed: (event) => {
+        wallModule.userInteracted = true;
         wallpaperCarousel.decrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onRightPressed: (event) => {
+        wallModule.userInteracted = true;
         wallpaperCarousel.incrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onUpPressed: (event) => {
+        wallModule.userInteracted = true;
         wallpaperCarousel.decrementCurrentIndex();
         event.accepted = true;
     }
     Keys.onDownPressed: (event) => {
+        wallModule.userInteracted = true;
         wallpaperCarousel.incrementCurrentIndex();
         event.accepted = true;
     }
@@ -39,19 +45,74 @@ ColumnLayout {
         event.accepted = true;
     }
 
+    function loadCachedWallpapers() {
+        if (typeof root !== "undefined" && root.cachedWallpapers && root.cachedWallpapers.length > 0) {
+            if (wallpaperModel.count === 0) {
+                wallpaperModel.clear();
+                for (var j = 0; j < root.cachedWallpapers.length; j++) {
+                    wallpaperModel.append(root.cachedWallpapers[j]);
+                }
+                var actWall = root.cachedActiveWallpaper || wallModule.lastAppliedWallpaper;
+                var targetIdx = 0;
+                if (actWall !== "") {
+                    for (var k = 0; k < wallpaperModel.count; k++) {
+                        var fPath = wallpaperModel.get(k).filePath;
+                        if (fPath === actWall || actWall.endsWith(wallpaperModel.get(k).fileName)) {
+                            targetIdx = k;
+                            break;
+                        }
+                    }
+                }
+                wallpaperCarousel.highlightMoveDuration = 0;
+                wallpaperCarousel.currentIndex = targetIdx;
+                wallpaperCarousel.positionViewAtIndex(targetIdx, PathView.Center);
+                restoreAnimTimer.restart();
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        wallModule.userInteracted = false;
+        wallModule.loadCachedWallpapers();
+        wallModule.scanWallpapers();
+    }
+
+    function scanWallpapers() {
+        if (wallpaperScanner.running) wallpaperScanner.running = false;
+        Qt.callLater(() => {
+            if (root.activeMode === "wallpaper" || visible) {
+                wallpaperScanner.running = true;
+            }
+        });
+    }
+
     Connections {
         target: root
         function onActiveModeChanged() {
             if (root.activeMode === "wallpaper") {
-                if (wallpaperScanner.running) wallpaperScanner.running = false;
-                wallpaperScanner.running = true;
+                wallModule.userInteracted = false;
+                wallModule.loadCachedWallpapers();
+                wallModule.scanWallpapers();
                 Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
+            }
+        }
+    }
+
+    Connections {
+        target: Theme
+        function onCurrentThemeNameChanged() {
+            if (root.activeMode === "wallpaper" || visible) {
+                wallModule.userInteracted = false;
+                wallModule.scanWallpapers();
             }
         }
     }
 
     onVisibleChanged: {
         if (visible) {
+            wallModule.userInteracted = false;
+            wallModule.loadCachedWallpapers();
+            wallModule.scanWallpapers();
             Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
         }
     }
@@ -63,17 +124,29 @@ ColumnLayout {
     // Query active wallpaper and populate carousel whenever the module opens
     Process {
         id: wallpaperScanner
-        running: root.activeMode === "wallpaper"
+        running: false
         command: ["sh", "-c", `python3 -c "
 import os, glob, subprocess
 
 theme = '${Theme.currentThemeName}'.strip()
+if not theme or theme.lower() == 'default':
+    name_file = os.path.expanduser('~/.config/active-theme/theme-name.txt')
+    if os.path.exists(name_file):
+        try:
+            with open(name_file, 'r') as f:
+                t = f.read().strip()
+                if t: theme = t
+        except Exception:
+            pass
+
 theme_lower = theme.lower()
 
 # Check candidates for theme wallpaper directory
 candidates = [
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
     os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
     os.path.expanduser(f'~/current/Wallpapers/{theme}')
 ]
@@ -84,7 +157,7 @@ for c in candidates:
         break
 
 if not wall_dir:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
         if os.path.isdir(base):
             for d in os.listdir(base):
                 if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
@@ -118,7 +191,7 @@ if wall_dir and os.path.exists(wall_dir):
 
 # Global Fallback: if theme folder is empty, missing, or has 0 wallpapers, show all wallpapers from Wallpapers directories
 if not files:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
         if os.path.isdir(base):
             for root_dir, dirs, fnames in os.walk(base, followlinks=True):
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
@@ -155,32 +228,56 @@ for f in sorted_files:
                     wallModule.lastAppliedWallpaper = activeFromQuery;
                 }
 
-                // Snap smoothly without initial jump
-                wallpaperCarousel.highlightMoveDuration = 0;
-
-                wallpaperModel.clear();
-                for (var j = 0; j < temp.length; j++) {
-                    wallpaperModel.append(temp[j]);
+                if (temp.length > 0) {
+                    if (typeof root !== "undefined") {
+                        root.cachedWallpapers = temp;
+                        if (activeFromQuery !== "") root.cachedActiveWallpaper = activeFromQuery;
+                    }
                 }
-                
-                var targetIdx = 0;
-                if (wallModule.lastAppliedWallpaper !== "") {
-                    for (var k = 0; k < wallpaperModel.count; k++) {
-                        var fPath = wallpaperModel.get(k).filePath;
-                        if (fPath === wallModule.lastAppliedWallpaper || wallModule.lastAppliedWallpaper.endsWith(wallpaperModel.get(k).fileName)) {
-                            targetIdx = k;
+
+                var isDifferent = (temp.length !== wallpaperModel.count);
+                if (!isDifferent) {
+                    for (var m = 0; m < temp.length; m++) {
+                        if (wallpaperModel.get(m).filePath !== temp[m].filePath) {
+                            isDifferent = true;
                             break;
                         }
                     }
                 }
 
-                if (wallpaperModel.count > 0) {
-                    wallpaperCarousel.currentIndex = targetIdx;
-                    wallpaperCarousel.positionViewAtIndex(targetIdx, PathView.Center);
-                    Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
+                if (isDifferent) {
+                    wallpaperModel.clear();
+                    for (var j = 0; j < temp.length; j++) {
+                        wallpaperModel.append(temp[j]);
+                    }
                 }
 
-                restoreAnimTimer.restart();
+                // If user has not interacted with the carousel yet, position it to active wallpaper
+                if (!wallModule.userInteracted && wallpaperModel.count > 0) {
+                    var targetIdx = 0;
+                    var checkWall = wallModule.lastAppliedWallpaper || activeFromQuery;
+                    if (checkWall !== "") {
+                        for (var k = 0; k < wallpaperModel.count; k++) {
+                            var fPath = wallpaperModel.get(k).filePath;
+                            if (fPath === checkWall || checkWall.endsWith(wallpaperModel.get(k).fileName)) {
+                                targetIdx = k;
+                                break;
+                            }
+                        }
+                    }
+                    if (wallpaperCarousel.currentIndex !== targetIdx || isDifferent) {
+                        wallpaperCarousel.highlightMoveDuration = 0;
+                        wallpaperCarousel.currentIndex = targetIdx;
+                        wallpaperCarousel.positionViewAtIndex(targetIdx, PathView.Center);
+                        restoreAnimTimer.restart();
+                    }
+                    Qt.callLater(() => wallpaperCarousel.forceActiveFocus());
+                } else if (wallModule.userInteracted) {
+                    // Make sure currentIndex remains within valid bounds
+                    if (wallpaperCarousel.currentIndex >= wallpaperModel.count) {
+                        wallpaperCarousel.currentIndex = Math.max(0, wallpaperModel.count - 1);
+                    }
+                }
             }
         }
     }
@@ -189,7 +286,7 @@ for f in sorted_files:
         id: restoreAnimTimer
         interval: 60
         repeat: false
-        onTriggered: wallpaperCarousel.highlightMoveDuration = 180
+        onTriggered: wallpaperCarousel.highlightMoveDuration = 200
     }
 
     Process { id: wallpaperRunner; running: false }
@@ -266,6 +363,7 @@ for f in sorted_files:
                     id: leftArrowMouse
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        wallModule.userInteracted = true;
                         wallpaperCarousel.decrementCurrentIndex();
                         wallpaperCarousel.forceActiveFocus();
                     }
@@ -284,24 +382,29 @@ for f in sorted_files:
                 preferredHighlightBegin: 0.5
                 preferredHighlightEnd: 0.5
                 highlightRangeMode: PathView.StrictlyEnforceRange
-                highlightMoveDuration: 0
+                highlightMoveDuration: 200
+                onMovementStarted: wallModule.userInteracted = true
 
                 readonly property real itemWidth: Math.min(270, Math.max(160, width * 0.44))
                 readonly property real itemHeight: height * 0.88
 
                 Keys.onLeftPressed: (event) => {
+                    wallModule.userInteracted = true;
                     decrementCurrentIndex();
                     event.accepted = true;
                 }
                 Keys.onRightPressed: (event) => {
+                    wallModule.userInteracted = true;
                     incrementCurrentIndex();
                     event.accepted = true;
                 }
                 Keys.onUpPressed: (event) => {
+                    wallModule.userInteracted = true;
                     decrementCurrentIndex();
                     event.accepted = true;
                 }
                 Keys.onDownPressed: (event) => {
+                    wallModule.userInteracted = true;
                     incrementCurrentIndex();
                     event.accepted = true;
                 }
@@ -328,6 +431,7 @@ for f in sorted_files:
                     cursorShape: Qt.PointingHandCursor
                     onWheel: (wheel) => {
                         wheel.accepted = true;
+                        wallModule.userInteracted = true;
                         if (wheel.angleDelta.y < 0) wallpaperCarousel.incrementCurrentIndex();
                         else if (wheel.angleDelta.y > 0) wallpaperCarousel.decrementCurrentIndex();
                     }
@@ -422,6 +526,7 @@ for f in sorted_files:
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            wallModule.userInteracted = true;
                             if (PathView.isCurrentItem) {
                                 wallpaperCarousel.applySelected();
                             } else {
@@ -453,6 +558,7 @@ for f in sorted_files:
                     id: rightArrowMouse
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        wallModule.userInteracted = true;
                         wallpaperCarousel.incrementCurrentIndex();
                         wallpaperCarousel.forceActiveFocus();
                     }
@@ -503,15 +609,17 @@ for f in sorted_files:
         if (idx >= 0 && idx < wallpaperModel.count) {
             var path = wallpaperModel.get(idx).filePath;
             wallModule.lastAppliedWallpaper = path;
-            if (wallpaperRunner.running) wallpaperRunner.running = false;
-            wallpaperRunner.command = [
+            if (typeof root !== "undefined") {
+                root.cachedActiveWallpaper = path;
+            }
+            var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
+            Quickshell.execDetached([
                 "awww", "img", path,
-                "--transition-type", Theme.activeTransition,
+                "--transition-type", trans,
                 "--transition-fps", "144",
                 "--transition-step", "240",
                 "--transition-bezier", "0.25,0.1,0.25,1.0"
-            ];
-            wallpaperRunner.running = true;
+            ]);
             root.collapseToIdle();
         }
     }

@@ -344,7 +344,7 @@ Item {
 
     Timer {
         id: fetchSinksTimer
-        interval: 3000
+        interval: 1000
         repeat: true
         running: musicModule.visible
         triggeredOnStart: true

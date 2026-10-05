@@ -27,5 +27,4 @@ wl-copy < "$FILE"
 # Direct native Quickshell IPC trigger (zero Python FIFO overhead)
 qs ipc call notch showScreenshot "$FILE" >/dev/null 2>&1 &
 
-# Desktop notification fallback with icon preview
-notify-send -a "Screenshot Hub" -i "$FILE" "Screenshot Captured" "Saved to Screenshots. Click notch action to Annotate, Pin to Shelf, or OCR."
+notify-send -a "Screenshot Hub" -i "$FILE" "Screenshot Captured" "Saved to Screenshots. Click notch action to Annotate."

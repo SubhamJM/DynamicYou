@@ -90,19 +90,8 @@ Item {
                 if (!this.text || this.text.trim() === "") return;
                 try {
                     var data = JSON.parse(this.text.trim());
-                    if (data.percentage !== undefined) batteryModule.rawBatteryLevel = data.percentage;
-                    if (data.isCharging !== undefined) batteryModule.rawIsCharging = !!data.isCharging;
-                    if (data.isFull !== undefined) batteryModule.rawIsFull = !!data.isFull;
-                    if (data.powerW !== undefined) batteryModule.currentPowerW = data.powerW;
-                    if (data.voltageV !== undefined) batteryModule.voltageV = data.voltageV;
-                    if (data.health !== undefined) batteryModule.healthPercentage = Math.min(100, Math.max(0, data.health));
-                    if (data.currentEnergyWh !== undefined) batteryModule.currentEnergyWh = data.currentEnergyWh;
-                    if (data.fullEnergyWh !== undefined) batteryModule.fullEnergyWh = data.fullEnergyWh;
-                    if (data.timeStr !== undefined) batteryModule.timeRemainingStr = data.timeStr;
-                    if (data.chargeThreshold !== undefined) batteryModule.chargeThreshold = data.chargeThreshold;
-                    if (data.refreshRate !== undefined) batteryModule.refreshRate = data.refreshRate;
-                    if (data.kbdBacklight !== undefined) batteryModule.kbdBacklight = data.kbdBacklight;
-                    if (data.topDrainers) batteryModule.topDrainers = data.topDrainers;
+                    if (typeof root !== "undefined") root.cachedBatteryTelemetry = data;
+                    batteryModule.applyTelemetry(data);
                 } catch (e) {
                     console.warn("[BatteryModule] Telemetry parse error:", e);
                 }
@@ -156,6 +145,23 @@ Item {
         Quickshell.execDetached(["powerprofilesctl", "set", profileName]);
     }
 
+    function applyTelemetry(data) {
+        if (!data) return;
+        if (data.percentage !== undefined) batteryModule.rawBatteryLevel = data.percentage;
+        if (data.isCharging !== undefined) batteryModule.rawIsCharging = !!data.isCharging;
+        if (data.isFull !== undefined) batteryModule.rawIsFull = !!data.isFull;
+        if (data.powerW !== undefined) batteryModule.currentPowerW = data.powerW;
+        if (data.voltageV !== undefined) batteryModule.voltageV = data.voltageV;
+        if (data.health !== undefined) batteryModule.healthPercentage = Math.min(100, Math.max(0, data.health));
+        if (data.currentEnergyWh !== undefined) batteryModule.currentEnergyWh = data.currentEnergyWh;
+        if (data.fullEnergyWh !== undefined) batteryModule.fullEnergyWh = data.fullEnergyWh;
+        if (data.timeStr !== undefined) batteryModule.timeRemainingStr = data.timeStr;
+        if (data.chargeThreshold !== undefined) batteryModule.chargeThreshold = data.chargeThreshold;
+        if (data.refreshRate !== undefined) batteryModule.refreshRate = data.refreshRate;
+        if (data.kbdBacklight !== undefined) batteryModule.kbdBacklight = data.kbdBacklight;
+        if (data.topDrainers) batteryModule.topDrainers = data.topDrainers;
+    }
+
     function pollAll() {
         if (!telemetryPoller.running) telemetryPoller.running = true;
         if (!profileChecker.running) profileChecker.running = true;
@@ -165,13 +171,16 @@ Item {
         target: root
         function onActiveModeChanged() {
             if (root.activeMode === "battery") {
+                if (typeof root !== "undefined" && root.cachedBatteryTelemetry) {
+                    batteryModule.applyTelemetry(root.cachedBatteryTelemetry);
+                }
                 batteryModule.pollAll();
             }
         }
     }
 
     Timer {
-        interval: 2500
+        interval: 1000
         running: root.activeMode === "battery"
         repeat: true
         triggeredOnStart: true
@@ -179,6 +188,9 @@ Item {
     }
 
     Component.onCompleted: {
+        if (typeof root !== "undefined" && root.cachedBatteryTelemetry) {
+            batteryModule.applyTelemetry(root.cachedBatteryTelemetry);
+        }
         batteryModule.pollAll();
     }
 

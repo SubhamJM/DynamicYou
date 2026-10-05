@@ -94,7 +94,7 @@ def list_processes():
         except Exception:
             pass
 
-    time.sleep(0.12)
+    time.sleep(0.04)
 
     mem = psutil.virtual_memory()
     cpu_total = psutil.cpu_percent()

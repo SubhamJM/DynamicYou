@@ -19,12 +19,10 @@ Item {
 
     property bool netIslandExpanded: false
     property bool powerIslandExpanded: false
-    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive || root.isDictationActive || root.isPomoFinishedIslandActive || root.isQrScannedIslandActive
+    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive || root.isPomoFinishedIslandActive
 
     readonly property string currentIslandType: {
-        if (root.isDictationActive) return "dictation";
         if (root.isPomoFinishedIslandActive) return "pomo_done";
-        if (root.isQrScannedIslandActive) return "qr_scanned";
         if (root.isScreenshotIslandActive) return "screenshot";
         if (root.isNotifPopupActive) return "notif";
         if (btIslandExpanded) return "bluetooth";
@@ -46,14 +44,8 @@ Item {
         if (displayedIslandType === "pomo_done" || root.isPomoFinishedIslandActive) {
             return Math.max(380, pomoDonePopupRow.implicitWidth + 36);
         }
-        if (displayedIslandType === "qr_scanned" || root.isQrScannedIslandActive) {
-            return Math.max(360, qrScannedPopupRow.implicitWidth + 36);
-        }
-        if (displayedIslandType === "dictation" || root.isDictationActive) {
-            return Math.max(340, dictationPopupRow.implicitWidth + 36);
-        }
         if (displayedIslandType === "screenshot" || root.isScreenshotIslandActive) {
-            return Math.max(400, screenshotPopupRow.implicitWidth + 36);
+            return Math.max(260, screenshotPopupRow.implicitWidth + 36);
         }
         if (displayedIslandType === "notif" || root.isNotifPopupActive) {
             var textW = Math.max(notifSummaryText.implicitWidth, notifBodyText.implicitWidth);
@@ -192,7 +184,7 @@ Item {
     }
 
     Timer {
-        interval: 20000
+        interval: 2000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -203,7 +195,7 @@ Item {
 
     Process {
         id: netPoller
-        command: ["sh", "-c", "nmcli -t -f TYPE,CONNECTION,STATE dev | grep -E '^(ethernet|wifi):.*:connected'; echo '---'; nmcli -t -f IN-USE,SIGNAL dev wifi list 2>/dev/null | grep '^\\*' | cut -d: -f2"]
+        command: ["sh", "-c", "nmcli -t -f TYPE,CONNECTION,STATE dev | grep -E '^(ethernet|wifi):.*:connected'; echo '---'; nmcli -t -f IN-USE,SIGNAL dev wifi list --rescan no 2>/dev/null | grep '^\\*' | cut -d: -f2"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var rawText = this.text.trim();
@@ -282,6 +274,7 @@ Item {
                 dash.triggerBtText = true;
                 btTextTimer.restart();
             }
+            if (!btBatteryPoller.running) btBatteryPoller.running = true;
         } else {
             dash.btConnected = false;
             dash.btConnectedMac = "";
@@ -291,16 +284,29 @@ Item {
         }
     }
 
-    function startOcr() {
-        if (!ocrRunner.running) {
-            ocrRunner.running = true;
+    Process {
+        id: btBatteryPoller
+        running: false
+        command: ["python3", Qt.resolvedUrl("../scripts/bt-status.py").toString().replace("file://", "")]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var line = this.text.trim();
+                var parts = line.split("|");
+                if (parts.length >= 4 && parts[0] === "1" && parts[3]) {
+                    dash.btIslandBattery = parts[3];
+                }
+            }
         }
     }
 
-    Process {
-        id: ocrRunner
-        running: false
-        command: ["/bin/sh", "-c", Qt.resolvedUrl("../scripts/snip_ocr.sh").toString().replace("file://", "")]
+    Timer {
+        interval: 2000
+        running: dash.btConnected
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!btBatteryPoller.running) btBatteryPoller.running = true;
+        }
     }
 
     // Stable workspace model tracking
@@ -358,206 +364,6 @@ Item {
         onOpacityChanged: {
             if (opacity <= 0.01 && !dash.isIslandActive) {
                 dash.displayedIslandType = "";
-            }
-        }
-
-        // Voice Dictation / AI Speech Island (Section 5.4)
-        RowLayout {
-            id: dictationPopupRow
-            anchors.centerIn: parent
-            spacing: 10
-            visible: dash.displayedIslandType === "dictation" || root.isDictationActive
-
-            // 1. Microphone Status Pill / Icon with breathing pulse
-            Rectangle {
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                radius: 13
-                color: {
-                    if (root.dictationState === "done") return Qt.rgba(0.18, 0.82, 0.34, 0.22);
-                    if (root.dictationState === "transcribing") return Qt.alpha(Theme.accent, 0.24);
-                    return Qt.rgba(1.0, 0.27, 0.23, 0.22);
-                }
-                Layout.alignment: Qt.AlignVCenter
-                Behavior on color { ColorAnimation { duration: 160 } }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: {
-                        if (root.dictationState === "done") return "󰄬";
-                        if (root.dictationState === "transcribing") return "󰚩";
-                        return "󰍬";
-                    }
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
-                    color: {
-                        if (root.dictationState === "done") return "#30d158";
-                        if (root.dictationState === "transcribing") return Theme.accent;
-                        return "#ff453a";
-                    }
-                    Behavior on color { ColorAnimation { duration: 160 } }
-                }
-
-                SequentialAnimation on scale {
-                    running: root.isDictationActive && root.dictationState === "listening"
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1.0; to: 1.14; duration: 500; easing.type: Easing.InOutQuad }
-                    NumberAnimation { from: 1.14; to: 1.0; duration: 500; easing.type: Easing.InOutQuad }
-                }
-            }
-
-            // 2. Center Content - Dynamic per State
-            // A. State: "listening" -> Waveform + "Listening" + Timer
-            RowLayout {
-                spacing: 8
-                visible: root.dictationState === "listening"
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    text: "Listening"
-                    font.family: "Readex Pro"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: Theme.colors.text_primary ?? "#f8fafc"
-                }
-
-                // 7 Fluid Waveform Bars
-                Row {
-                    spacing: 3
-                    Layout.alignment: Qt.AlignVCenter
-                    Repeater {
-                        model: 7
-                        Rectangle {
-                            required property int index
-                            width: 3
-                            radius: 1.5
-                            color: Theme.accent
-                            height: {
-                                var pts = root.dictationWavePoints;
-                                var val = (pts && pts.length > index) ? pts[index] : 0.2;
-                                return Math.max(4, Math.min(22, val * 22));
-                            }
-                            Behavior on height { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
-                        }
-                    }
-                }
-
-                Text {
-                    text: {
-                        var s = root.dictationSeconds;
-                        var m = Math.floor(s / 60);
-                        var rem = s % 60;
-                        return (m < 10 ? "0" : "") + m + ":" + (rem < 10 ? "0" : "") + rem;
-                    }
-                    font.family: "Readex Pro"
-                    font.pixelSize: 12
-                    font.weight: Font.Medium
-                    font.features: ({ "tnum": 1 })
-                    color: Qt.alpha(Theme.colors.text_primary ?? "#f8fafc", 0.6)
-                }
-            }
-
-            // B. State: "transcribing" -> Sparkle + "Transcribing..."
-            RowLayout {
-                spacing: 8
-                visible: root.dictationState === "transcribing"
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    text: "Transcribing..."
-                    font.family: "Readex Pro"
-                    font.pixelSize: 13
-                    font.weight: Font.Medium
-                    color: Theme.colors.text_primary ?? "#f8fafc"
-                }
-
-                Row {
-                    spacing: 3
-                    Layout.alignment: Qt.AlignVCenter
-                    Repeater {
-                        model: 3
-                        Rectangle {
-                            required property int index
-                            width: 4
-                            height: 4
-                            radius: 2
-                            color: Theme.accent
-                            opacity: 0.3
-                            SequentialAnimation on opacity {
-                                loops: Animation.Infinite
-                                PauseAnimation { duration: index * 160 }
-                                NumberAnimation { to: 1.0; duration: 280 }
-                                NumberAnimation { to: 0.3; duration: 280 }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // C. State: "done" or "empty" -> Text snippet + "Typed" badge
-            RowLayout {
-                spacing: 8
-                visible: root.dictationState === "done" || root.dictationState === "empty"
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    Layout.maximumWidth: 260
-                    elide: Text.ElideRight
-                    text: root.dictationText !== "" ? ('"' + root.dictationText + '"') : "No speech detected"
-                    font.family: "Readex Pro"
-                    font.pixelSize: 13
-                    font.weight: Font.Normal
-                    font.italic: true
-                    color: Theme.colors.text_primary ?? "#f8fafc"
-                }
-
-                Rectangle {
-                    Layout.preferredHeight: 18
-                    Layout.preferredWidth: badgeText.implicitWidth + 10
-                    radius: 9
-                    color: root.dictationState === "done" ? Qt.rgba(0.18, 0.82, 0.34, 0.18) : Qt.rgba(1, 1, 1, 0.1)
-                    visible: root.dictationState === "done"
-
-                    Text {
-                        id: badgeText
-                        anchors.centerIn: parent
-                        text: "Typed"
-                        font.family: "Readex Pro"
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: "#30d158"
-                    }
-                }
-            }
-
-            // 3. Interactive Stop / Cancel button
-            MouseArea {
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                cursorShape: Qt.PointingHandCursor
-                Layout.alignment: Qt.AlignVCenter
-                onClicked: {
-                    if (root.dictationState === "listening") {
-                        root.stopDictation();
-                    } else {
-                        root.cancelDictation();
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: parent.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.dictationState === "listening" ? "󰅙" : "󰅖"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                        color: Qt.alpha(Theme.colors.text_primary ?? "#f8fafc", 0.6)
-                    }
-                }
             }
         }
 
@@ -666,103 +472,6 @@ Item {
                             screenshotIslandTimer.stop();
                             root.screenshotIslandPath = "";
                             root.screenshotIslandStatus = "";
-                        }
-                    }
-                }
-
-                // Action 2: Pin to Shelf
-                Rectangle {
-                    width: shelfBtnRow.implicitWidth + 14
-                    height: 24
-                    radius: 12
-                    color: shelfBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
-                    border.width: 0
-                    border.color: "transparent"
-                    Behavior on color { ColorAnimation { duration: 140 } }
-
-                    Row {
-                        id: shelfBtnRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        Text {
-                            text: "󰉋"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: Theme.accent
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "Shelf"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: Theme.colors.text_primary ?? "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    MouseArea {
-                        id: shelfBtnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.shelfMod) {
-                                root.shelfMod.addFiles([root.screenshotIslandPath]);
-                            } else {
-                                root.pendingDropUrls = [root.screenshotIslandPath];
-                            }
-                            root.screenshotIslandStatus = "Pinned to Shelf!";
-                            screenshotActionFeedbackTimer.restart();
-                        }
-                    }
-                }
-
-                // Action 3: Instant OCR
-                Rectangle {
-                    width: ocrBtnRow.implicitWidth + 14
-                    height: 24
-                    radius: 12
-                    color: ocrBtnMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : Qt.rgba(1, 1, 1, 0.08)
-                    border.width: 0
-                    border.color: "transparent"
-                    Behavior on color { ColorAnimation { duration: 140 } }
-
-                    Row {
-                        id: ocrBtnRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        Text {
-                            text: "󰬚"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: Theme.accent
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: "OCR"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: Theme.colors.text_primary ?? "#ffffff"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    MouseArea {
-                        id: ocrBtnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            var scriptPath = Quickshell.env("HOME") + "/.config/quickshell/scripts/snip_ocr.sh";
-                            Quickshell.execDetached(["bash", scriptPath, root.screenshotIslandPath]);
-                            root.screenshotIslandStatus = "Text Extracted!";
-                            screenshotActionFeedbackTimer.restart();
                         }
                     }
                 }
@@ -905,119 +614,6 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.isPomoFinishedIslandActive = false;
-                        root.collapseToIdle();
-                    }
-                }
-            }
-        }
-
-        // QR Code Scanned Island (Section 4.3)
-        RowLayout {
-            id: qrScannedPopupRow
-            anchors.centerIn: parent
-            spacing: 10
-            visible: dash.displayedIslandType === "qr_scanned" || root.isQrScannedIslandActive
-
-            Rectangle {
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                radius: 13
-                color: Qt.alpha(Theme.accent, 0.22)
-                border.width: 1
-                border.color: Qt.alpha(Theme.accent, 0.45)
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰐳"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
-                    color: Theme.accent
-                }
-            }
-
-            ColumnLayout {
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 0
-
-                Text {
-                    text: "QR Scanned & Copied"
-                    font.family: "Readex Pro"
-                    font.pixelSize: 12
-                    font.weight: Font.Bold
-                    color: "#ffffff"
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    text: root.qrScannedText !== "" ? root.qrScannedText : "Copied to clipboard"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#8e8e93"
-                    elide: Text.ElideMiddle
-                    Layout.maximumWidth: 160
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            // Open Link if URL
-            Rectangle {
-                visible: root.qrScannedText.trim().startsWith("http://") || root.qrScannedText.trim().startsWith("https://")
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: qrOpenActionText.implicitWidth + 16
-                radius: 12
-                color: qrOpenMouse.containsMouse ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.accent, 0.20)
-                border.width: 1
-                border.color: Qt.alpha(Theme.accent, 0.40)
-                scale: qrOpenMouse.pressed ? 0.94 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                Text {
-                    id: qrOpenActionText
-                    anchors.centerIn: parent
-                    text: "Open"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    color: Theme.accent
-                }
-
-                MouseArea {
-                    id: qrOpenMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        Quickshell.execDetached(["xdg-open", root.qrScannedText.trim()]);
-                        root.isQrScannedIslandActive = false;
-                        root.collapseToIdle();
-                    }
-                }
-            }
-
-            // Dismiss
-            Rectangle {
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
-                radius: 11
-                color: qrDismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-                scale: qrDismissMouse.pressed ? 0.90 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: 13
-                    color: Theme.colors.text_secondary ?? "#8e8e93"
-                }
-
-                MouseArea {
-                    id: qrDismissMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.isQrScannedIslandActive = false;
                         root.collapseToIdle();
                     }
                 }

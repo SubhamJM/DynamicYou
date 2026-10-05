@@ -89,12 +89,11 @@ ColumnLayout {
         function applyTransition(idx) {
             if (idx >= 0 && idx < count) {
                 var trans = transitionModel.get(idx).name;
-                if (transitionWriter.running) transitionWriter.running = false;
-                transitionWriter.command = [
+                Theme.activeTransition = trans;
+                Quickshell.execDetached([
                     "sh", "-c", 
-                    "mkdir -p $HOME/.config/active-theme && echo -n '" + trans + "' > $HOME/.config/active-theme/wallpaper-transition.txt"
-                ];
-                transitionWriter.running = true;
+                    "mkdir -p $HOME/.config/active-theme && printf '%s' '" + trans + "' > $HOME/.config/active-theme/wallpaper-transition.txt"
+                ]);
                 root.activeMode = "idle";
             }
         }

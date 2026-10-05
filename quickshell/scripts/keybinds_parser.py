@@ -177,18 +177,12 @@ def parse_hypr_lua(path):
             elif "quickshell:resetNotchToIdle" in clean_dsp:
                 desc = "Collapse Notch to Idle"
                 cat = "System"
-            elif "quickshell:toggleShelfNotch" in clean_dsp:
-                desc = "Toggle File Stash Shelf"
-                cat = "Launchers"
             elif "quickshell:toggleNotificationsNotch" in clean_dsp:
                 desc = "Open Notification Center"
                 cat = "System"
             elif "quickshell:toggleUtilityNotch" in clean_dsp:
                 desc = "Open Dynamic Control Center"
                 cat = "System"
-            elif "quickshell:triggerScreenOcr" in clean_dsp:
-                desc = "Snip Screen OCR (Copy text from image)"
-                cat = "Media"
             elif "quickshell:cycleWindowNext" in clean_dsp:
                 desc = "Alt-Tab: Cycle Next Window"
                 cat = "Window"
@@ -210,9 +204,6 @@ def parse_hypr_lua(path):
             elif "quickshell:toggleTaskManagerNotch" in clean_dsp:
                 desc = "Open Task Manager (Process Monitor)"
                 cat = "System"
-            elif "quickshell:voiceDictationPress" in clean_dsp or "quickshell:toggleDictation" in clean_dsp:
-                desc = "Voice Dictation (Push-to-Talk / Toggle)"
-                cat = "Media"
             elif "exec_cmd" in clean_dsp:
                 cat = "Launchers"
                 if vars_map.get("browser", "zen-browser") in clean_dsp:

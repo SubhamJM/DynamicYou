@@ -86,14 +86,14 @@ QtObject {
     signal themeReloaded()
 
     function reload() {
-        if (themeLoader.running) themeLoader.running = false;
-        themeLoader.running = true;
-        
-        if (themeNameLoader.running) themeNameLoader.running = false;
-        themeNameLoader.running = true;
-
-        if (transitionLoader.running) transitionLoader.running = false;
-        transitionLoader.running = true;
+        themeLoader.running = false;
+        themeNameLoader.running = false;
+        transitionLoader.running = false;
+        Qt.callLater(() => {
+            themeLoader.running = true;
+            themeNameLoader.running = true;
+            transitionLoader.running = true;
+        });
     }
 
     Component.onCompleted: theme.reload()

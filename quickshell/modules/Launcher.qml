@@ -12,7 +12,7 @@ ColumnLayout {
     Layout.fillHeight: true
 
     property alias searchInput: searchInput
-    property var allApps: []
+    property var allApps: (typeof root !== "undefined" && root.cachedApps && root.cachedApps.length > 0) ? root.cachedApps : []
     property var runningClients: []
     property var clipboardEntries: []
     property var suggestions: []
@@ -105,9 +105,6 @@ ColumnLayout {
         { name: "Restart Computer", cmd: "systemctl reboot", icon: "restart_alt", action: "restart" },
         { name: "Shut Down", cmd: "systemctl poweroff", icon: "power_settings_new", action: "shutdown" },
         { name: "Screen Snip / Capture", cmd: "grim -g \"$(slurp)\" - | wl-copy", icon: "screenshot_monitor", action: "screenshot" },
-        { name: "Text OCR Capture", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/snip_ocr.sh", icon: "document_scanner", action: "ocr" },
-        { name: "Scan Screen QR Code", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh scan", icon: "qr_code_scanner", action: "qrscan" },
-        { name: "Generate QR from Clipboard", cmd: "bash " + (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh encode", icon: "qr_code_2", action: "qr" },
         { name: "Pomodoro: 25m Focus Sprint", cmd: "qs ipc call notch startPomo 25 focus", icon: "timer", action: "pomo" },
         { name: "Pomodoro: 5m Short Break", cmd: "qs ipc call notch startPomo 5 short_break", icon: "coffee", action: "break" },
         { name: "Stop Pomodoro Timer", cmd: "qs ipc call notch stopPomo", icon: "timer_off", action: "pomostop" },
@@ -118,6 +115,11 @@ ColumnLayout {
     ]
 
     Component.onCompleted: {
+        if (typeof root !== "undefined" && root.cachedApps && root.cachedApps.length > 0) {
+            launcher.allApps = root.cachedApps;
+            launcher.updateSuggestions();
+            launcher.processSearch(searchInput.text);
+        }
         appScanner.running = true;
         clientScanner.running = true;
     }
@@ -126,11 +128,13 @@ ColumnLayout {
         launcher.isCopiedFeedback = false;
         launcher.selectedTileIndex = 0;
         clientScanner.running = true;
-        if (allApps.length === 0 && !appScanner.running) {
+        if (typeof root !== "undefined" && root.cachedApps && root.cachedApps.length > 0 && launcher.allApps.length === 0) {
+            launcher.allApps = root.cachedApps;
+        }
+        launcher.updateSuggestions();
+        launcher.processSearch(searchInput.text);
+        if (!appScanner.running) {
             appScanner.running = true;
-        } else {
-            launcher.updateSuggestions();
-            launcher.processSearch(searchInput.text);
         }
         searchInput.forceActiveFocus();
         if (resultsModel.count > 0) appList.currentIndex = 0;
@@ -380,33 +384,44 @@ ColumnLayout {
         command: ["sh", "-c", `
             python3 -c "
 import os, glob, re, json
-apps = []
-usage = {}
-try:
-    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
-except: pass
 
+cache_file = os.path.expanduser('~/.cache/qs_icon_cache.json')
 icon_cache = {}
-for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
-    if os.path.exists(base):
-        for root, dirs, files in os.walk(base):
-            for f in files:
-                name, ext = os.path.splitext(f)
-                if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
-                    icon_cache[name] = os.path.join(root, f)
-for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
-    base = f'/usr/share/icons/{theme}'
-    if os.path.exists(base):
-        for root, dirs, files in os.walk(base):
-            for f in files:
-                name, ext = os.path.splitext(f)
-                if ext.lower() in ('.png', '.svg') and name not in icon_cache:
-                    icon_cache[name] = os.path.join(root, f)
+if os.path.exists(cache_file):
+    try:
+        with open(cache_file, 'r') as f: icon_cache = json.load(f)
+    except: pass
+
+if not icon_cache:
+    for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, ext = os.path.splitext(f)
+                    if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
+                        icon_cache[name] = os.path.join(root, f)
+    for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
+        base = f'/usr/share/icons/{theme}'
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, ext = os.path.splitext(f)
+                    if ext.lower() in ('.png', '.svg') and name not in icon_cache:
+                        icon_cache[name] = os.path.join(root, f)
+    try:
+        with open(cache_file, 'w') as f: json.dump(icon_cache, f)
+    except: pass
 
 def resolve_icon(i):
     if not i: return ''
     if os.path.isabs(i) and os.path.exists(i): return i
     return icon_cache.get(i, '')
+
+apps = []
+usage = {}
+try:
+    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
+except: pass
 
 paths = ['/usr/share/applications', os.path.expanduser('~/.local/share/applications')]
 for p in paths:
@@ -447,9 +462,12 @@ for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
                         });
                     }
                 }
-                launcher.allApps = tempList;
-                launcher.updateSuggestions();
-                launcher.processSearch(searchInput.text);
+                if (tempList.length > 0) {
+                    if (typeof root !== "undefined") root.cachedApps = tempList;
+                    launcher.allApps = tempList;
+                    launcher.updateSuggestions();
+                    launcher.processSearch(searchInput.text);
+                }
             }
         }
     }
@@ -619,8 +637,6 @@ with open(f, 'w') as file: json.dump(d, file)
                 "!note":  { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
                 "!notes": { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
                 "!todo":  { label: "Open Quick Scratchpad & Tasks", icon: "󰠮", type: "notes" },
-                "!qr":     { label: "Generate QR Code" + (bQuery ? (" for \"" + bQuery + "\"") : " from clipboard"), icon: "󰐳", type: "qr" },
-                "!qrscan": { label: "Scan QR Code from Screen", icon: "󰐳", type: "qrscan" },
                 "!pomo":   { label: "Start Focus Sprint (25m)", icon: "󱎫", type: "pomo" }
             };
 
@@ -750,14 +766,6 @@ with open(f, 'w') as file: json.dump(d, file)
             root.switchMode("cheatsheet", true);
         } else if (launcher.bangType === "notes") {
             root.switchMode("notes", true);
-        } else if (launcher.bangType === "qr") {
-            if (launcher.bangQuery !== "") {
-                Quickshell.execDetached(["bash", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh", "encode", launcher.bangQuery]);
-            } else {
-                root.generateQrFromClipboard();
-            }
-        } else if (launcher.bangType === "qrscan") {
-            root.scanQr();
         } else if (launcher.bangType === "pomo") {
             var pMins = parseInt(launcher.bangQuery) || 25;
             root.startPomodoro(pMins, "focus");
@@ -782,19 +790,6 @@ with open(f, 'w') as file: json.dump(d, file)
         root.collapseToIdle();
 
         var lower = cmd.toLowerCase();
-        if (lower === "qrscan") {
-            root.scanQr();
-            return;
-        }
-        if (lower === "qr" || lower.startsWith("qr ")) {
-            var qrArg = cmd.substring(2).trim();
-            if (qrArg !== "") {
-                Quickshell.execDetached(["bash", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/qr_utils.sh", "encode", qrArg]);
-            } else {
-                root.generateQrFromClipboard();
-            }
-            return;
-        }
         if (lower === "pomo" || lower.startsWith("pomo ") || lower.startsWith("pomostop")) {
             var pParts = lower.split(/\s+/);
             if (lower === "pomostop" || (pParts.length > 1 && pParts[1] === "stop")) {

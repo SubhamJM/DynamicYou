@@ -91,7 +91,7 @@ Item {
 
     Timer {
         id: wifiSettleTimer
-        interval: 1000
+        interval: 350
         repeat: false
         onTriggered: {
             utilModule.isTogglingWifi = false;
@@ -129,7 +129,7 @@ Item {
 
     Timer {
         id: hotspotSettleTimer
-        interval: 1200
+        interval: 400
         repeat: false
         onTriggered: {
             checkHotspotStatus.running = true;
@@ -223,12 +223,6 @@ Item {
             caffeineInhibitor.running = true;
         }
         checkCaffeineState.running = true;
-    }
-
-    // 5. Screen OCR
-    function triggerOcr() {
-        root.collapseToIdle();
-        Quickshell.execDetached(["/bin/sh", "-c", Qt.resolvedUrl("../scripts/snip_ocr.sh").toString().replace("file://", "")]);
     }
 
     // 6. Color Picker (hyprpicker)
@@ -486,14 +480,14 @@ Item {
 
     Timer {
         id: vpnPollTimer
-        interval: 800
+        interval: 400
         repeat: true
         running: false
         property int ticks: 0
         onTriggered: {
             fetchVpnStatus.running = true;
             ticks++;
-            if (ticks > 6) {
+            if (ticks > 8) {
                 running = false;
                 ticks = 0;
             }
@@ -501,7 +495,7 @@ Item {
     }
 
     Timer {
-        interval: 3000
+        interval: 1000
         running: utilModule.visible && root.activeMode === "utility"
         repeat: true
         triggeredOnStart: true
@@ -964,32 +958,11 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Quick Shortcut Badges (Shelf, OCR, QR, Timer, Notes, Clipboard, Theme, Task Manager)
+            // Quick Shortcut Badges (Timer, Notes, Clipboard, Theme, Task Manager)
             RowLayout {
                 spacing: 7
                 Layout.alignment: Qt.AlignRight
                 visible: utilModule.activeSection === ""
-
-                // 1. Drop files / Shelf
-                HeaderQuickBtn {
-                    glyph: "inventory_2"
-                    onClicked: root.switchMode("shelf", false)
-                }
-
-                // 2. OCR Snip
-                HeaderQuickBtn {
-                    glyph: "document_scanner"
-                    onClicked: utilModule.triggerOcr()
-                }
-
-                // 3. QR Code Scanner
-                HeaderQuickBtn {
-                    glyph: "qr_code_scanner"
-                    onClicked: {
-                        root.collapseToIdle();
-                        root.scanQr();
-                    }
-                }
 
                 // 4. Focus & Pomodoro Timer
                 HeaderQuickBtn {
@@ -1275,17 +1248,6 @@ Item {
                     lit: false
                     tint: "#30b0c7"
                     onClicked: utilModule.triggerColorPicker()
-                }
-
-                // 7. Voice Dictation (AI Speech Island)
-                MaterialChipBtn {
-                    glyph: "record_voice_over"
-                    lit: root.isDictationActive
-                    tint: "#ff375f"
-                    onClicked: {
-                        root.collapseToIdle();
-                        root.startDictation();
-                    }
                 }
             }
         }

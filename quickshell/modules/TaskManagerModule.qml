@@ -144,7 +144,7 @@ Item {
     // Auto-refresh timer when module is active
     Timer {
         id: autoRefreshTimer
-        interval: 2000
+        interval: 1000
         repeat: true
         running: taskManagerRoot.visible && root.activeMode === "taskmanager"
         onTriggered: {

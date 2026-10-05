@@ -55,14 +55,12 @@ QtObject {
         "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 460, height: 380, radius: 12 },
-        "shelf":         { width: 460, height: 380, radius: 12 },
         "utility":       { width: 484, height: 342, radius: 26 },
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
         "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 800, height: 540, radius: 18 },
-        "qr":            { width: 340, height: 390, radius: 26 }
+        "taskmanager":   { width: 800, height: 540, radius: 18 }
     })
 
     function calculateUtilityHeight(activeSection) {
@@ -82,11 +80,6 @@ QtObject {
     function calculateNotificationsHeight(count) {
         if (count === 0) return 200;
         return Math.min(480, Math.max(200, 50 + (count * 76)));
-    }
-
-    function calculateShelfHeight(count) {
-        if (count === 0) return 220;
-        return Math.min(440, Math.max(180, 66 + (count * 48)));
     }
 
     function calculateClipboardHeight(count) {

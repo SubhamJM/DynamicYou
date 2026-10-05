@@ -384,12 +384,16 @@ ColumnLayout {
     }
 
     Timer {
-        interval: 4000; running: root.activeMode === "wifi"; repeat: true
+        interval: 1200; running: root.activeMode === "wifi"; repeat: true
         onTriggered: {
             if (!wifiMaster.isScanning && !wifiMaster.isAnyWifiExpanded()) wifiSavedChecker.running = true;
             hotspotStatusChecker.running = true;
             netInfoChecker.running = true;
         }
+    }
+
+    onVisibleChanged: {
+        if (visible) refreshStatus();
     }
 
     Component.onCompleted: refreshStatus()

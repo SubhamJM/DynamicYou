@@ -59,9 +59,15 @@ ColumnLayout {
         }
     }
 
+    Component.onCompleted: {
+        if (btModule.isEnabled && !btBatchBatteryScanner.running) {
+            btBatchBatteryScanner.running = true;
+        }
+    }
+
     // Refresh scanner periodically when Bluetooth popup is active
     Timer {
-        interval: 2500
+        interval: 1000
         running: (root.activeMode === "bluetooth" || (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "bluetooth")) && btModule.isEnabled
         repeat: true
         triggeredOnStart: true

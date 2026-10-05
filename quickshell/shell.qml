@@ -165,193 +165,6 @@ ShellRoot {
         }
     }
 
-    // Voice Dictation Island State (Section 5.4 Voice Dictation / AI Speech Island)
-    property bool isDictationActive: false
-    property string dictationState: "idle" // "idle", "listening", "transcribing", "done", "empty", "error"
-    property string dictationText: ""
-    property int dictationSeconds: 0
-    property real dictationAudioLevel: 0.0
-    property var dictationWavePoints: [0.25, 0.45, 0.7, 0.9, 0.7, 0.45, 0.25]
-    property real dictationPressTime: 0
-    property bool isDictationWorkerReady: false
-
-    Timer {
-        id: dictationTimer
-        interval: 1000
-        repeat: true
-        running: root.isDictationActive && root.dictationState === "listening"
-        onTriggered: {
-            root.dictationSeconds++;
-            if (root.dictationSeconds >= 60) {
-                root.stopDictation();
-            }
-        }
-    }
-
-    Timer {
-        id: dictationAutoDismissTimer
-        interval: 1600
-        repeat: false
-        onTriggered: {
-            root.isDictationActive = false;
-            root.dictationState = "idle";
-            root.dictationText = "";
-            root.dictationSeconds = 0;
-            if (root.activeMode === "idle" && typeof notchHoverHandler !== "undefined" && !notchHoverHandler.hovered) {
-                root.collapseToIdle();
-            }
-        }
-    }
-
-    function startDictation() {
-        if (root.activeMode !== "idle" && root.activeMode !== "hover") {
-            root.collapseToIdle();
-        }
-        root.isDictationActive = true;
-        root.dictationState = "listening";
-        root.dictationText = "";
-        root.dictationSeconds = 0;
-        dictationAutoDismissTimer.stop();
-        if (dictationWorker.running) {
-            dictationWorker.write("START\n");
-        }
-    }
-
-    function stopDictation() {
-        if (!root.isDictationActive) return;
-        dictationTimer.stop();
-        root.dictationState = "transcribing";
-        if (dictationWorker.running) {
-            dictationWorker.write("STOP\n");
-        }
-    }
-
-    function cancelDictation() {
-        if (!root.isDictationActive) return;
-        dictationTimer.stop();
-        dictationAutoDismissTimer.stop();
-        root.isDictationActive = false;
-        root.dictationState = "idle";
-        root.dictationText = "";
-        root.dictationSeconds = 0;
-        if (dictationWorker.running) {
-            dictationWorker.write("CANCEL\n");
-        }
-        if (root.activeMode === "idle" && typeof notchHoverHandler !== "undefined" && !notchHoverHandler.hovered) {
-            root.collapseToIdle();
-        }
-    }
-
-    function toggleDictation() {
-        if (root.isDictationActive && root.dictationState === "listening") {
-            root.stopDictation();
-        } else {
-            root.startDictation();
-        }
-    }
-
-    function handleDictationEvent(msg) {
-        if (!msg || !msg.event) return;
-        switch(msg.event) {
-            case "ready":
-                root.isDictationWorkerReady = true;
-                break;
-            case "state":
-                root.dictationState = msg.state;
-                break;
-            case "level":
-                root.dictationAudioLevel = msg.level || 0;
-                root.dictationWavePoints = msg.bars || [0.25, 0.45, 0.7, 0.9, 0.7, 0.45, 0.25];
-                break;
-            case "done":
-                root.dictationState = "done";
-                root.dictationText = msg.text || "";
-                dictationAutoDismissTimer.restart();
-                break;
-            case "empty":
-                root.dictationState = "empty";
-                root.dictationText = "No speech detected";
-                dictationAutoDismissTimer.restart();
-                break;
-            case "cancelled":
-                root.isDictationActive = false;
-                root.dictationState = "idle";
-                root.dictationText = "";
-                break;
-            case "error":
-                root.dictationState = "error";
-                root.dictationText = msg.message || "Error";
-                dictationAutoDismissTimer.restart();
-                break;
-        }
-    }
-
-    // Background Voice Dictation Worker Process
-    Process {
-        id: dictationWorker
-        command: [
-            Qt.resolvedUrl("scripts/voice_dictation.sh").toString().replace(/^file:\/\//, ""),
-            "worker"
-        ]
-        running: true
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: (data) => {
-                var raw = data.trim();
-                if (!raw) return;
-                try {
-                    var msg = JSON.parse(raw);
-                    root.handleDictationEvent(msg);
-                } catch (e) {
-                    // Ignore non-json logs
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // SECTION 4.3: QR CODE UTILITIES STATE & ACTIONS
-    // ========================================================
-    property string qrContentText: ""
-    property string qrScannedText: ""
-    property bool isQrScannedIslandActive: false
-
-    Timer {
-        id: qrScannedIslandTimer
-        interval: 7000
-        repeat: false
-        onTriggered: {
-            root.isQrScannedIslandActive = false;
-            root.qrScannedText = "";
-            if (root.activeMode === "idle" && typeof notchHoverHandler !== "undefined" && !notchHoverHandler.hovered) {
-                root.collapseToIdle();
-            }
-        }
-    }
-
-    function scanQr() {
-        Quickshell.execDetached(["bash", Qt.resolvedUrl("scripts/qr_utils.sh").toString().replace(/^file:\/\//, ""), "scan"]);
-    }
-
-    function generateQrFromClipboard() {
-        Quickshell.execDetached(["bash", Qt.resolvedUrl("scripts/qr_utils.sh").toString().replace(/^file:\/\//, ""), "encode"]);
-    }
-
-    function showQr(text) {
-        root.qrContentText = text || "";
-        root.switchMode("qr", true);
-    }
-
-    function onQrScanned(text) {
-        if (!text) return;
-        root.qrScannedText = text;
-        root.isQrScannedIslandActive = true;
-        qrScannedIslandTimer.restart();
-        if (root.activeMode !== "idle" && root.activeMode !== "hover") {
-            root.collapseToIdle();
-        }
-    }
-
     // ========================================================
     // SECTION 4.4: DYNAMIC ISLAND POMODORO & FOCUS TIMER STATE
     // ========================================================
@@ -561,16 +374,256 @@ ShellRoot {
     property string loadedExpandedMode: ""
     property string requestedUtilitySection: ""
     property string requestedMusicPanel: ""
-    property var pendingDropUrls: []
+
+    // Persistent caches for instant zero-latency module rendering across the entire shell
+    property var cachedApps: []
+    property var cachedWallpapers: []
+    property string cachedActiveWallpaper: ""
+    property var cachedBatteryTelemetry: null
+    property var cachedThemes: []
 
     Timer {
         id: moduleUnloadTimer
-        interval: NotchConfig.animNotchResize // 260ms matches collapse animation
+        interval: 30000 // 30s grace period keeps active modules warm and prevents cold reload lag
         repeat: false
         onTriggered: {
             if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd") {
                 root.loadedExpandedMode = "";
             }
+        }
+    }
+
+    // Background Global App Scanner (runs at shell startup and periodically)
+    Process {
+        id: globalAppScanner
+        running: false
+        command: ["sh", "-c", `
+            python3 -c "
+import os, glob, re, json
+
+cache_file = os.path.expanduser('~/.cache/qs_icon_cache.json')
+icon_cache = {}
+if os.path.exists(cache_file):
+    try:
+        with open(cache_file, 'r') as f: icon_cache = json.load(f)
+    except: pass
+
+if not icon_cache:
+    for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, ext = os.path.splitext(f)
+                    if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
+                        icon_cache[name] = os.path.join(root, f)
+    for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
+        base = f'/usr/share/icons/{theme}'
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, ext = os.path.splitext(f)
+                    if ext.lower() in ('.png', '.svg') and name not in icon_cache:
+                        icon_cache[name] = os.path.join(root, f)
+    try:
+        with open(cache_file, 'w') as f: json.dump(icon_cache, f)
+    except: pass
+
+def resolve_icon(i):
+    if not i: return ''
+    if os.path.isabs(i) and os.path.exists(i): return i
+    return icon_cache.get(i, '')
+
+apps = []
+usage = {}
+try:
+    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
+except: pass
+
+paths = ['/usr/share/applications', os.path.expanduser('~/.local/share/applications')]
+for p in paths:
+    for f in glob.glob(p + '/*.desktop'):
+        try:
+            with open(f, 'r', encoding='utf-8', errors='ignore') as file:
+                content = file.read()
+                if 'NoDisplay=true' in content: continue
+                name = re.search(r'^Name=(.*)$', content, re.M)
+                exec_cmd = re.search(r'^Exec=(.*)$', content, re.M)
+                icon = re.search(r'^Icon=(.*)$', content, re.M)
+                comment = re.search(r'^Comment=(.*)$', content, re.M)
+                if name and exec_cmd:
+                    n = name.group(1).strip()
+                    e = re.sub(r'%[fFuUiDc]', '', exec_cmd.group(1)).strip()
+                    i_raw = icon.group(1).strip() if (icon and icon.group(1)) else ''
+                    i = resolve_icon(i_raw)
+                    c = comment.group(1).strip() if comment else ''
+                    u = usage.get(e, 0)
+                    apps.append((u, n, e, i, c))
+        except: pass
+apps = sorted(list(set(apps)), key=lambda x: (-x[0], x[1].lower()))
+for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
+"
+        `]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.split("\n");
+                var tempList = [];
+                for (var i = 0; i < lines.length; i++) {
+                    var parts = lines[i].split("|||");
+                    if (parts.length >= 3) {
+                        tempList.push({
+                            "name": parts[0],
+                            "exec": parts[1],
+                            "iconName": parts[2],
+                            "comment": parts.length > 3 ? parts[3] : ""
+                        });
+                    }
+                }
+                if (tempList.length > 0) {
+                    root.cachedApps = tempList;
+                    if (root.launcherMod) {
+                        root.launcherMod.allApps = tempList;
+                        root.launcherMod.updateSuggestions();
+                        root.launcherMod.processSearch(root.launcherMod.searchInput.text);
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: globalAppScanTimer
+        interval: 12000 // 12 seconds background app scanner
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!globalAppScanner.running) globalAppScanner.running = true;
+        }
+    }
+
+    // Background Global Wallpaper Scanner
+    Process {
+        id: globalWallpaperScanner
+        running: false
+        command: ["sh", "-c", `python3 -c "
+import os, glob, subprocess
+
+theme = '${Theme.currentThemeName}'.strip()
+if not theme or theme.lower() == 'default':
+    name_file = os.path.expanduser('~/.config/active-theme/theme-name.txt')
+    if os.path.exists(name_file):
+        try:
+            with open(name_file, 'r') as f:
+                t = f.read().strip()
+                if t: theme = t
+        except Exception:
+            pass
+
+theme_lower = theme.lower()
+
+candidates = [
+    os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/current/Wallpapers/{theme}')
+]
+wall_dir = ''
+for c in candidates:
+    if os.path.isdir(c):
+        wall_dir = c
+        break
+
+if not wall_dir:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+        if os.path.isdir(base):
+            for d in os.listdir(base):
+                if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
+                    wall_dir = os.path.join(base, d)
+                    break
+        if wall_dir:
+            break
+
+active_wall = ''
+try:
+    p = subprocess.run(['awww', 'query'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    for line in p.stdout.splitlines():
+        if 'image:' in line.lower():
+            active_wall = line.split('image:', 1)[1].strip()
+            break
+        elif line.strip():
+            active_wall = line.strip().split()[-1]
+            break
+except Exception:
+    pass
+
+exts = ('.jpg', '.jpeg', '.png', '.webp')
+files = []
+if wall_dir and os.path.exists(wall_dir):
+    for root_dir, dirs, fnames in os.walk(wall_dir, followlinks=True):
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
+        for fn in fnames:
+            if fn.lower().endswith(exts) and not fn.startswith('.'):
+                files.append(os.path.join(root_dir, fn))
+
+if not files:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
+        if os.path.isdir(base):
+            for root_dir, dirs, fnames in os.walk(base, followlinks=True):
+                dirs[:] = [d for d in dirs if not d.startswith('.')]
+                for fn in fnames:
+                    if fn.lower().endswith(exts) and not fn.startswith('.'):
+                        files.append(os.path.join(root_dir, fn))
+
+sorted_files = sorted(list(set(files)))
+for f in sorted_files:
+    name = os.path.basename(f)
+    print(f'{name}|||{f}|||{active_wall}')
+"
+        `]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.trim().split("\n");
+                var temp = [];
+                var activeFromQuery = "";
+
+                for (var i = 0; i < lines.length; i++) {
+                    var parts = lines[i].split("|||");
+                    if (parts.length >= 2) {
+                        temp.push({
+                            "fileName": parts[0],
+                            "filePath": parts[1]
+                        });
+                        if (parts.length >= 3 && parts[2].trim() !== "") {
+                            activeFromQuery = parts[2].trim();
+                        }
+                    }
+                }
+
+                if (temp.length > 0) {
+                    root.cachedWallpapers = temp;
+                    if (activeFromQuery !== "") root.cachedActiveWallpaper = activeFromQuery;
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: globalWallpaperScanTimer
+        interval: 8000 // 8 seconds background wallpaper scan
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!globalWallpaperScanner.running) globalWallpaperScanner.running = true;
+        }
+    }
+
+    Connections {
+        target: Theme
+        function onCurrentThemeNameChanged() {
+            if (!globalWallpaperScanner.running) globalWallpaperScanner.running = true;
         }
     }
 
@@ -587,7 +640,6 @@ ShellRoot {
             case "powermenu":     return Qt.resolvedUrl("modules/PowerMenu.qml");
             case "calendar":      return Qt.resolvedUrl("modules/CalendarModule.qml");
             case "clipboard":     return Qt.resolvedUrl("modules/ClipboardModule.qml");
-            case "shelf":         return Qt.resolvedUrl("modules/ShelfModule.qml");
             case "notifications": return Qt.resolvedUrl("modules/NotificationModule.qml");
             case "switcher":      return Qt.resolvedUrl("modules/WindowSwitcher.qml");
             case "utility":       return Qt.resolvedUrl("modules/UtilityModule.qml");
@@ -595,7 +647,6 @@ ShellRoot {
             case "notes":         return Qt.resolvedUrl("modules/NotesModule.qml");
             case "cheatsheet":    return Qt.resolvedUrl("modules/KeybindsModule.qml");
             case "taskmanager":   return Qt.resolvedUrl("modules/TaskManagerModule.qml");
-            case "qr":            return Qt.resolvedUrl("modules/QrModule.qml");
             default:              return "";
         }
     }
@@ -612,7 +663,6 @@ ShellRoot {
     readonly property var powerMod:      (root.loadedExpandedMode === "powermenu") ? moduleLoader.item : null
     readonly property var calMod:        (root.loadedExpandedMode === "calendar") ? moduleLoader.item : null
     readonly property var clipMod:       (root.loadedExpandedMode === "clipboard") ? moduleLoader.item : null
-    readonly property var shelfMod:      (root.loadedExpandedMode === "shelf") ? moduleLoader.item : null
     readonly property var notifMod:      (root.loadedExpandedMode === "notifications") ? moduleLoader.item : null
     readonly property var switcherMod:   (root.loadedExpandedMode === "switcher") ? moduleLoader.item : null
     readonly property var utilMod:       (root.loadedExpandedMode === "utility") ? moduleLoader.item : null
@@ -620,7 +670,6 @@ ShellRoot {
     readonly property var notesMod:      (root.loadedExpandedMode === "notes") ? moduleLoader.item : null
     readonly property var cheatsheetMod: (root.loadedExpandedMode === "cheatsheet") ? moduleLoader.item : null
     readonly property var taskMgrMod:    (root.loadedExpandedMode === "taskmanager") ? moduleLoader.item : null
-    readonly property var qrMod:         (root.loadedExpandedMode === "qr") ? moduleLoader.item : null
 
     function openUtility(section = "", fromShortcut = false) {
         root.isWorkspacePeeking = false;
@@ -643,13 +692,11 @@ ShellRoot {
         else if (activeMode === "wallpaper" && root.wallMod) root.wallMod.wallpaperGrid.forceActiveFocus();
         else if (activeMode === "transition" && root.transMod) root.transMod.transitionGrid.forceActiveFocus();
         else if (activeMode === "clipboard" && root.clipMod) root.clipMod.searchInput.forceActiveFocus();
-        else if (activeMode === "shelf" && root.shelfMod) root.shelfMod.forceShelfFocus();
         else if (activeMode === "powermenu" && root.powerMod) root.powerMod.forceActiveFocus();
         else if (activeMode === "notes" && root.notesMod) root.notesMod.forceNotesFocus();
         else if (activeMode === "cheatsheet" && root.cheatsheetMod) root.cheatsheetMod.forceSearchFocus();
         else if (activeMode === "taskmanager" && root.taskMgrMod) root.taskMgrMod.forceSearchFocus();
         else if (activeMode === "music" && root.musicMod) root.musicMod.forceActiveFocus();
-        else if (activeMode === "qr" && root.qrMod) root.qrMod.forceQrFocus();
         else if (typeof moduleLoader !== "undefined" && moduleLoader.item) moduleLoader.item.forceActiveFocus();
         else notchContainer.forceActiveFocus();
     }
@@ -685,7 +732,6 @@ ShellRoot {
             if (activeMode !== "launcher" && root.launcherMod) root.launcherMod.searchInput.text = "";
             if (activeMode !== "theme" && root.themeMod) root.themeMod.resetSearch();
             if (activeMode !== "clipboard" && root.clipMod) root.clipMod.searchInput.text = "";
-            if (activeMode !== "shelf" && root.shelfMod) root.shelfMod.searchInput.text = "";
             if (activeMode !== "taskmanager" && root.taskMgrMod) root.taskMgrMod.searchInput.text = "";
         });
     }
@@ -711,20 +757,11 @@ ShellRoot {
         if (root.isPomoFinishedIslandActive && root.isDashMode) {
             return 44;
         }
-        if (root.isQrScannedIslandActive && root.isDashMode) {
-            return 42;
-        }
-        if (root.isDictationActive && root.isDashMode) {
-            return 42;
-        }
         if (root.isScreenshotIslandActive && root.isDashMode) {
             return 44;
         }
         if (root.isNotifPopupActive && root.isDashMode) {
             return 42;
-        }
-        if (activeMode === "qr") {
-            return 390;
         }
         if (activeMode === "cheatsheet" && root.cheatsheetMod && root.cheatsheetMod.isAddingMode) {
             return 500;
@@ -740,9 +777,6 @@ ShellRoot {
         }
         if (activeMode === "notifications") {
             return NotchConfig.calculateNotificationsHeight(globalNotifModel.count);
-        }
-        if (activeMode === "shelf") {
-            return NotchConfig.calculateShelfHeight(root.shelfMod ? root.shelfMod.calculatedCount : 0);
         }
         if (activeMode === "clipboard") {
             return NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
@@ -781,7 +815,7 @@ ShellRoot {
     } 
 
     readonly property int targetRadius: {
-        if (root.isDictationActive || (dashMod && dashMod.isIslandActive) || (root.isNotifPopupActive && root.isDashMode) || (root.isScreenshotIslandActive && root.isDashMode) || (root.isPomoFinishedIslandActive && root.isDashMode) || (root.isQrScannedIslandActive && root.isDashMode)) {
+        if ((dashMod && dashMod.isIslandActive) || (root.isNotifPopupActive && root.isDashMode) || (root.isScreenshotIslandActive && root.isDashMode) || (root.isPomoFinishedIslandActive && root.isDashMode)) {
             return 21;
         }
         if (activeMode === "idle") {
@@ -891,7 +925,6 @@ ShellRoot {
     GlobalShortcut { name: "togglePowerMenuNotch"; onPressed: root.switchMode("powermenu", true) }
     GlobalShortcut { name: "toggleCalendarNotch"; onPressed: root.switchMode("calendar", true) }
     GlobalShortcut { name: "toggleClipboardNotch"; onPressed: root.switchMode("clipboard", true) }
-    GlobalShortcut { name: "toggleShelfNotch"; onPressed: root.switchMode("shelf", true) }
     GlobalShortcut { name: "toggleNotificationsNotch"; onPressed: root.switchMode("notifications", true) }
     GlobalShortcut { name: "toggleDndNotch"; onPressed: root.dndEnabled = !root.dndEnabled }
     GlobalShortcut { 
@@ -927,61 +960,9 @@ ShellRoot {
         name: "toggleRecorderNotch"
         onPressed: root.switchMode("recorder", true)
     }
-    GlobalShortcut { 
-        name: "triggerScreenOcr"
-        onPressed: {
-            if (root.activeMode !== "idle" && root.activeMode !== "hover") {
-                root.collapseToIdle();
-            }
-            if (typeof dashMod !== "undefined") dashMod.startOcr();
-        }
-    }
-
-    GlobalShortcut {
-        name: "scanScreenQr"
-        onPressed: {
-            if (root.activeMode !== "idle" && root.activeMode !== "hover") {
-                root.collapseToIdle();
-            }
-            root.scanQr();
-        }
-    }
-
-    GlobalShortcut {
-        name: "generateClipboardQr"
-        onPressed: root.generateQrFromClipboard()
-    }
-
     GlobalShortcut {
         name: "togglePomo"
         onPressed: root.togglePomodoroPause()
-    }
-
-    GlobalShortcut {
-        name: "voiceDictationPress"
-        onPressed: {
-            root.dictationPressTime = Date.now();
-            if (root.isDictationActive && root.dictationState === "listening") {
-                root.stopDictation();
-            } else if (!root.isDictationActive) {
-                root.startDictation();
-            }
-        }
-    }
-
-    GlobalShortcut {
-        name: "voiceDictationRelease"
-        onPressed: {
-            var elapsed = Date.now() - root.dictationPressTime;
-            if (elapsed > 350 && root.isDictationActive && root.dictationState === "listening") {
-                root.stopDictation();
-            }
-        }
-    }
-
-    GlobalShortcut {
-        name: "toggleDictation"
-        onPressed: root.toggleDictation()
     }
 
     property bool switcherQuickTapArmed: false
@@ -1125,34 +1106,6 @@ ShellRoot {
             root.triggerScreenshotHub(filePath);
             return "OK";
         }
-        function startDictation(): string {
-            root.startDictation();
-            return "OK";
-        }
-        function stopDictation(): string {
-            root.stopDictation();
-            return "OK";
-        }
-        function toggleDictation(): string {
-            root.toggleDictation();
-            return "OK";
-        }
-        function cancelDictation(): string {
-            root.cancelDictation();
-            return "OK";
-        }
-        function scanQr(): string {
-            root.scanQr();
-            return "OK";
-        }
-        function showQr(text: string): string {
-            root.showQr(text);
-            return "OK";
-        }
-        function onQrScanned(text: string): string {
-            root.onQrScanned(text);
-            return "OK";
-        }
         function startPomo(minutes: int, mode: string): string {
             root.startPomodoro(minutes, mode);
             return "OK";
@@ -1181,7 +1134,6 @@ ShellRoot {
         active: false
         windows: [panel]
         onCleared: {
-            if (root.shelfMod && root.shelfMod.isDragging) return;
             root.collapseToIdle();
         }
     }
@@ -1229,7 +1181,7 @@ ShellRoot {
                 : (root.activeMode === "hover" ? hoverMaskArea : notchContainer)
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher" && !root.isDictationActive)
+        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher")
             ? WlrKeyboardFocus.Exclusive
             : WlrKeyboardFocus.None
 
@@ -1240,11 +1192,7 @@ ShellRoot {
             z: 0
             enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
             onClicked: {
-                if (root.isDictationActive) {
-                    root.cancelDictation();
-                } else {
-                    root.collapseToIdle();
-                }
+                root.collapseToIdle();
             }
         }
 
@@ -1263,11 +1211,7 @@ ShellRoot {
             focus: root.activeMode !== "idle" && root.activeMode !== "hover"
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Escape) {
-                    if (root.isDictationActive) {
-                        root.cancelDictation();
-                    } else {
-                        root.collapseToIdle();
-                    }
+                    root.collapseToIdle();
                     event.accepted = true;
                 } else {
                     root.regainFocus();
@@ -1293,34 +1237,6 @@ ShellRoot {
                 onExited: {
                     if (root.activeMode === "hover" && !notchHoverHandler.hovered) {
                         root.collapseToIdle();
-                    }
-                }
-            }
-
-            DropArea {
-                id: notchDropArea
-                anchors.fill: parent
-                keys: ["text/uri-list"]
-
-                onEntered: (drag) => {
-                    if (root.shelfMod && root.shelfMod.isDragging) return;
-                    if (drag.hasUrls) {
-                        if (root.activeMode !== "shelf") {
-                            root.switchMode("shelf", false);
-                        }
-                        drag.acceptProposedAction();
-                    }
-                }
-
-                onDropped: (drop) => {
-                    if (root.shelfMod && root.shelfMod.isDragging) return;
-                    if (drop.hasUrls) {
-                        if (root.shelfMod) {
-                            root.shelfMod.addDroppedFiles(drop.urls);
-                        } else {
-                            root.pendingDropUrls = drop.urls;
-                        }
-                        drop.acceptProposedAction();
                     }
                 }
             }
@@ -1454,9 +1370,6 @@ ShellRoot {
                                     item.togglePanel(root.requestedMusicPanel);
                                     root.requestedMusicPanel = "";
                                 }
-                            } else if (root.loadedExpandedMode === "shelf" && root.pendingDropUrls.length > 0) {
-                                if (typeof item.addDroppedFiles === "function") item.addDroppedFiles(root.pendingDropUrls);
-                                root.pendingDropUrls = [];
                             } else if (root.loadedExpandedMode === "switcher") {
                                 if (typeof item.refreshClients === "function") item.refreshClients();
                             }
@@ -1501,7 +1414,6 @@ ShellRoot {
                     enabled: root.activeMode !== "osd"
                     cursorShape: Qt.ArrowCursor
                     onHoveredChanged: {
-                        if (root.shelfMod && root.shelfMod.isDragging) return;
                         if (root.utilMod && (root.utilMod.isDraggingVolume || root.utilMod.isDraggingBrightness)) return;
                         if (root.musicMod && root.musicMod.isDraggingSeek) return;
                         if (hovered) {

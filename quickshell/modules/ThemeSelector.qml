@@ -48,7 +48,7 @@ ColumnLayout {
     property var filteredThemes: []
 
     Component.onCompleted: {
-        themeScanner.running = true;
+        themeSelector.scanThemes();
     }
 
     Connections {
@@ -73,8 +73,8 @@ ColumnLayout {
 
     onVisibleChanged: {
         if (visible) {
-            if (allThemes.length === 0 && !themeScanner.running) {
-                themeScanner.running = true;
+            if (allThemes.length === 0) {
+                themeSelector.scanThemes();
             } else {
                 filterThemes();
                 selectActiveTheme(false);
@@ -133,12 +133,20 @@ ColumnLayout {
         if (carousel.currentIndex >= 0 && carousel.currentIndex < filteredThemes.length) {
             var t = filteredThemes[carousel.currentIndex];
             if (t && t.rawName) {
-                if (themeRunner.running) themeRunner.running = false;
-                themeRunner.command = ["sh", "-c", "~/.config/scripts/apply-theme.sh " + t.rawName];
-                themeRunner.running = true;
+                var home = Quickshell.env("HOME") || "/home/ricing";
+                var scriptPath = home + "/.config/scripts/apply-theme.sh";
+                Quickshell.execDetached(["bash", scriptPath, t.rawName]);
+                Theme.currentThemeName = t.rawName;
                 root.activeMode = "idle";
             }
         }
+    }
+
+    function scanThemes() {
+        if (themeScanner.running) themeScanner.running = false;
+        Qt.callLater(() => {
+            themeScanner.running = true;
+        });
     }
 
     // Scans all themes in ~/.config/themes via python helper
@@ -160,12 +168,6 @@ ColumnLayout {
                 }
             }
         }
-    }
-
-    Process {
-        id: themeRunner
-        running: false
-        onExited: Theme.reload()
     }
 
     // ==========================================

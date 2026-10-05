@@ -5,7 +5,7 @@ import re
 
 def get_battery(mac):
     try:
-        info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, timeout=1.5)
+        info = subprocess.check_output(['bluetoothctl', 'info', mac], text=True, timeout=0.8)
         m = re.search(r'Battery Percentage:.*?\((\d+)\)', info)
         if m:
             return m.group(1) + '%'
@@ -25,7 +25,7 @@ def mode_current():
         except Exception:
             pass
     try:
-        out = subprocess.check_output(['bluetoothctl', 'devices', 'Connected'], text=True, timeout=1.5).strip()
+        out = subprocess.check_output(['bluetoothctl', 'devices', 'Connected'], text=True, timeout=0.8).strip()
         lines = [l for l in out.split('\n') if l.strip().startswith('Device')]
         if lines:
             parts = lines[0].split(' ', 2)
@@ -40,7 +40,10 @@ def mode_current():
 
 def mode_all():
     try:
-        out = subprocess.check_output(['bluetoothctl', 'devices'], text=True, timeout=1.5).strip()
+        # Check connected devices first since disconnected devices don't have battery
+        out = subprocess.check_output(['bluetoothctl', 'devices', 'Connected'], text=True, timeout=0.8).strip()
+        if not out:
+            out = subprocess.check_output(['bluetoothctl', 'devices'], text=True, timeout=0.8).strip()
         for line in out.split('\n'):
             line = line.strip()
             if line.startswith('Device'):
