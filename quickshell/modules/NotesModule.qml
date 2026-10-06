@@ -10,6 +10,7 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
     focus: true
+
     Keys.onEscapePressed: (event) => {
         if (notesRoot.isSaveDrawerOpen) {
             notesRoot.isSaveDrawerOpen = false;
@@ -19,19 +20,37 @@ Item {
         event.accepted = true;
     }
 
-    property int activeTab: 0 // 0: Scratchpad, 1: Todos
-    property string scratchpadText: ""
+    // ==========================================
+    // MATERIAL YOU (M3) THEME & STATE
+    // ==========================================
+    property int activeTab: 0 // 0: Notepad, 1: Tasks
+    property bool isWideMode: false
+
+    // Material 3 Dynamic Tonal Palette (Pixel Aesthetic)
+    readonly property color m3Primary: Theme.accent ?? "#89b4fa"
+    readonly property color m3OnPrimary: "#0a0e14"
+    readonly property color m3PrimaryContainer: Qt.rgba(m3Primary.r, m3Primary.g, m3Primary.b, 0.18)
+    readonly property color m3OnPrimaryContainer: m3Primary
+    readonly property color m3SurfaceContainer: Qt.rgba(255, 255, 255, 0.05)
+    readonly property color m3SurfaceContainerHigh: Qt.rgba(255, 255, 255, 0.09)
+    readonly property color m3SurfaceContainerHighest: Qt.rgba(255, 255, 255, 0.14)
+    readonly property color m3TextPrimary: "#f8fafc"
+    readonly property color m3TextSecondary: Qt.rgba(255, 255, 255, 0.65)
+    readonly property color m3TextMuted: Qt.rgba(255, 255, 255, 0.38)
+    readonly property color m3Error: "#f87171"
+    readonly property color m3ErrorContainer: Qt.rgba(248, 113, 113, 0.18)
+    readonly property color m3Success: "#51cf66"
+    readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+
+    // Status Badges
     property bool isSaving: false
     property bool justSaved: false
     property bool justCopied: false
     property bool justExported: false
 
-    // Wide mode toggle (680px vs 820px)
-    property bool isWideMode: false
-
     // File export state
     property bool isSaveDrawerOpen: false
-    property string exportPath: "~/Documents/scratchpad.txt"
+    property string exportPath: "~/Documents/notes.txt"
     readonly property string expandedExportPath: {
         if (exportPath.startsWith("~/")) {
             return Quickshell.env("HOME") + exportPath.substring(1);
@@ -39,24 +58,21 @@ Item {
         return exportPath;
     }
 
+    // Models
     ListModel { id: todoModel }
-
-    readonly property color accentColor: Theme.colors.accent ?? "#7aa2f7"
-    readonly property color cardColor: Theme.colors.card_bg ?? "#1f2335"
-    readonly property color hoverColor: Theme.colors.hover_bg ?? "#24283b"
-    readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+    property string scratchpadContent: ""
 
     readonly property int completedTodoCount: {
-        var c = 0;
+        var count = 0;
         for (var i = 0; i < todoModel.count; i++) {
-            if (todoModel.get(i).done) c++;
+            if (todoModel.get(i).done) count++;
         }
-        return c;
+        return count;
     }
 
     function forceNotesFocus() {
         if (activeTab === 0) {
-            scratchArea.forceActiveFocus();
+            notepadArea.forceActiveFocus();
         } else {
             newTodoInput.forceActiveFocus();
         }
@@ -76,10 +92,9 @@ Item {
         loadProcess.running = true;
     }
 
-    // ========================================================
-    // PROCESSES: LOAD, SAVE & EXPORT
-    // ========================================================
-    // 1. Load from disk
+    // ==========================================
+    // BACKEND LOAD & SAVE PROCESSES
+    // ==========================================
     Process {
         id: loadProcess
         running: false
@@ -89,9 +104,9 @@ Item {
                 if (!this.text || this.text.trim() === "") return;
                 try {
                     var data = JSON.parse(this.text);
-                    if (data.scratchpad !== undefined && !scratchArea.activeFocus) {
-                        notesRoot.scratchpadText = data.scratchpad;
-                        scratchArea.text = data.scratchpad;
+                    if (data.scratchpad !== undefined && !notepadArea.activeFocus) {
+                        notesRoot.scratchpadContent = data.scratchpad;
+                        notepadArea.text = data.scratchpad;
                     }
                     if (Array.isArray(data.todos)) {
                         todoModel.clear();
@@ -106,14 +121,14 @@ Item {
         }
     }
 
-    // 2. Auto-save Scratchpad
+    // Auto-save Notepad
     Timer {
         id: autoSaveDebounce
         interval: 350
         repeat: false
         onTriggered: {
             notesRoot.isSaving = true;
-            var enc = encodeURIComponent(scratchArea.text);
+            var enc = encodeURIComponent(notepadArea.text);
             saveScratchProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "save_scratchpad_enc", enc];
             saveScratchProcess.running = true;
         }
@@ -131,7 +146,7 @@ Item {
         }
     }
 
-    // 3. Save Todos
+    // Save Todos
     function saveTodosToDisk() {
         var list = [];
         for (var i = 0; i < todoModel.count; i++) {
@@ -142,8 +157,7 @@ Item {
                 "done": item.done
             });
         }
-        var jsonStr = JSON.stringify(list);
-        var enc = encodeURIComponent(jsonStr);
+        var enc = encodeURIComponent(JSON.stringify(list));
         saveTodosProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "save_todos_enc", enc];
         saveTodosProcess.running = true;
     }
@@ -159,12 +173,25 @@ Item {
         }
     }
 
-    // 4. Export Scratchpad as .txt to custom path
-    function exportScratchpadToDisk(targetPath) {
+    // Export As File (.txt or .md)
+    function exportContentToDisk(targetPath) {
         var path = targetPath.trim();
         if (path === "") return;
         notesRoot.exportPath = path;
-        var enc = encodeURIComponent(scratchArea.text);
+
+        var textContent = "";
+        if (notesRoot.activeTab === 0) {
+            textContent = notepadArea.text;
+        } else {
+            var lines = ["# Tasks & Checklist\n"];
+            for (var i = 0; i < todoModel.count; i++) {
+                var item = todoModel.get(i);
+                lines.push("- [" + (item.done ? "x" : " ") + "] " + item.text);
+            }
+            textContent = lines.join("\n");
+        }
+
+        var enc = encodeURIComponent(textContent);
         exportProcess.targetPath = path;
         exportProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "export_txt", path, enc];
         exportProcess.running = true;
@@ -181,23 +208,23 @@ Item {
                     notesRoot.justExported = true;
                     notesRoot.isSaveDrawerOpen = false;
                     savedBadgeTimer.restart();
-                    Quickshell.execDetached(["notify-send", "-a", "Quickshell Notes", "Scratchpad Saved", "Successfully saved to " + exportProcess.targetPath]);
+                    Quickshell.execDetached(["notify-send", "-a", "Quickshell Notes", "Saved Successfully", "Exported to " + exportProcess.targetPath]);
                 }
             }
         }
     }
 
-    // 5. System native file picker (kdialog)
+    // System native file picker (kdialog)
     Process {
         id: fileDialogProcess
         running: false
-        command: ["kdialog", "--getsavefilename", notesRoot.expandedExportPath, "Text files (*.txt);;All files (*)"]
+        command: ["kdialog", "--getsavefilename", notesRoot.expandedExportPath, "Text files (*.txt);;Markdown files (*.md);;All files (*)"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var chosen = this.text.trim();
                 if (chosen !== "") {
                     exportPathField.text = chosen;
-                    notesRoot.exportScratchpadToDisk(chosen);
+                    notesRoot.exportContentToDisk(chosen);
                 }
             }
         }
@@ -214,18 +241,30 @@ Item {
         }
     }
 
-    function copyScratchpad() {
-        Quickshell.execDetached(["sh", "-c", "printf '%s' " + JSON.stringify(scratchArea.text) + " | wl-copy"]);
+    function copyActiveContent() {
+        var content = "";
+        if (notesRoot.activeTab === 0) {
+            content = notepadArea.text;
+        } else {
+            var lines = [];
+            for (var i = 0; i < todoModel.count; i++) {
+                var item = todoModel.get(i);
+                lines.push("- [" + (item.done ? "x" : " ") + "] " + item.text);
+            }
+            content = lines.join("\n");
+        }
+        Quickshell.execDetached(["sh", "-c", "printf '%s' " + JSON.stringify(content) + " | wl-copy"]);
         notesRoot.justCopied = true;
         savedBadgeTimer.restart();
     }
 
-    function clearScratchpad() {
-        scratchArea.text = "";
-        notesRoot.scratchpadText = "";
+    function clearNotepad() {
+        notepadArea.text = "";
+        notesRoot.scratchpadContent = "";
         autoSaveDebounce.restart();
     }
 
+    // Task Actions
     function addNewTodo(txt) {
         var clean = txt.trim();
         if (clean === "") return;
@@ -263,41 +302,39 @@ Item {
         saveTodosToDisk();
     }
 
-    // ========================================================
-    // MAIN GEOMETRIC ROOT CONTAINER (Anchored to fill parent)
-    // ========================================================
+    // ==========================================
+    // UI LAYOUT
+    // ==========================================
     Item {
         id: mainContainer
         anchors.fill: parent
 
-        // ================= 1. HEADER BAR (Fixed to top) =================
+        // ================= 1. MATERIAL YOU TOP HEADER =================
         Item {
             id: headerBar
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 32
+            height: 38
 
             RowLayout {
                 anchors.fill: parent
                 spacing: 8
 
-                // Back button
+                // Material Circular Back Button (Pixel style)
                 Rectangle {
-                    Layout.preferredWidth: 26
-                    Layout.preferredHeight: 26
-                    radius: 13
-                    color: backMouse.containsMouse ? notesRoot.hoverColor : "transparent"
-                    border.width: 1
-                    border.color: Theme.colors.border ?? "#16161e"
-                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    radius: 16
+                    color: backMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer
+                    Behavior on color { ColorAnimation { duration: 140 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "󰁍"
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 13
-                        color: Theme.colors.text_primary ?? "#c0caf5"
+                        font.pixelSize: 14
+                        color: notesRoot.m3TextPrimary
                     }
 
                     MouseArea {
@@ -309,49 +346,25 @@ Item {
                     }
                 }
 
-                // Title with Icon
-                Row {
-                    spacing: 6
-                    Layout.alignment: Qt.AlignVCenter
-                    Text {
-                        text: "󰠮"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 15
-                        color: notesRoot.accentColor
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: "Notes & Tasks"
-                        font.family: "Inter"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        color: Theme.colors.text_primary ?? "#c0caf5"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                // Segmented Tab Selector
+                // ================= PIXEL MATERIAL 3 SEGMENTED SWITCH =================
                 Rectangle {
-                    Layout.preferredHeight: 28
-                    Layout.preferredWidth: 210
-                    radius: 14
-                    color: notesRoot.cardColor
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
+                    Layout.preferredHeight: 34
+                    Layout.preferredWidth: 236
+                    radius: 17
+                    color: notesRoot.m3SurfaceContainer
+                    clip: true
 
-                    // Sliding indicator
+                    // Sliding Pill Indicator
                     Rectangle {
-                        x: notesRoot.activeTab === 0 ? 2 : parent.width / 2
-                        y: 2
-                        width: parent.width / 2 - 2
-                        height: parent.height - 4
-                        radius: 12
-                        color: notesRoot.accentColor
-                        opacity: 0.22
-
+                        x: notesRoot.activeTab === 0 ? 3 : (parent.width / 2) + 1
+                        y: 3
+                        width: (parent.width / 2) - 4
+                        height: parent.height - 6
+                        radius: 14
+                        color: notesRoot.m3Primary
                         Behavior on x {
                             NumberAnimation {
-                                duration: 180
+                                duration: 200
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: notesRoot.motionCurve
                             }
@@ -360,56 +373,73 @@ Item {
 
                     Row {
                         anchors.fill: parent
+
+                        // Segment 0: Notepad
                         Item {
                             width: parent.width / 2
                             height: parent.height
+
                             Row {
                                 anchors.centerIn: parent
-                                spacing: 4
+                                spacing: 5
+
                                 Text {
                                     text: "󰠮"
                                     font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    color: notesRoot.activeTab === 0 ? notesRoot.accentColor : (Theme.colors.text_secondary ?? "#565f89")
+                                    font.pixelSize: 13
+                                    color: notesRoot.activeTab === 0 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
                                 Text {
-                                    text: "Scratchpad"
+                                    text: "Notepad"
                                     font.family: "Inter"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.weight: notesRoot.activeTab === 0 ? Font.DemiBold : Font.Normal
-                                    color: notesRoot.activeTab === 0 ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_secondary ?? "#565f89")
+                                    color: notesRoot.activeTab === 0 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
                             }
+
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     notesRoot.activeTab = 0;
-                                    scratchArea.forceActiveFocus();
+                                    notepadArea.forceActiveFocus();
                                 }
                             }
                         }
 
+                        // Segment 1: Todo List
                         Item {
                             width: parent.width / 2
                             height: parent.height
+
                             Row {
                                 anchors.centerIn: parent
-                                spacing: 4
+                                spacing: 5
+
                                 Text {
                                     text: "󰄲"
                                     font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    color: notesRoot.activeTab === 1 ? notesRoot.accentColor : (Theme.colors.text_secondary ?? "#565f89")
+                                    font.pixelSize: 13
+                                    color: notesRoot.activeTab === 1 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
                                 Text {
-                                    text: "Todos (" + todoModel.count + ")"
+                                    text: "Tasks (" + todoModel.count + ")"
                                     font.family: "Inter"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.weight: notesRoot.activeTab === 1 ? Font.DemiBold : Font.Normal
-                                    color: notesRoot.activeTab === 1 ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_secondary ?? "#565f89")
+                                    color: notesRoot.activeTab === 1 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Behavior on color { ColorAnimation { duration: 150 } }
                                 }
                             }
+
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
@@ -424,18 +454,52 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
-                // ================= ACTION BUTTONS =================
-                // 1. Scratchpad: Save As .txt Button
+                // ================= MATERIAL YOU ACTION PILLS =================
+                // 1. Copy Action Pill
                 Rectangle {
-                    visible: notesRoot.activeTab === 0
-                    Layout.preferredHeight: 25
-                    Layout.preferredWidth: notesRoot.justExported ? 82 : 78
-                    radius: 7
+                    Layout.preferredHeight: 30
+                    Layout.preferredWidth: notesRoot.justCopied ? 74 : 64
+                    radius: 15
+                    color: notesRoot.justCopied
+                        ? Qt.rgba(0.32, 0.81, 0.40, 0.22)
+                        : (copyMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            text: notesRoot.justCopied ? "✓" : "󰆏"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 11
+                            color: notesRoot.justCopied ? notesRoot.m3Success : notesRoot.m3TextPrimary
+                        }
+                        Text {
+                            text: notesRoot.justCopied ? "Copied" : "Copy"
+                            font.family: "Inter"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: notesRoot.justCopied ? notesRoot.m3Success : notesRoot.m3TextPrimary
+                        }
+                    }
+
+                    MouseArea {
+                        id: copyMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: notesRoot.copyActiveContent()
+                    }
+                }
+
+                // 2. Export / Save As Action Pill
+                Rectangle {
+                    Layout.preferredHeight: 30
+                    Layout.preferredWidth: notesRoot.justExported ? 82 : 74
+                    radius: 15
                     color: notesRoot.justExported
-                        ? Qt.rgba(0.18, 0.83, 0.5, 0.22)
-                        : (notesRoot.isSaveDrawerOpen ? Qt.rgba(notesRoot.accentColor.r, notesRoot.accentColor.g, notesRoot.accentColor.b, 0.25) : (saveDrawerMouse.containsMouse ? notesRoot.hoverColor : notesRoot.cardColor))
-                    border.width: 1
-                    border.color: notesRoot.justExported ? "#73daca" : (notesRoot.isSaveDrawerOpen ? notesRoot.accentColor : (Theme.colors.border ?? "#16161e"))
+                        ? Qt.rgba(0.32, 0.81, 0.40, 0.22)
+                        : (notesRoot.isSaveDrawerOpen ? notesRoot.m3PrimaryContainer : (exportMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer))
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Row {
@@ -445,19 +509,19 @@ Item {
                             text: notesRoot.justExported ? "✓" : "󰈔"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
-                            color: notesRoot.justExported ? "#73daca" : (Theme.colors.text_primary ?? "#c0caf5")
+                            color: notesRoot.justExported ? notesRoot.m3Success : (notesRoot.isSaveDrawerOpen ? notesRoot.m3Primary : notesRoot.m3TextPrimary)
                         }
                         Text {
-                            text: notesRoot.justExported ? "Saved" : "Save As"
+                            text: notesRoot.justExported ? "Saved" : "Export"
                             font.family: "Inter"
-                            font.pixelSize: 10
+                            font.pixelSize: 11
                             font.weight: Font.Medium
-                            color: notesRoot.justExported ? "#73daca" : (Theme.colors.text_primary ?? "#c0caf5")
+                            color: notesRoot.justExported ? notesRoot.m3Success : (notesRoot.isSaveDrawerOpen ? notesRoot.m3Primary : notesRoot.m3TextPrimary)
                         }
                     }
 
                     MouseArea {
-                        id: saveDrawerMouse
+                        id: exportMouse
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
@@ -468,71 +532,30 @@ Item {
                     }
                 }
 
-                // 2. Scratchpad: Copy Button
+                // 3. Clear Action Pill (Contextual)
                 Rectangle {
-                    visible: notesRoot.activeTab === 0
-                    Layout.preferredHeight: 25
-                    Layout.preferredWidth: notesRoot.justCopied ? 68 : 62
-                    radius: 7
-                    color: notesRoot.justCopied 
-                        ? Qt.rgba(0.18, 0.83, 0.5, 0.22) 
-                        : (copyMouse.containsMouse ? notesRoot.hoverColor : notesRoot.cardColor)
-                    border.width: 1
-                    border.color: notesRoot.justCopied ? "#73daca" : (Theme.colors.border ?? "#16161e")
+                    visible: (notesRoot.activeTab === 0 && notepadArea.text.trim() !== "") || (notesRoot.activeTab === 1 && notesRoot.completedTodoCount > 0)
+                    Layout.preferredHeight: 30
+                    Layout.preferredWidth: notesRoot.activeTab === 0 ? 62 : 88
+                    radius: 15
+                    color: clearMouse.containsMouse ? notesRoot.m3ErrorContainer : notesRoot.m3SurfaceContainer
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Row {
                         anchors.centerIn: parent
                         spacing: 4
                         Text {
-                            text: notesRoot.justCopied ? "✓" : "󰆏"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: notesRoot.justCopied ? "#73daca" : (Theme.colors.text_primary ?? "#c0caf5")
-                        }
-                        Text {
-                            text: notesRoot.justCopied ? "Copied" : "Copy"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: notesRoot.justCopied ? "#73daca" : (Theme.colors.text_primary ?? "#c0caf5")
-                        }
-                    }
-
-                    MouseArea {
-                        id: copyMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: notesRoot.copyScratchpad()
-                    }
-                }
-
-                // 3. Scratchpad: Clear Button
-                Rectangle {
-                    visible: notesRoot.activeTab === 0 && scratchArea.text.trim() !== ""
-                    Layout.preferredHeight: 25
-                    Layout.preferredWidth: 54
-                    radius: 7
-                    color: clearMouse.containsMouse ? Qt.rgba(0.97, 0.46, 0.56, 0.2) : notesRoot.cardColor
-                    border.width: 1
-                    border.color: clearMouse.containsMouse ? "#f7768e" : (Theme.colors.border ?? "#16161e")
-                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 3
-                        Text {
                             text: "󰅖"
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            color: clearMouse.containsMouse ? "#f7768e" : (Theme.colors.text_secondary ?? "#565f89")
+                            font.pixelSize: 11
+                            color: clearMouse.containsMouse ? notesRoot.m3Error : notesRoot.m3TextSecondary
                         }
                         Text {
-                            text: "Clear"
+                            text: notesRoot.activeTab === 0 ? "Clear" : "Clear Done"
                             font.family: "Inter"
-                            font.pixelSize: 10
-                            color: clearMouse.containsMouse ? "#f7768e" : (Theme.colors.text_secondary ?? "#565f89")
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: clearMouse.containsMouse ? notesRoot.m3Error : notesRoot.m3TextSecondary
                         }
                     }
 
@@ -541,64 +564,30 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onClicked: notesRoot.clearScratchpad()
+                        onClicked: {
+                            if (notesRoot.activeTab === 0) {
+                                notesRoot.clearNotepad();
+                            } else {
+                                notesRoot.clearCompletedTodos();
+                            }
+                        }
                     }
                 }
 
-                // 4. Todo: Clear Completed Button
+                // 4. Wide Mode Pill Button
                 Rectangle {
-                    visible: notesRoot.activeTab === 1 && notesRoot.completedTodoCount > 0
-                    Layout.preferredHeight: 25
-                    Layout.preferredWidth: 86
-                    radius: 7
-                    color: clearDoneMouse.containsMouse ? Qt.rgba(0.97, 0.46, 0.56, 0.2) : notesRoot.cardColor
-                    border.width: 1
-                    border.color: clearDoneMouse.containsMouse ? "#f7768e" : (Theme.colors.border ?? "#16161e")
-                    Behavior on color { ColorAnimation { duration: 150 } }
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 4
-                        Text {
-                            text: "󰃢"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: clearDoneMouse.containsMouse ? "#f7768e" : (Theme.colors.text_secondary ?? "#565f89")
-                        }
-                        Text {
-                            text: "Clear Done"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: clearDoneMouse.containsMouse ? "#f7768e" : (Theme.colors.text_secondary ?? "#565f89")
-                        }
-                    }
-
-                    MouseArea {
-                        id: clearDoneMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: notesRoot.clearCompletedTodos()
-                    }
-                }
-
-                // 5. Dynamic Wide Mode Toggle Button
-                Rectangle {
-                    Layout.preferredWidth: 26
-                    Layout.preferredHeight: 25
-                    radius: 7
-                    color: notesRoot.isWideMode ? Qt.rgba(notesRoot.accentColor.r, notesRoot.accentColor.g, notesRoot.accentColor.b, 0.25) : (wideMouse.containsMouse ? notesRoot.hoverColor : notesRoot.cardColor)
-                    border.width: 1
-                    border.color: notesRoot.isWideMode ? notesRoot.accentColor : (Theme.colors.border ?? "#16161e")
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 30
+                    radius: 15
+                    color: notesRoot.isWideMode ? notesRoot.m3PrimaryContainer : (wideMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer)
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: notesRoot.isWideMode ? "󰆦" : "󰆤"
                         font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        color: notesRoot.isWideMode ? notesRoot.accentColor : (Theme.colors.text_primary ?? "#c0caf5")
+                        font.pixelSize: 13
+                        color: notesRoot.isWideMode ? notesRoot.m3Primary : notesRoot.m3TextPrimary
                     }
 
                     MouseArea {
@@ -612,33 +601,31 @@ Item {
             }
         }
 
-        // ================= 2. SAVE AS .TXT DRAWER (Expandable) =================
+        // ================= 2. SLIDE-DOWN EXPORT DRAWER =================
         Rectangle {
             id: saveDrawer
             anchors.top: headerBar.bottom
             anchors.topMargin: notesRoot.isSaveDrawerOpen ? 6 : 0
             anchors.left: parent.left
             anchors.right: parent.right
-            height: notesRoot.isSaveDrawerOpen ? 36 : 0
+            height: notesRoot.isSaveDrawerOpen ? 38 : 0
             visible: height > 0
             clip: true
-            radius: 9
-            color: notesRoot.cardColor
-            border.width: 1
-            border.color: Qt.rgba(notesRoot.accentColor.r, notesRoot.accentColor.g, notesRoot.accentColor.b, 0.35)
+            radius: 19
+            color: notesRoot.m3SurfaceContainerHigh
             Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 10
+                anchors.leftMargin: 12
                 anchors.rightMargin: 8
-                spacing: 6
+                spacing: 8
 
                 Text {
                     text: "󰈔"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
-                    color: notesRoot.accentColor
+                    font.pixelSize: 14
+                    color: notesRoot.m3Primary
                 }
 
                 TextField {
@@ -647,40 +634,35 @@ Item {
                     text: notesRoot.exportPath
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
-                    color: Theme.colors.text_primary ?? "#c0caf5"
-                    placeholderText: "Enter destination path e.g. ~/Documents/notes.txt..."
-                    placeholderTextColor: Theme.colors.text_secondary ?? "#565f89"
+                    color: notesRoot.m3TextPrimary
+                    placeholderText: "Save path e.g. ~/Documents/notes.txt..."
+                    placeholderTextColor: notesRoot.m3TextMuted
                     background: Item {}
 
-                    onAccepted: notesRoot.exportScratchpadToDisk(text)
+                    onAccepted: notesRoot.exportContentToDisk(text)
                     Keys.onEscapePressed: (event) => {
                         notesRoot.isSaveDrawerOpen = false;
                         event.accepted = true;
                     }
                 }
 
-                // Browse Button (kdialog)
+                // Browse Button
                 Rectangle {
-                    Layout.preferredHeight: 24
+                    Layout.preferredHeight: 26
                     Layout.preferredWidth: 68
-                    radius: 6
-                    color: browseMouse.containsMouse ? notesRoot.hoverColor : Qt.rgba(1, 1, 1, 0.06)
-                    border.width: 1
-                    border.color: Theme.colors.border ?? "#16161e"
+                    radius: 13
+                    color: browseMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer
 
                     Row {
                         anchors.centerIn: parent
                         spacing: 3
-                        Text {
-                            text: "📁"
-                            font.pixelSize: 10
-                        }
+                        Text { text: "📁"; font.pixelSize: 10 }
                         Text {
                             text: "Browse"
                             font.family: "Inter"
                             font.pixelSize: 10
                             font.weight: Font.Medium
-                            color: Theme.colors.text_primary ?? "#c0caf5"
+                            color: notesRoot.m3TextPrimary
                         }
                     }
 
@@ -697,20 +679,18 @@ Item {
 
                 // Save Confirm Button
                 Rectangle {
-                    Layout.preferredHeight: 24
-                    Layout.preferredWidth: 54
-                    radius: 6
-                    color: saveConfirmMouse.containsMouse ? notesRoot.accentColor : Qt.rgba(notesRoot.accentColor.r, notesRoot.accentColor.g, notesRoot.accentColor.b, 0.2)
-                    border.width: 1
-                    border.color: notesRoot.accentColor
+                    Layout.preferredHeight: 26
+                    Layout.preferredWidth: 58
+                    radius: 13
+                    color: saveConfirmMouse.containsMouse ? notesRoot.m3Primary : notesRoot.m3PrimaryContainer
 
                     Text {
                         anchors.centerIn: parent
                         text: "Save"
                         font.family: "Inter"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.weight: Font.DemiBold
-                        color: saveConfirmMouse.containsMouse ? "white" : notesRoot.accentColor
+                        color: saveConfirmMouse.containsMouse ? notesRoot.m3OnPrimary : notesRoot.m3Primary
                     }
 
                     MouseArea {
@@ -718,22 +698,22 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onClicked: notesRoot.exportScratchpadToDisk(exportPathField.text)
+                        onClicked: notesRoot.exportContentToDisk(exportPathField.text)
                     }
                 }
 
                 // Close Drawer Button
                 Rectangle {
-                    Layout.preferredWidth: 20
-                    Layout.preferredHeight: 20
-                    radius: 10
-                    color: closeDrawerMouse.containsMouse ? notesRoot.hoverColor : "transparent"
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    radius: 11
+                    color: closeDrawerMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "✕"
-                        font.pixelSize: 10
-                        color: Theme.colors.text_secondary ?? "#565f89"
+                        font.pixelSize: 11
+                        color: notesRoot.m3TextSecondary
                     }
 
                     MouseArea {
@@ -747,15 +727,15 @@ Item {
             }
         }
 
-        // ================= 3. FOOTER STATUS BAR (Fixed to bottom) =================
+        // ================= 3. FOOTER STATUS BAR =================
         Item {
             id: footerBar
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 20
+            height: 24
 
-            // Footer for Scratchpad (Tab 0)
+            // Status Bar for Notepad
             RowLayout {
                 anchors.fill: parent
                 visible: notesRoot.activeTab === 0
@@ -763,18 +743,18 @@ Item {
 
                 Text {
                     text: {
-                        var chars = scratchArea.text.length;
-                        var lines = scratchArea.text === "" ? 0 : scratchArea.text.split("\n").length;
-                        return chars + " characters · " + lines + " lines";
+                        var chars = notepadArea.text.length;
+                        var words = notepadArea.text.trim() === "" ? 0 : notepadArea.text.trim().split(/\s+/).length;
+                        var lines = notepadArea.text === "" ? 0 : notepadArea.text.split("\n").length;
+                        return words + " words · " + chars + " characters · " + lines + " lines";
                     }
                     font.family: "Inter"
                     font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#565f89"
+                    color: notesRoot.m3TextMuted
                 }
 
                 Item { Layout.fillWidth: true }
 
-                // Live status info
                 Row {
                     spacing: 4
                     visible: notesRoot.justSaved || notesRoot.isSaving || notesRoot.justExported
@@ -782,80 +762,78 @@ Item {
                         text: notesRoot.justExported ? "✓" : (notesRoot.isSaving ? "󰔛" : "󰄬")
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 10
-                        color: notesRoot.isSaving ? notesRoot.accentColor : "#73daca"
+                        color: notesRoot.isSaving ? notesRoot.m3Primary : notesRoot.m3Success
                     }
                     Text {
                         text: {
                             if (notesRoot.justExported) return "Saved to " + notesRoot.exportPath;
                             if (notesRoot.isSaving) return "Saving...";
-                            return "Saved to cache";
+                            return "Auto-saved";
                         }
                         font.family: "Inter"
                         font.pixelSize: 10
-                        color: notesRoot.isSaving ? notesRoot.accentColor : "#73daca"
+                        color: notesRoot.isSaving ? notesRoot.m3Primary : notesRoot.m3Success
                     }
                 }
             }
 
-            // Footer for Todo Tasks (Tab 1)
+            // Status Bar for Todo Tasks
             RowLayout {
                 anchors.fill: parent
                 visible: notesRoot.activeTab === 1
-                spacing: 8
+                spacing: 10
 
                 Text {
-                    text: notesRoot.completedTodoCount + " of " + todoModel.count + " completed"
+                    text: notesRoot.completedTodoCount + " of " + todoModel.count + " completed (" + (todoModel.count > 0 ? Math.round((notesRoot.completedTodoCount / todoModel.count) * 100) : 0) + "%)"
                     font.family: "Inter"
                     font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#565f89"
+                    color: notesRoot.m3TextMuted
                 }
 
                 Item { Layout.fillWidth: true }
 
-                // Progress Bar
+                // Material 3 Progress Bar Capsule
                 Rectangle {
-                    Layout.preferredWidth: 120
-                    Layout.preferredHeight: 5
+                    Layout.preferredWidth: 140
+                    Layout.preferredHeight: 6
                     radius: 3
-                    color: notesRoot.cardColor
+                    color: notesRoot.m3SurfaceContainerHighest
 
                     Rectangle {
                         height: parent.height
                         radius: 3
                         width: parent.width * (todoModel.count > 0 ? (notesRoot.completedTodoCount / todoModel.count) : 0)
-                        color: notesRoot.completedTodoCount === todoModel.count ? "#73daca" : notesRoot.accentColor
+                        color: notesRoot.completedTodoCount === todoModel.count ? notesRoot.m3Success : notesRoot.m3Primary
                         Behavior on width { NumberAnimation { duration: 180 } }
                     }
                 }
             }
         }
 
-        // ================= 4. BODY CONTENT (Strictly bounded between header & footer) =================
+        // ================= 4. BODY CONTENT (STACKED NOTEPAD & TASKS) =================
         StackLayout {
             id: contentStack
             anchors.top: notesRoot.isSaveDrawerOpen ? saveDrawer.bottom : headerBar.bottom
             anchors.topMargin: 8
             anchors.bottom: footerBar.top
-            anchors.bottomMargin: 8
+            anchors.bottomMargin: 6
             anchors.left: parent.left
             anchors.right: parent.right
             currentIndex: notesRoot.activeTab
 
-            // ---------------- TAB 0: SCRATCHPAD ----------------
+            // ---------------- TAB 0: MATERIAL YOU NOTEPAD ----------------
             Item {
-                anchors.fill: parent
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 10
-                    color: notesRoot.cardColor
-                    border.width: 1
-                    border.color: scratchArea.activeFocus ? notesRoot.accentColor : Qt.rgba(1, 1, 1, 0.08)
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
+                    radius: 20
+                    color: notesRoot.m3SurfaceContainer
 
                     ScrollView {
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.margins: 14
                         clip: true
 
                         ScrollBar.vertical: ScrollBar {
@@ -863,30 +841,30 @@ Item {
                             width: 5
                             contentItem: Rectangle {
                                 radius: 3
-                                color: Theme.colors.text_secondary ?? "#565f89"
-                                opacity: 0.4
+                                color: notesRoot.m3TextMuted
+                                opacity: 0.35
                             }
                         }
 
                         TextArea {
-                            id: scratchArea
+                            id: notepadArea
                             wrapMode: TextEdit.Wrap
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 13
-                            color: Theme.colors.text_primary ?? "#c0caf5"
-                            placeholderText: "Jot temporary notes, terminal snippets, API keys, or thoughts here...\nAuto-saved automatically in real time.\nClick 'Save As' or press Ctrl+S to save as .txt."
-                            placeholderTextColor: Theme.colors.text_secondary ?? "#565f89"
+                            color: notesRoot.m3TextPrimary
+                            placeholderText: "Jot notes, scratch ideas, terminal snippets, or thoughts here...\nAuto-saved automatically in real time."
+                            placeholderTextColor: notesRoot.m3TextMuted
                             selectByMouse: true
                             background: Item {}
 
                             onTextChanged: {
-                                notesRoot.scratchpadText = text;
+                                notesRoot.scratchpadContent = text;
                                 autoSaveDebounce.restart();
                             }
 
                             Keys.onEscapePressed: root.collapseToIdle()
-                            
-                            // Ctrl+S shortcut to open Save As / Export drawer
+
+                            // Ctrl+S shortcut to export
                             Keys.onPressed: (event) => {
                                 if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S) {
                                     notesRoot.isSaveDrawerOpen = true;
@@ -899,230 +877,244 @@ Item {
                 }
             }
 
-            // ---------------- TAB 1: TODOS ----------------
+            // ---------------- TAB 1: MATERIAL YOU TODO TASKS ----------------
             Item {
-                anchors.fill: parent
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                // Top Add Task Bar
-                Rectangle {
-                    id: addTodoBar
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 38
-                    radius: 19
-                    color: notesRoot.cardColor
-                    border.width: 1
-                    border.color: newTodoInput.activeFocus ? notesRoot.accentColor : Qt.rgba(1, 1, 1, 0.08)
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 8
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 8
-                        spacing: 8
+                    // Material 3 Add Task Input Capsule (Pixel Search Pill style)
+                    Rectangle {
+                        id: addTodoBar
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 42
+                        radius: 21
+                        color: notesRoot.m3SurfaceContainer
+                        border.width: newTodoInput.activeFocus ? 1 : 0
+                        border.color: notesRoot.m3Primary
+                        Behavior on border.width { NumberAnimation { duration: 120 } }
 
-                        Text {
-                            text: "󰄱"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
-                            color: notesRoot.accentColor
-                        }
-
-                        TextField {
-                            id: newTodoInput
-                            Layout.fillWidth: true
-                            font.family: "Inter"
-                            font.pixelSize: 12
-                            color: Theme.colors.text_primary ?? "#c0caf5"
-                            placeholderText: "Add a new task (Press Enter to add)..."
-                            placeholderTextColor: Theme.colors.text_secondary ?? "#565f89"
-                            background: Item {}
-
-                            onAccepted: notesRoot.addNewTodo(text)
-                            Keys.onEscapePressed: root.collapseToIdle()
-                        }
-
-                        Rectangle {
-                            Layout.preferredWidth: 26
-                            Layout.preferredHeight: 26
-                            radius: 13
-                            color: addBtnMouse.containsMouse ? notesRoot.accentColor : Qt.rgba(notesRoot.accentColor.r, notesRoot.accentColor.g, notesRoot.accentColor.b, 0.15)
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 8
+                            spacing: 8
 
                             Text {
-                                anchors.centerIn: parent
-                                text: "+"
-                                font.pixelSize: 16
-                                font.bold: true
-                                color: addBtnMouse.containsMouse ? "white" : notesRoot.accentColor
+                                text: "󰄱"
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 15
+                                color: notesRoot.m3Primary
                             }
 
-                            MouseArea {
-                                id: addBtnMouse
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                hoverEnabled: true
-                                onClicked: notesRoot.addNewTodo(newTodoInput.text)
+                            TextField {
+                                id: newTodoInput
+                                Layout.fillWidth: true
+                                font.family: "Inter"
+                                font.pixelSize: 12
+                                color: notesRoot.m3TextPrimary
+                                placeholderText: "Add a task (Press Enter to add)..."
+                                placeholderTextColor: notesRoot.m3TextMuted
+                                background: Item {}
+
+                                onAccepted: notesRoot.addNewTodo(text)
+                                Keys.onEscapePressed: root.collapseToIdle()
                             }
-                        }
-                    }
-                }
 
-                // Task List / Empty State container
-                Item {
-                    anchors.top: addTodoBar.bottom
-                    anchors.topMargin: 8
-                    anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: parent.right
+                            // Pixel FAB Button (+)
+                            Rectangle {
+                                Layout.preferredWidth: 30
+                                Layout.preferredHeight: 30
+                                radius: 15
+                                color: addBtnMouse.containsMouse ? notesRoot.m3PrimaryContainer : notesRoot.m3Primary
+                                scale: addBtnMouse.pressed ? 0.92 : (addBtnMouse.containsMouse ? 1.05 : 1.0)
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+                                Behavior on color { ColorAnimation { duration: 120 } }
 
-                    ListView {
-                        id: todoListView
-                        anchors.fill: parent
-                        clip: true
-                        spacing: 6
-                        model: todoModel
-
-                        boundsBehavior: Flickable.DragAndOvershootBounds
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                            width: 5
-                            contentItem: Rectangle {
-                                radius: 3
-                                color: Theme.colors.text_secondary ?? "#565f89"
-                                opacity: 0.4
-                            }
-                        }
-
-                        add: Transition {
-                            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
-                            NumberAnimation { property: "scale"; from: 0.95; to: 1.0; duration: 180; easing.type: Easing.OutBack }
-                        }
-                        remove: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
-                        displaced: Transition { NumberAnimation { property: "y"; duration: 180; easing.type: Easing.OutCubic } }
-
-                        delegate: Rectangle {
-                            id: todoDelegate
-                            width: ListView.view.width
-                            height: 38
-                            radius: 10
-                            color: itemMouse.containsMouse ? notesRoot.hoverColor : notesRoot.cardColor
-                            border.width: 1
-                            border.color: done ? Qt.rgba(1, 1, 1, 0.04) : Qt.rgba(1, 1, 1, 0.08)
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 8
-                                spacing: 10
-
-                                // Checkbox Toggle
-                                Rectangle {
-                                    Layout.preferredWidth: 20
-                                    Layout.preferredHeight: 20
-                                    radius: 6
-                                    color: done ? notesRoot.accentColor : "transparent"
-                                    border.width: done ? 0 : 1.5
-                                    border.color: done ? "transparent" : (Theme.colors.text_secondary ?? "#565f89")
-                                    Behavior on color { ColorAnimation { duration: 140 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "✓"
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        color: "white"
-                                        visible: done
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: notesRoot.toggleTodoDone(index)
-                                    }
-                                }
-
-                                // Task Text
                                 Text {
-                                    Layout.fillWidth: true
-                                    text: model.text
-                                    font.family: "Inter"
-                                    font.pixelSize: 12
-                                    font.strikeout: done
-                                    color: done 
-                                        ? (Theme.colors.text_secondary ?? "#565f89") 
-                                        : (Theme.colors.text_primary ?? "#c0caf5")
-                                    elide: Text.ElideRight
-                                    Behavior on color { ColorAnimation { duration: 140 } }
+                                    anchors.centerIn: parent
+                                    text: "+"
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                    color: addBtnMouse.containsMouse ? notesRoot.m3Primary : notesRoot.m3OnPrimary
                                 }
 
-                                // Delete Button
-                                Rectangle {
-                                    Layout.preferredWidth: 22
-                                    Layout.preferredHeight: 22
-                                    radius: 11
-                                    color: delMouse.containsMouse ? Qt.rgba(0.97, 0.46, 0.56, 0.2) : "transparent"
-                                    opacity: itemMouse.containsMouse ? 1.0 : 0.0
-                                    Behavior on opacity { NumberAnimation { duration: 120 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "✕"
-                                        font.pixelSize: 10
-                                        color: delMouse.containsMouse ? "#f7768e" : (Theme.colors.text_secondary ?? "#565f89")
-                                    }
-
-                                    MouseArea {
-                                        id: delMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: notesRoot.removeTodo(index)
-                                    }
+                                MouseArea {
+                                    id: addBtnMouse
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    onClicked: notesRoot.addNewTodo(newTodoInput.text)
                                 }
-                            }
-
-                            MouseArea {
-                                id: itemMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton
-                                z: -1
-                                onClicked: notesRoot.toggleTodoDone(index)
                             }
                         }
                     }
 
-                    // Empty State
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        visible: todoModel.count === 0
+                    // Task Cards List
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
 
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "󰄵"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 26
-                            color: notesRoot.accentColor
+                        ListView {
+                            id: todoListView
+                            anchors.fill: parent
+                            clip: true
+                            spacing: 6
+                            model: todoModel
+
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                                width: 5
+                                contentItem: Rectangle {
+                                    radius: 3
+                                    color: notesRoot.m3TextMuted
+                                    opacity: 0.35
+                                }
+                            }
+
+                            add: Transition {
+                                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150 }
+                                NumberAnimation { property: "scale"; from: 0.95; to: 1.0; duration: 180; easing.type: Easing.OutBack }
+                            }
+                            remove: Transition { NumberAnimation { property: "opacity"; to: 0; duration: 120 } }
+                            displaced: Transition { NumberAnimation { property: "y"; duration: 160; easing.type: Easing.OutCubic } }
+
+                            // Material You Card Delegate
+                            delegate: Rectangle {
+                                id: todoDelegate
+                                width: ListView.view.width
+                                height: 44
+                                radius: 16
+                                color: itemMouse.containsMouse ? notesRoot.m3SurfaceContainerHigh : notesRoot.m3SurfaceContainer
+                                Behavior on color { ColorAnimation { duration: 120 } }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    // Material 3 Squircle Checkbox
+                                    Rectangle {
+                                        Layout.preferredWidth: 22
+                                        Layout.preferredHeight: 22
+                                        radius: 7
+                                        color: done ? notesRoot.m3Primary : "transparent"
+                                        border.width: done ? 0 : 2
+                                        border.color: done ? "transparent" : notesRoot.m3TextSecondary
+                                        scale: checkMouse.pressed ? 0.88 : 1.0
+                                        Behavior on color { ColorAnimation { duration: 140 } }
+                                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✓"
+                                            font.pixelSize: 12
+                                            font.bold: true
+                                            color: notesRoot.m3OnPrimary
+                                            visible: done
+                                        }
+
+                                        MouseArea {
+                                            id: checkMouse
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: notesRoot.toggleTodoDone(index)
+                                        }
+                                    }
+
+                                    // Task Text
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: model.text
+                                        font.family: "Inter"
+                                        font.pixelSize: 12
+                                        font.weight: done ? Font.Normal : Font.Medium
+                                        font.strikeout: done
+                                        color: done ? notesRoot.m3TextMuted : notesRoot.m3TextPrimary
+                                        opacity: done ? 0.6 : 1.0
+                                        elide: Text.ElideRight
+                                        Behavior on color { ColorAnimation { duration: 140 } }
+                                        Behavior on opacity { NumberAnimation { duration: 140 } }
+                                    }
+
+                                    // Pixel Circle Delete Button (reveals on hover)
+                                    Rectangle {
+                                        Layout.preferredWidth: 24
+                                        Layout.preferredHeight: 24
+                                        radius: 12
+                                        color: delMouse.containsMouse ? notesRoot.m3ErrorContainer : "transparent"
+                                        opacity: itemMouse.containsMouse ? 1.0 : 0.0
+                                        Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✕"
+                                            font.pixelSize: 11
+                                            color: delMouse.containsMouse ? notesRoot.m3Error : notesRoot.m3TextMuted
+                                        }
+
+                                        MouseArea {
+                                            id: delMouse
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            hoverEnabled: true
+                                            onClicked: notesRoot.removeTodo(index)
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: itemMouse
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    hoverEnabled: true
+                                    z: -1
+                                    onClicked: notesRoot.toggleTodoDone(index)
+                                }
+                            }
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "All tasks completed!"
-                            font.family: "Inter"
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
-                            color: Theme.colors.text_primary ?? "#c0caf5"
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Type a task above and hit Enter to add."
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            color: Theme.colors.text_secondary ?? "#565f89"
+
+                        // Empty State Graphic
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            visible: todoModel.count === 0
+
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 44
+                                height: 44
+                                radius: 22
+                                color: notesRoot.m3PrimaryContainer
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "󰄵"
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 22
+                                    color: notesRoot.m3Primary
+                                }
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "All caught up!"
+                                font.family: "Inter"
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                color: notesRoot.m3TextPrimary
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "Add a task above to plan your day."
+                                font.family: "Inter"
+                                font.pixelSize: 11
+                                color: notesRoot.m3TextMuted
+                            }
                         }
                     }
                 }
