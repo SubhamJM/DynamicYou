@@ -1,0 +1,167 @@
+*cphelper.txt* Competitive programming helper for neovim
+
+Author:  Chinmay Dalal
+Repo:    https://github.com/dchinmay2/cphelper.nvim
+         https://git.sr.ht/~chinmay/cphelper.nvim
+License: MIT
+
+
+INTRODUCTION                                                        *cphelper*
+
+A plugin for automating tasks in competitive programming like downloading test
+cases, compiling and testing. Supports Rust, C, C++, Java, Kotlin (JVM),
+Python, Javascript (Node) and Lua.
+
+==============================================================================
+
+USAGE                                                         *cphelper-usage*
+
+
+                                                                 *:CphReceive*
+:CphReceive              Use `:CphReceive` and press the "parse task" button
+                         in the browser extension to prepare files. This
+                         will open an empty solution file in you preferred
+                         language.
+
+                                                                    *:CphTest*
+:CphTest [numbers]       To test your solution. If test case number(s) are
+                         specified, only those cases are run, otherwise all
+                         cases are run.
+
+                                                                  *:CphRetest*
+:CphRetest [nummbers]    To test the same binary without recompiling.
+
+                                                                    *:CphEdit*
+:CphEdit [number]        To edit/add a test case.
+
+                                                                  *:CphDelete*
+:CphDelete [numbers]     To delete test cases.
+
+==============================================================================
+
+CONFIGURATION                                         *cphelper-configuration*
+
+
+The filetype of the floating window showing results is `Results`, so for
+example you can disable your indentline/cursorline plugins for this filetype.
+
+The plugin is configured using global variables:
+
+`g:cph#dir`                                                          *g:cph#dir*
+            The directory in which contests are stored. Note: specify
+            absolute path.
+            Default: `~/contests`
+
+`g:cph#lang`                                                        *g:cph#lang*
+            Preferred language for the first solution file opened.
+            (You can always open a `solution.language` file for a particular
+            problem using `:e` and that file will be used.)
+            Default: `cpp`
+
+`g:cph#ignore_trailing_differences`          *g:cph#ignore_trailing_differences*
+	    Ignore differences in trailing whitespace when checking if a
+	    result matches the expected output
+
+`g:cph#timeout`                                                  *g:cph#timeout*
+            Time limit per test case in milliseconds
+            Default: 2000
+
+`g:cph#url_register`                                        *g:cph#url#register*
+            Register to save the url of the problem in.
+            Default: `nil`
+
+`g:cph#border`                                                    *g:cph#border*
+            Border type used for the results window.
+            Possible values: see |nvim_open_win()|
+            Default: `rounded`
+`g:cph#vsplit`                                                    *g:cph#vsplit*
+            Whether to use a split or a floating window for the results.
+            Default: `false`
+
+`g:cph#cpp#compile_command`                          *g:cph#cpp#compile_command*
+            Command for compiling C++ files.
+            Default: `{ "g++", "solution.cpp", "-o", "cpp.out" }`
+            Note: The input file must be `solution.cpp` and the output file
+            must be `cpp.out`
+
+
+`g:cph#c#compile_command`                              *g:cph#c#compile_command*
+            Command for compiling C files.
+            Default: `{ "gcc", "solution.c", "-o", "c.out" }`
+            Note: The input file must be `solution.c` and the output file
+            must be `c.out`
+
+
+`g:cph#rust#compile_command`                        *g:cph#rust#compile_command*
+            Command for compiling Rust files.
+            Default: `{ "rustc", "solution.rs", "-o", "rust.out" }`
+            Note: The input file must be `solution.rs` and the output file
+            must be `rust.out`
+
+`g:cph#rust#createjson`                                  *g:cph#rust#createjson*
+            Whether to create a `rust-project.json` file for rust-analyzer.
+            Default: `false`
+
+`g:cph#rust#json`                                              *g:cph#rust#json*
+            `rust-project.json` created for rust-analyzer.
+            Default:
+>
+    {
+         "sysroot_src": "<output of `rustc --print sysroot`>/lib/rustlib/src/rust/library/",
+         "crates": [
+                 {
+                     "root_module": "solution.rs",
+                     "edition": "2021",
+                     "deps": []
+                }
+         ]
+    }
+<
+            Note: Be sure to check the edition with the online judge, their version might be old.
+
+
+`g:cph#kotlin#compile_command`                    *g:cph#kotlin#compile_command*
+            Command for compiling kotlin files.
+            Default: `{ "kotlinc", "solution.kt", "-include-runtime", "-d", "solution.jar" }`
+            Note: The input file must be `solution.kt` and the output file
+            must be `solution.jar`
+
+==============================================================================
+
+DIRECTORY STRUCTURE                             *cphelper-directory-structure*
+
+Contests directory (g:cphdir)
+├── Judge 1
+│   ├── Contest 1
+│   │   ├── Problem 1
+│   │   │   ├── input1
+│   │   │   ├── input2
+│   │   │   ├── output1
+│   │   │   ├── output2
+│   │   │   ├── solution.c
+│   │   │   ├── solution.cpp
+│   │   │   └── solution.py
+│   │   └── Problem 2
+│   │       ├── input1
+│   │       ├── output1
+│   │       ├── solution.c
+│   │       ├── solution.cpp
+│   │       └── solution.py
+│   └── Contest 2
+│       └── Problem 1
+│           ├── input1
+│           ├── output1
+│           ├── solution.c
+│           ├── solution.cpp
+│           └── solution.py
+└── Judge 2
+    └── Contest 2
+        └── Problem 1
+            ├── input1
+            ├── output1
+            ├── solution.c
+            ├── solution.cpp
+            └── solution.py
+
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
