@@ -15,17 +15,18 @@ ColumnLayout {
         event.accepted = true;
     }
 
-    // Material UI Neutral Deep Black Tokens
+    // Sleek Dark OLED Palette with Theme Accent Hints
     readonly property color colSurface: "#000000"
     readonly property color colCard: "#0e0e12"
     readonly property color colCardHover: "#18181c"
     readonly property color colCardActive: "#141418"
-    readonly property color colChipBg: "#141418"
+    readonly property color colChipBg: "#16161a"
     readonly property color colText: "#f8fafc"
     readonly property color colSubtext: "#94a3b8"
     readonly property color colMuted: "#64748b"
-    readonly property color colGreen: ({ afterglow: "#a78bfa", crimson: "#ef4444", solstice: "#f59e0b", verdant: "#34d399", frost: "#cbd5e1", cyber: "#d946ef", astral: "#818cf8", abyss: "#38bdf8", serenity: "#86efac", cloudscape: "#22d3ee", nord: "#a3be8c", dracula: "#50fa7b", catppuccin: "#a6e3a1", everforest: "#a7c080", "rose-pine": "#9ccfd8" })[Theme.currentThemeName] ?? "#30d158"
-    readonly property color colRed: ({ afterglow: "#f43f5e", crimson: "#ff453a", solstice: "#ea580c", verdant: "#e67e80", frost: "#f43f5e", cyber: "#f43f5e", astral: "#f43f5e", abyss: "#f43f5e", serenity: "#fb7185", cloudscape: "#f43f5e", nord: "#bf616a", dracula: "#ff5555", catppuccin: "#f38ba8", everforest: "#e67e80", "rose-pine": "#eb6f92" })[Theme.currentThemeName] ?? "#ff453a"
+    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
+    readonly property color colGreen: Theme.accent ?? "#30d158"
+    readonly property color colRed: "#f43f5e"
 
     // State maps for expanded cards and live device batteries
     property var stateMap: ({})
@@ -220,8 +221,9 @@ ColumnLayout {
                     width: 38
                     height: 38
                     radius: 11
-                    color: btModule.primaryConnectedDevice ? Qt.alpha(btModule.colAccent, 0.18) : btModule.colChipBg
-                    border.width: 0
+                    color: btModule.colChipBg
+                    border.width: btModule.primaryConnectedDevice ? 1 : 0
+                    border.color: Qt.alpha(btModule.colAccent, 0.25)
 
                     Text {
                         anchors.centerIn: parent
@@ -278,11 +280,7 @@ ColumnLayout {
                 // Solid Status Pill
                 Rectangle {
                     radius: 10
-                    color: {
-                        if (!btModule.isEnabled) return btModule.colChipBg;
-                        if (btModule.primaryConnectedDevice) return Qt.alpha(btModule.colGreen, 0.18);
-                        return Qt.alpha(btModule.colAccent, 0.16);
-                    }
+                    color: btModule.colChipBg
                     border.width: 0
                     implicitWidth: statusRow.implicitWidth + 14
                     implicitHeight: 22
@@ -299,7 +297,6 @@ ColumnLayout {
                             anchors.verticalCenter: parent.verticalCenter
                             color: {
                                 if (!btModule.isEnabled) return btModule.colMuted;
-                                if (btModule.primaryConnectedDevice) return btModule.colGreen;
                                 return btModule.colAccent;
                             }
                             // Subtle breathing pulse when connected
@@ -323,7 +320,6 @@ ColumnLayout {
                             renderType: Text.NativeRendering
                             color: {
                                 if (!btModule.isEnabled) return btModule.colMuted;
-                                if (btModule.primaryConnectedDevice) return btModule.colGreen;
                                 return btModule.colAccent;
                             }
                             anchors.verticalCenter: parent.verticalCenter
@@ -416,8 +412,9 @@ ColumnLayout {
                 Rectangle {
                     height: 22
                     radius: 6
-                    color: btModule.isDiscovering ? Qt.alpha(btModule.colAccent, 0.2) : btModule.colChipBg
-                    border.width: 0
+                    color: btModule.colChipBg
+                    border.width: btModule.isDiscovering ? 1 : 0
+                    border.color: Qt.alpha(btModule.colAccent, 0.25)
                     implicitWidth: chipStateRow.implicitWidth + 12
 
                     Row {
@@ -437,7 +434,7 @@ ColumnLayout {
                             font.pixelSize: 10
                             font.weight: Font.Medium
                             renderType: Text.NativeRendering
-                            color: btModule.isDiscovering ? btModule.colAccent : btModule.colSubtext
+                            color: btModule.colSubtext
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -497,8 +494,9 @@ ColumnLayout {
         Rectangle {
             height: 26
             radius: 13
-            color: btModule.isDiscovering ? btModule.colAccent : btModule.colChipBg
-            border.width: 0
+            color: btModule.colChipBg
+            border.width: 1
+            border.color: btModule.isDiscovering ? Qt.alpha(btModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.08)
             implicitWidth: scanRow.implicitWidth + 16
             visible: btModule.isEnabled
 
@@ -511,7 +509,7 @@ ColumnLayout {
                     text: "󰑓"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 12
-                    color: btModule.isDiscovering ? btModule.colSurface : btModule.colText
+                    color: btModule.isDiscovering ? btModule.colAccent : btModule.colSubtext
                     anchors.verticalCenter: parent.verticalCenter
                     RotationAnimation on rotation {
                         running: btModule.isDiscovering
@@ -524,7 +522,7 @@ ColumnLayout {
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     renderType: Text.NativeRendering
-                    color: btModule.isDiscovering ? btModule.colSurface : btModule.colText
+                    color: btModule.isDiscovering ? btModule.colAccent : btModule.colText
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -638,8 +636,9 @@ ColumnLayout {
             // Dynamic height (50px collapsed, 92px expanded with drawer)
             height: isExpanded ? 92 : 50
             radius: 12
-            color: cardHover.containsMouse ? btModule.colCardHover : btModule.colCard
-            border.width: 0
+            color: modelData.connected ? (cardHover.containsMouse ? btModule.colCardHover : btModule.colCardActive) : (cardHover.containsMouse ? btModule.colCardHover : btModule.colCard)
+            border.width: modelData.connected ? 1 : 0
+            border.color: modelData.connected ? Qt.alpha(btModule.colAccent, 0.35) : "transparent"
             clip: true
 
             Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutExpo } }
@@ -668,8 +667,9 @@ ColumnLayout {
                         width: 34
                         height: 34
                         radius: 10
-                        color: modelData.connected ? Qt.alpha(btModule.colAccent, 0.22) : btModule.colChipBg
-                        border.width: 0
+                        color: btModule.colChipBg
+                        border.width: modelData.connected ? 1 : 0
+                        border.color: Qt.alpha(btModule.colAccent, 0.25)
 
                         Text {
                             anchors.centerIn: parent
@@ -687,7 +687,7 @@ ColumnLayout {
 
                         Text {
                             text: modelData.name
-                            color: modelData.connected ? btModule.colAccent : btModule.colText
+                            color: btModule.colText
                             font.family: "Noto Sans"
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
@@ -701,7 +701,7 @@ ColumnLayout {
                             Rectangle {
                                 height: 16
                                 radius: 8
-                                color: modelData.connected ? Qt.alpha(btModule.colGreen, 0.2) : btModule.colChipBg
+                                color: btModule.colChipBg
                                 border.width: 0
                                 implicitWidth: statusChipRow.implicitWidth + 10
 
@@ -715,7 +715,7 @@ ColumnLayout {
                                         width: 5
                                         height: 5
                                         radius: 2.5
-                                        color: btModule.colGreen
+                                        color: btModule.colAccent
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
@@ -725,7 +725,7 @@ ColumnLayout {
                                         font.pixelSize: 10
                                         font.weight: Font.Medium
                                         renderType: Text.NativeRendering
-                                        color: modelData.connected ? btModule.colGreen : btModule.colSubtext
+                                        color: modelData.connected ? btModule.colAccent : btModule.colSubtext
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -786,8 +786,9 @@ ColumnLayout {
                         Layout.fillWidth: true
                         height: 28
                         radius: 8
-                        color: modelData.connected ? Qt.alpha(btModule.colRed, 0.24) : btModule.colAccent
-                        border.width: 0
+                        color: btActionMouse.containsMouse ? btModule.colCardHover : btModule.colChipBg
+                        border.width: 1
+                        border.color: modelData.connected ? Qt.alpha(btModule.colRed, 0.40) : Qt.alpha(btModule.colAccent, 0.40)
 
                         Row {
                             anchors.centerIn: parent
@@ -796,7 +797,7 @@ ColumnLayout {
                                 text: modelData.connected ? "󰂲" : "󰂱"
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 11
-                                color: modelData.connected ? btModule.colRed : btModule.colSurface
+                                color: modelData.connected ? btModule.colRed : btModule.colAccent
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
@@ -805,13 +806,15 @@ ColumnLayout {
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
-                                color: modelData.connected ? btModule.colRed : btModule.colSurface
+                                color: modelData.connected ? btModule.colRed : btModule.colAccent
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
                         MouseArea {
+                            id: btActionMouse
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (modelData.connected) {

@@ -19,17 +19,18 @@ ColumnLayout {
         event.accepted = true;
     }
 
-    // Material UI Neutral Deep Black Tokens
+    // Sleek Dark OLED Palette with Theme Accent Hints
     readonly property color colSurface: "#000000"
     readonly property color colCard: "#0e0e12"
     readonly property color colCardHover: "#18181c"
     readonly property color colCardActive: "#141418"
-    readonly property color colChipBg: "#141418"
+    readonly property color colChipBg: "#16161a"
     readonly property color colText: "#f8fafc"
     readonly property color colSubtext: "#94a3b8"
     readonly property color colMuted: "#64748b"
-    readonly property color colGreen: ({ afterglow: "#a78bfa", crimson: "#ef4444", solstice: "#f59e0b", verdant: "#34d399", frost: "#cbd5e1", cyber: "#d946ef", astral: "#818cf8", abyss: "#38bdf8", serenity: "#86efac", cloudscape: "#22d3ee", nord: "#a3be8c", dracula: "#50fa7b", catppuccin: "#a6e3a1", everforest: "#a7c080", "rose-pine": "#9ccfd8" })[Theme.currentThemeName] ?? "#30d158"
-    readonly property color colRed: ({ afterglow: "#f43f5e", crimson: "#ff453a", solstice: "#ea580c", verdant: "#e67e80", frost: "#f43f5e", cyber: "#f43f5e", astral: "#f43f5e", abyss: "#f43f5e", serenity: "#fb7185", cloudscape: "#f43f5e", nord: "#bf616a", dracula: "#ff5555", catppuccin: "#f38ba8", everforest: "#e67e80", "rose-pine": "#eb6f92" })[Theme.currentThemeName] ?? "#ff453a"
+    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
+    readonly property color colGreen: Theme.accent ?? "#30d158"
+    readonly property color colRed: "#f43f5e"
 
     property string saveDirectory: (typeof root !== "undefined" && root.recSaveDirectory) ? root.recSaveDirectory : "~/Videos"
     onSaveDirectoryChanged: if (typeof root !== "undefined") root.recSaveDirectory = saveDirectory
@@ -258,7 +259,7 @@ except Exception:
                 // Solid Status Pill
                 Rectangle {
                     radius: 10
-                    color: recModule.isRecording ? Qt.alpha(recModule.colRed, 0.22) : Qt.alpha(recModule.colAccent, 0.16)
+                    color: recModule.colChipBg
                     border.width: 0
                     implicitWidth: statusRow.implicitWidth + 14
                     implicitHeight: 22
@@ -334,7 +335,7 @@ except Exception:
                 Rectangle {
                     height: 22
                     radius: 6
-                    color: recModule.recordAudio ? Qt.alpha(recModule.colAccent, 0.2) : recModule.colChipBg
+                    color: recModule.colChipBg
                     border.width: 0
                     implicitWidth: chipAudioRow.implicitWidth + 12
 
@@ -354,7 +355,7 @@ except Exception:
                             font.family: "Rubik"
                             font.pixelSize: 10
                             font.weight: Font.Medium
-                            color: recModule.recordAudio ? recModule.colAccent : recModule.colSubtext
+                            color: recModule.recordAudio ? recModule.colText : recModule.colSubtext
                             elide: Text.ElideRight
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -429,7 +430,7 @@ except Exception:
                     width: 28
                     height: 28
                     radius: 8
-                    color: recModule.recordAudio ? Qt.alpha(recModule.colAccent, 0.18) : recModule.colChipBg
+                    color: recModule.colChipBg
                     border.width: 0
                     Text {
                         anchors.centerIn: parent
@@ -472,7 +473,7 @@ except Exception:
                             font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.bold: true
-                            color: recModule.colAccent
+                            color: recModule.colText
                             elide: Text.ElideRight
                         }
 
@@ -541,8 +542,9 @@ except Exception:
                     height: 29
                     radius: 7
                     property bool isSelected: (model.sourceId === recModule.selectedSourceId)
-                    color: isSelected ? Qt.alpha(recModule.colAccent, 0.16) : (micItemMouse.containsMouse ? recModule.colCardHover : "transparent")
-                    border.width: 0
+                    color: isSelected ? Qt.alpha(recModule.colAccent, 0.12) : (micItemMouse.containsMouse ? recModule.colCardHover : "transparent")
+                    border.width: isSelected ? 1 : 0
+                    border.color: Qt.alpha(recModule.colAccent, 0.35)
 
                     RowLayout {
                         anchors.fill: parent
@@ -559,7 +561,7 @@ except Exception:
                         Text {
                             Layout.fillWidth: true
                             text: model.sourceName
-                            color: isSelected ? recModule.colAccent : recModule.colText
+                            color: isSelected ? recModule.colText : recModule.colSubtext
                             font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.bold: isSelected
@@ -598,7 +600,8 @@ except Exception:
             height: 44
             radius: 12
             color: fullMouse.containsMouse ? recModule.colCardHover : recModule.colCard
-            border.width: 0
+            border.width: 1
+            border.color: fullMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.06)
 
             Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
@@ -610,7 +613,7 @@ except Exception:
                     width: 28
                     height: 28
                     radius: 8
-                    color: recModule.colChipBg
+                    color: fullMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
                     border.width: 0
                     Text {
                         anchors.centerIn: parent
@@ -654,7 +657,8 @@ except Exception:
             height: 44
             radius: 12
             color: areaMouse.containsMouse ? recModule.colCardHover : recModule.colCard
-            border.width: 0
+            border.width: 1
+            border.color: areaMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.06)
 
             Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
@@ -666,7 +670,7 @@ except Exception:
                     width: 28
                     height: 28
                     radius: 8
-                    color: recModule.colChipBg
+                    color: areaMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
                     border.width: 0
                     Text {
                         anchors.centerIn: parent
@@ -717,7 +721,8 @@ except Exception:
             height: 28
             radius: 8
             color: snapMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-            border.width: 0
+            border.width: 1
+            border.color: snapMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.35) : Qt.rgba(1, 1, 1, 0.06)
 
             Row {
                 anchors.centerIn: parent
@@ -758,7 +763,8 @@ except Exception:
             height: 28
             radius: 8
             color: folderMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-            border.width: 0
+            border.width: 1
+            border.color: folderMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
 
             Row {
                 anchors.centerIn: parent

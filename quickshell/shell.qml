@@ -23,6 +23,27 @@ ShellRoot {
     property string recAudioSourceId: ""
     property string recAudioSourceName: "Default Microphone"
 
+    // Fullscreen auto-hide & top-edge hover reveal state (true fullscreen mode 2 only, not maximized mode 1)
+    property bool isWindowFullscreen: false
+    property bool fullscreenHoverRevealed: false
+    property bool fullscreenCheckPending: false
+
+    onIsWindowFullscreenChanged: {
+        if (!root.isWindowFullscreen) {
+            root.fullscreenHoverRevealed = false;
+        }
+    }
+
+    readonly property bool notchHidden: {
+        if (!root.isWindowFullscreen) return false;
+        if (root.activeMode !== "idle" && root.activeMode !== "hover") return false;
+        if (root.fullscreenHoverRevealed) return false;
+        if (root.isNotifPopupActive) return false;
+        if (root.isScreenshotIslandActive) return false;
+        if (root.isWorkspacePeeking) return false;
+        return true;
+    }
+
     Timer {
         id: screenRecordTimer
         interval: 1000
@@ -355,6 +376,8 @@ ShellRoot {
         root.openedViaShortcut = false;
         if (typeof notchHoverHandler !== "undefined" && notchHoverHandler.hovered) {
             root.activeMode = "hover";
+        } else if (typeof notchHoverArea !== "undefined" && notchHoverArea.containsMouse) {
+            root.activeMode = "hover";
         } else {
             root.activeMode = "idle";
         }
@@ -367,6 +390,9 @@ ShellRoot {
         } else {
             root.openedViaShortcut = fromShortcut;
             root.activeMode = newMode;
+            if (root.isWindowFullscreen) {
+                root.fullscreenHoverRevealed = true;
+            }
         }
     }
 
@@ -682,6 +708,9 @@ for f in sorted_files:
             }
             root.openedViaShortcut = fromShortcut;
             root.activeMode = "utility";
+            if (root.isWindowFullscreen) {
+                root.fullscreenHoverRevealed = true;
+            }
         }
     }
 
@@ -890,10 +919,54 @@ for f in sorted_files:
         }
     }
 
+    function triggerFullscreenCheck() {
+        if (!checkFullscreenProc.running) {
+            checkFullscreenProc.running = true;
+        } else {
+            root.fullscreenCheckPending = true;
+        }
+    }
+
+    Process {
+        id: checkFullscreenProc
+        running: false
+        command: ["sh", Quickshell.env("HOME") + "/.config/quickshell/scripts/check_fullscreen.sh"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var isFull = (this.text.trim() === "1");
+                root.isWindowFullscreen = isFull;
+                if (!isFull) {
+                    root.fullscreenHoverRevealed = false;
+                }
+                if (root.fullscreenCheckPending) {
+                    root.fullscreenCheckPending = false;
+                    checkFullscreenProc.running = true;
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: fullscreenPollTimer
+        interval: 2000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            root.triggerFullscreenCheck();
+        }
+    }
+
     Connections {
         target: typeof Hyprland !== "undefined" ? Hyprland : null
         function onRawEvent(event) {
             var evName = (typeof event === "object" && event !== null) ? event.name : event;
+            var evData = (typeof event === "object" && event !== null) ? (event.data || "") : "";
+
+            if (evName === "fullscreen" || evName === "workspace" || evName === "focusedmon" || evName === "workspacev2" || evName === "activewindow" || evName === "openwindow" || evName === "closewindow") {
+                root.triggerFullscreenCheck();
+            }
+
             if (evName === "workspace" || evName === "focusedmon" || evName === "workspacev2") {
                 if (typeof dashMod !== "undefined") dashMod.refreshWorkspaceIds();
                 if (root.activeMode === "idle") {
@@ -1175,15 +1248,76 @@ for f in sorted_files:
             height: notch.height + 40
         }
 
+        // Invisible top sensor strip for fullscreen autohide hover reveal
+        Item {
+            id: topHoverSensorArea
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.max(notch.width + (root.cornerCurveRadius * 2) + 160, 520)
+            height: 4
+        }
+
         mask: Region {
-            item: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") 
-                ? fullMaskArea 
-                : (root.activeMode === "hover" ? hoverMaskArea : notchContainer)
+            item: {
+                if (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") {
+                    return fullMaskArea;
+                }
+                if (root.notchHidden) {
+                    return topHoverSensorArea;
+                }
+                if (root.activeMode === "hover") {
+                    return hoverMaskArea;
+                }
+                return notchContainer;
+            }
         }
 
         WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher")
             ? WlrKeyboardFocus.Exclusive
             : WlrKeyboardFocus.None
+
+        // Top hover sensor mouse trigger for fullscreen mode
+        MouseArea {
+            id: topHoverSensorMouse
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.max(notch.width + (root.cornerCurveRadius * 2) + 160, 520)
+            height: 4
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            cursorShape: Qt.ArrowCursor
+            z: 2
+            enabled: root.isWindowFullscreen
+
+            onEntered: {
+                fullscreenHideTimer.stop();
+                if (root.isWindowFullscreen) {
+                    root.fullscreenHoverRevealed = true;
+                }
+            }
+            onExited: {
+                if (root.isWindowFullscreen && (root.activeMode === "idle" || root.activeMode === "hover")) {
+                    fullscreenHideTimer.restart();
+                }
+            }
+        }
+
+        Timer {
+            id: fullscreenHideTimer
+            interval: NotchConfig.timerFullscreenHideGrace
+            repeat: false
+            onTriggered: {
+                if (!topHoverSensorMouse.containsMouse && 
+                    !notchHoverArea.containsMouse && 
+                    !notchHoverHandler.hovered &&
+                    (root.activeMode === "idle" || root.activeMode === "hover")) {
+                    root.fullscreenHoverRevealed = false;
+                    if (root.activeMode === "hover") {
+                        root.collapseToIdle();
+                    }
+                }
+            }
+        }
 
         // Click-away backdrop: collapses open popups/hover when clicking outside
         MouseArea {
@@ -1193,25 +1327,44 @@ for f in sorted_files:
             enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
             onClicked: {
                 root.collapseToIdle();
+                if (root.isWindowFullscreen) {
+                    root.fullscreenHoverRevealed = false;
+                }
             }
         }
 
         Item {
             id: notchContainer
             z: 1
-            anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             width: notch.width + (root.cornerCurveRadius * 2)
             height: notch.height
 
-            y: 0
-            opacity: 1.0
-            visible: true
+            y: root.notchHidden ? (-notchContainer.height - root.cornerCurveRadius - 8) : 0
+            opacity: root.notchHidden ? 0.0 : 1.0
+            visible: opacity > 0.001
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: NotchConfig.animNotchResize
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: NotchConfig.motionCurve
+                }
+            }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             focus: root.activeMode !== "idle" && root.activeMode !== "hover"
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Escape) {
                     root.collapseToIdle();
+                    if (root.isWindowFullscreen) {
+                        root.fullscreenHoverRevealed = false;
+                    }
                     event.accepted = true;
                 } else {
                     root.regainFocus();
@@ -1231,10 +1384,15 @@ for f in sorted_files:
                 acceptedButtons: Qt.NoButton
                 z: -1
                 onEntered: {
+                    fullscreenHideTimer.stop();
                     autoCollapseTimer.stop();
+                    if (root.isWindowFullscreen) root.fullscreenHoverRevealed = true;
                     if (root.activeMode === "idle") root.activeMode = "hover";
                 }
                 onExited: {
+                    if (root.isWindowFullscreen) {
+                        fullscreenHideTimer.restart();
+                    }
                     if (root.activeMode === "hover" && !notchHoverHandler.hovered) {
                         root.collapseToIdle();
                     }
@@ -1417,10 +1575,15 @@ for f in sorted_files:
                         if (root.utilMod && (root.utilMod.isDraggingVolume || root.utilMod.isDraggingBrightness)) return;
                         if (root.musicMod && root.musicMod.isDraggingSeek) return;
                         if (hovered) {
+                            fullscreenHideTimer.stop();
                             autoCollapseTimer.stop();
                             root.isWorkspacePeeking = false;
+                            if (root.isWindowFullscreen) root.fullscreenHoverRevealed = true;
                             if (root.activeMode === "idle") root.activeMode = "hover";
                         } else {
+                            if (root.isWindowFullscreen) {
+                                fullscreenHideTimer.restart();
+                            }
                             if (root.activeMode === "hover" && !notchHoverArea.containsMouse) {
                                 root.collapseToIdle();
                             }

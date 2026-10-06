@@ -21,20 +21,23 @@ QtObject {
         }
     }
 
+    property var rawThemeColors: ({})
+
     function _rebuildColors() {
         var activeAcc = (theme.mediaAccent !== "") ? theme.mediaAccent : theme.baseAccent;
+        var raw = theme.rawThemeColors || {};
         theme.colors = {
             "bg": "#000000",
             "card_bg": "#0e0e12",
             "hover_bg": "#18181c",
             "border": "transparent",
-            "border_hover": "transparent",
+            "border_hover": activeAcc,
             "text_primary": "#f8fafc",
             "text_secondary": "#94a3b8",
             "text_muted": "#64748b",
             "accent": activeAcc,
-            "error": "#f87171",
-            "warning": "#fbbf24"
+            "error": raw.error || "#f87171",
+            "warning": raw.warning || "#fbbf24"
         };
         theme.themeReloaded();
     }
@@ -106,6 +109,7 @@ QtObject {
                 if (!this.text || this.text.trim() === "") return;
                 try {
                     var parsed = JSON.parse(this.text);
+                    theme.rawThemeColors = parsed;
                     var acc = parsed.accent || "#7aa2f7";
                     theme.baseAccent = acc;
                     theme._rebuildColors();
@@ -122,7 +126,10 @@ QtObject {
         stdout: StdioCollector {
             onStreamFinished: {
                 var name = this.text.trim();
-                if (name !== "") theme.currentThemeName = name;
+                if (name !== "") {
+                    theme.currentThemeName = name;
+                    theme.themeReloaded();
+                }
             }
         }
     }

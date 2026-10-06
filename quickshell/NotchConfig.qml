@@ -32,6 +32,7 @@ QtObject {
     readonly property int timerPowerPopup: 1500     // Duration for Power/Charging connected island popup
     readonly property int timerNetPopup: 1500       // Duration for Network handoff island popup
     readonly property int timerIslandText: 3500     // Duration for Island textual info labels
+    readonly property int timerFullscreenHideGrace: 250 // Duration before auto-hiding when leaving top hover in fullscreen
 
     // ==========================================
     // 4. STATIC NOTCH BASE DIMENSIONS
