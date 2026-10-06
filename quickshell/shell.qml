@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Effects
 import Quickshell.Bluetooth
 import Quickshell.Services.Notifications
 import "./modules"
@@ -1375,6 +1376,75 @@ for f in sorted_files:
                     if (root.switcherMod) root.switcherMod.activateSelected();
                     event.accepted = true;
                 }
+            }
+
+            // Notch Shadow System
+            Item {
+                id: shadowSilhouette
+                anchors.fill: parent
+                visible: false
+
+                Canvas {
+                    id: sLeftWing
+                    width: root.cornerCurveRadius; height: root.cornerCurveRadius
+                    anchors.top: parent.top; anchors.right: sNotch.left; anchors.rightMargin: -1
+                    renderTarget: Canvas.FramebufferObject
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.reset();
+                        ctx.fillStyle = "#000000";
+                        ctx.beginPath();
+                        ctx.moveTo(width + 1, 0); ctx.lineTo(width + 1, height);
+                        ctx.arcTo(width, 0, 0, 0, height);
+                        ctx.closePath(); ctx.fill();
+                    }
+                    Connections { target: root; function onCornerCurveRadiusChanged() { sLeftWing.requestPaint(); } }
+                    onAvailableChanged: if (available) requestPaint()
+                    Component.onCompleted: requestPaint()
+                }
+
+                Rectangle {
+                    id: sNotch
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: notch.width
+                    height: notch.height
+                    color: "#000000"
+                    bottomLeftRadius: notch.bottomLeftRadius
+                    bottomRightRadius: notch.bottomRightRadius
+                }
+
+                Canvas {
+                    id: sRightWing
+                    width: root.cornerCurveRadius; height: root.cornerCurveRadius
+                    anchors.top: parent.top; anchors.left: sNotch.right; anchors.leftMargin: -1
+                    renderTarget: Canvas.FramebufferObject
+                    onPaint: {
+                        var ctx = getContext("2d");
+                        ctx.reset();
+                        ctx.fillStyle = "#000000";
+                        ctx.beginPath();
+                        ctx.moveTo(-1, 0); ctx.lineTo(-1, height);
+                        ctx.arcTo(0, 0, width, 0, height);
+                        ctx.closePath(); ctx.fill();
+                    }
+                    Connections { target: root; function onCornerCurveRadiusChanged() { sRightWing.requestPaint(); } }
+                    onAvailableChanged: if (available) requestPaint()
+                    Component.onCompleted: requestPaint()
+                }
+            }
+
+            MultiEffect {
+                id: notchShadow
+                source: shadowSilhouette
+                anchors.fill: shadowSilhouette
+                z: -2
+                shadowEnabled: NotchConfig.shadowEnabled
+                shadowColor: NotchConfig.shadowColor
+                shadowOpacity: NotchConfig.shadowOpacity
+                shadowBlur: NotchConfig.shadowBlur
+                shadowVerticalOffset: NotchConfig.shadowVerticalOffset
+                shadowHorizontalOffset: NotchConfig.shadowHorizontalOffset
             }
 
             MouseArea {

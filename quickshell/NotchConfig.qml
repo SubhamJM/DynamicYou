@@ -130,4 +130,15 @@ QtObject {
         var dynamicListHeight = Math.min(320, Math.max(70, effectiveList));
         return Math.min(500, Math.max(260, base + dynamicListHeight));
     }
+
+    // ==========================================
+    // 6. NOTCH SHADOW CONFIGURATION
+    // ==========================================
+    readonly property bool shadowEnabled: true
+    readonly property color shadowColor: "#000000"
+    readonly property real shadowOpacity: 0.65
+    readonly property real shadowBlur: 0.48
+    readonly property real shadowVerticalOffset: 2.5
+    readonly property real shadowHorizontalOffset: 0
 }
+
