@@ -5,7 +5,7 @@
     "source": "~/.config/fastfetch/logo.txt",
     "padding": {
       "top": 1,
-      "left": 3,
+      "left": 2,
       "right": 4
     },
     "color": {
@@ -13,50 +13,55 @@
     }
   },
   "display": {
-    "separator": " : "
+    "separator": "  "
   },
   "modules": [
+    "break",
+    {
+      "type": "title",
+      "color": {
+        "user": "cyan",
+        "at": "white",
+        "host": "blue"
+      }
+    },
     {
       "type": "custom",
-      "format": "\u001b[37m┌─\u001b[0m"
+      "format": "\u001b[90m─────────────────────────\u001b[0m"
     },
     {
       "type": "os",
-      "key": "\u001b[37m│\u001b[0m  \u001b[36m󰣇 OS\u001b[0m",
+      "key": "󰣇 ",
+      "keyColor": "cyan",
+      "format": "{2}"
+    },
+    {
+      "type": "wm",
+      "key": "󱗃 ",
+      "keyColor": "blue",
       "format": "{2}"
     },
     {
       "type": "packages",
-      "key": "\u001b[37m│\u001b[0m  \u001b[34m󰏗 Packages\u001b[0m",
-    },
-    {
-      "type": "wm",
-      "key": "\u001b[37m│\u001b[0m  \u001b[35m󱗃 WM\u001b[0m",
-      "format": "{2}"
-    },
-    {
-      "type": "memory",
-      "key": "\u001b[37m│\u001b[0m  \u001b[33m Memory\u001b[0m",
-      "format": "{/1}{-}{/}{/2}{-}{/}{} / {}"
-    },
-    {
-      "type": "command",
-      "key": "\u001b[37m│\u001b[0m  \u001b[32m󱦟 OS Age\u001b[0m",
-      "text": "echo $(( ($(date +%s) - $(stat -c %W / 2>/dev/null || stat -c %Y /)) / 86400 ))d"
+      "key": "󰏗 ",
+      "keyColor": "cyan"
     },
     {
       "type": "uptime",
-      "key": "\u001b[37m│\u001b[0m  \u001b[31m󱫐 Uptime\u001b[0m",
+      "key": "󱫐 ",
+      "keyColor": "blue",
       "format": "{2}h {3}m"
     },
     {
-      "type": "colors",
-      "key": "\u001b[37m│\u001b[0m  \u001b[90m󰏘 Colors\u001b[0m",
-      "symbol": "circle"
+      "type": "memory",
+      "key": " ",
+      "keyColor": "cyan",
+      "format": "{1} / {2}"
     },
+    "break",
     {
-      "type": "custom",
-      "format": "\u001b[37m└─\u001b[0m"
+      "type": "colors",
+      "symbol": "circle"
     }
   ]
 }

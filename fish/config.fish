@@ -2,6 +2,7 @@ if status is-interactive
     # Starship custom prompt
     if command -v starship >/dev/null 2>&1
         starship init fish | source
+        disable_transience 2>/dev/null
     end
 
     # Direnv + Zoxide
@@ -34,6 +35,12 @@ if status is-interactive
     abbr la 'ls -a'
     abbr lla 'ls -la'
 
+    abbr -a update "sudo pacman -Syu"
+    abbr -a install "sudo pacman -S"
+    abbr -a remove "sudo pacman -Rns"
+    abbr -a search "pacman -Ss"
+    abbr -a clean "sudo pacman -Sc"
+
     # Custom colours
     cat ~/.local/state/caelestia/sequences.txt 2> /dev/null
 
@@ -51,3 +58,7 @@ if status is-interactive
     set -q XDG_CONFIG_HOME && set -l cConf $XDG_CONFIG_HOME/caelestia || set -l cConf $HOME/.config/caelestia
     source $cConf/user-config.fish 2> /dev/null
 end
+
+
+# Added by Antigravity CLI installer
+set -gx PATH "/home/ricing/.local/bin" $PATH
