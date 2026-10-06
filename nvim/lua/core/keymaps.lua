@@ -61,10 +61,10 @@ vim.keymap.set("n", "<C-h>", ":wincmd h<CR>", opts)
 vim.keymap.set("n", "<C-l>", ":wincmd l<CR>", opts)
 
 -- Tabs
-vim.keymap.set("n", "<leader>to", ":tabnew<CR>", opts) -- open new tab
-vim.keymap.set("n", "<leader>tx", ":tabclose<CR>", opts) -- close current tab
-vim.keymap.set("n", "<leader>tn", ":tabn<CR>", opts) --  go to next tab
-vim.keymap.set("n", "<leader>tp", ":tabp<CR>", opts) --  go to previous tab
+vim.keymap.set("n", "<leader>To", ":tabnew<CR>", vim.tbl_extend("force", opts, { desc = "Open new tab" }))
+vim.keymap.set("n", "<leader>Tx", ":tabclose<CR>", vim.tbl_extend("force", opts, { desc = "Close current tab" }))
+vim.keymap.set("n", "<leader>Tn", ":tabn<CR>", vim.tbl_extend("force", opts, { desc = "Go to next tab" }))
+vim.keymap.set("n", "<leader>Tp", ":tabp<CR>", vim.tbl_extend("force", opts, { desc = "Go to previous tab" }))
 
 -- Toggle line wrapping
 vim.keymap.set("n", "<leader>lw", "<cmd>set wrap!<CR>", opts)

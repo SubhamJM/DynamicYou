@@ -48,6 +48,7 @@ wk.add({
     { "<leader>l", group = "LSP" },
 
     { "<leader>t", group = "Terminal" },
+    { "<leader>T", group = "Tabs" },
 
     { "<leader>b", group = "Buffers" },
 

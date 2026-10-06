@@ -40,6 +40,10 @@
       "rev": "a12fd5672110c8aa7e3c8419e28c96943ca179be",
       "src": "https://github.com/github/copilot.vim"
     },
+    "cphelper.nvim": {
+      "rev": "b5574fd8adc738bb325247329fc0f164d4d0f808",
+      "src": "https://github.com/dchinmay2/cphelper.nvim"
+    },
     "dracula": {
       "rev": "ae752c13e95fb7c5f58da4b5123cb804ea7568ee",
       "src": "https://github.com/Mofiqul/dracula.nvim"

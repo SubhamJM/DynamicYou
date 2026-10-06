@@ -47,3 +47,5 @@ vim.o.winbar = " "
 vim.opt.fillchars = {
 	eob = " ",
 }
+
+vim.opt.shell = "fish"
