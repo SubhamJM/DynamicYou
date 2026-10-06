@@ -182,8 +182,7 @@ ColumnLayout {
         Rectangle {
             width: 24; height: 24; radius: 7
             color: themeBackMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-            border.width: 1
-            border.color: Theme.colors.border ?? "#16161e"
+            border.width: 0
             scale: themeBackMouse.pressed ? 0.90 : 1.0
             Behavior on scale { NumberAnimation { duration: 90 } }
 
@@ -317,8 +316,7 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 radius: 8
                 color: leftArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: leftArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 80 } }
 
                 Text {
@@ -440,13 +438,7 @@ ColumnLayout {
                         radius: 16
                         color: modelData.cardBg || "#181825"
 
-                        border.width: delegateRoot.isCurrent ? 2 : 1
-                        border.color: delegateRoot.isCurrent 
-                            ? (Theme.colors.accent ?? "#2dd4bf") 
-                            : (cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.05))
-
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-                        Behavior on border.width { NumberAnimation { duration: 120 } }
+                        border.width: 0
 
                         // Active desktop theme indicator dot (top-right corner)
                         Rectangle {
@@ -522,8 +514,7 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 radius: 8
                 color: rightArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: rightArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 80 } }
 
                 Text {

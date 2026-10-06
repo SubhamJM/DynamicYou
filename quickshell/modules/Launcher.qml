@@ -845,9 +845,7 @@ with open(f, 'w') as file: json.dump(d, file)
         Layout.preferredHeight: 48
         radius: 14
         color: Theme.colors.card_bg ?? "#141416"
-        border.width: 1.5
-        border.color: searchInput.activeFocus ? launcher.accentColor : Qt.rgba(1, 1, 1, 0.08)
-        Behavior on border.color { ColorAnimation { duration: 150 } }
+        border.width: 0
 
         RowLayout {
             anchors.fill: parent
@@ -1043,8 +1041,7 @@ with open(f, 'w') as file: json.dump(d, file)
                 height: tilesItem.height - 4
                 radius: 12
                 color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18)
-                border.width: 1
-                border.color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.28)
+                border.width: 0
                 Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.BezierSpline; easing.bezierCurve: launcher.motionCurve } }
             }
 
@@ -1160,10 +1157,8 @@ with open(f, 'w') as file: json.dump(d, file)
                 height: 28
                 radius: 8
                 color: chipMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.16) : Qt.rgba(1, 1, 1, 0.04)
-                border.width: 1
-                border.color: chipMouse.containsMouse ? launcher.accentColor : Qt.rgba(1, 1, 1, 0.06)
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 110 } }
-                Behavior on border.color { ColorAnimation { duration: 110 } }
 
                 Row {
                     anchors.centerIn: parent
@@ -1234,8 +1229,7 @@ with open(f, 'w') as file: json.dump(d, file)
             color: launcher.isCopiedFeedback
                 ? Qt.rgba(0.18, 0.83, 0.5, 0.22)
                 : (mathMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416"))
-            border.width: 1.5
-            border.color: launcher.isCopiedFeedback ? "#73daca" : launcher.accentColor
+            border.width: 0
             Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
@@ -1313,8 +1307,7 @@ with open(f, 'w') as file: json.dump(d, file)
             visible: launcher.isBangActive
             radius: 12
             color: bangMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416")
-            border.width: 1.5
-            border.color: launcher.accentColor
+            border.width: 0
             Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
@@ -1394,8 +1387,7 @@ with open(f, 'w') as file: json.dump(d, file)
             visible: launcher.isCmdActive
             radius: 12
             color: cmdMouse.containsMouse ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18) : (Theme.colors.card_bg ?? "#141416")
-            border.width: 1.5
-            border.color: launcher.accentColor
+            border.width: 0
             Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
@@ -1553,8 +1545,7 @@ with open(f, 'w') as file: json.dump(d, file)
                         color: delegateRoot.isSelected
                             ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.18)
                             : (rowMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
-                        border.width: delegateRoot.isSelected ? 1 : 0
-                        border.color: Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.28)
+                        border.width: 0
                         Behavior on color { ColorAnimation { duration: 110 } }
 
                         RowLayout {

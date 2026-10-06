@@ -145,6 +145,8 @@ theme_lower = theme.lower()
 candidates = [
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme_lower}'),
     os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
     os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
     os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
@@ -157,7 +159,7 @@ for c in candidates:
         break
 
 if not wall_dir:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/DynamicYou/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
         if os.path.isdir(base):
             for d in os.listdir(base):
                 if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
@@ -349,8 +351,7 @@ for f in sorted_files:
                 Layout.alignment: Qt.AlignVCenter
                 radius: 8
                 color: leftArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: leftArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 80 } }
 
                 Text {
@@ -503,8 +504,7 @@ for f in sorted_files:
                         anchors.fill: parent
                         radius: 12
                         color: Theme.colors.card_bg ?? "#1f2335"
-                        border.width: PathView.isCurrentItem ? 2 : 1
-                        border.color: PathView.isCurrentItem ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "#16161e")
+                        border.width: 0
                         clip: true
 
                         Image {
@@ -544,8 +544,7 @@ for f in sorted_files:
                 Layout.alignment: Qt.AlignVCenter
                 radius: 8
                 color: rightArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: rightArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 80 } }
 
                 Text {
@@ -585,8 +584,7 @@ for f in sorted_files:
             Layout.preferredWidth: 120; Layout.preferredHeight: 28
             radius: 8
             color: applyMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.hover_bg ?? "#24283b")
-            border.width: 1
-            border.color: Theme.colors.border_hover ?? "#7aa2f7"
+            border.width: 0
             Behavior on color { ColorAnimation { duration: 80 } }
 
             Text {

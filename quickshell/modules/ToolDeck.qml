@@ -571,8 +571,8 @@ Item {
                     color: def.isActive
                         ? Qt.rgba(toolDeckRoot.colAccent.r, toolDeckRoot.colAccent.g, toolDeckRoot.colAccent.b, tileMouse.containsMouse ? 0.24 : 0.16)
                         : (tileMouse.containsMouse ? toolDeckRoot.colCardHover : toolDeckRoot.colCard)
-                    border.width: def.isActive ? 1 : (toolDeckRoot.isEditing ? 1 : 0)
-                    border.color: def.isActive ? toolDeckRoot.colAccent : Qt.rgba(255, 255, 255, 0.10)
+                    border.width: toolDeckRoot.isEditing ? 1 : 0
+                    border.color: Qt.rgba(255, 255, 255, 0.10)
 
                     scale: tileMouse.pressed ? 0.96 : 1.0
                     Behavior on scale { NumberAnimation { duration: 80 } }

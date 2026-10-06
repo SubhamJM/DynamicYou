@@ -195,8 +195,7 @@ ColumnLayout {
                 Rectangle {
                     width: 28; height: 28; radius: 8
                     color: btBackMouse.containsMouse ? btModule.colCardHover : "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
+                    border.width: 0
                     scale: btBackMouse.pressed ? 0.90 : 1.0
                     Behavior on scale { NumberAnimation { duration: 90 } }
 
@@ -222,8 +221,7 @@ ColumnLayout {
                     height: 38
                     radius: 11
                     color: btModule.colChipBg
-                    border.width: btModule.primaryConnectedDevice ? 1 : 0
-                    border.color: Qt.alpha(btModule.colAccent, 0.25)
+                    border.width: 0
 
                     Text {
                         anchors.centerIn: parent
@@ -413,8 +411,7 @@ ColumnLayout {
                     height: 22
                     radius: 6
                     color: btModule.colChipBg
-                    border.width: btModule.isDiscovering ? 1 : 0
-                    border.color: Qt.alpha(btModule.colAccent, 0.25)
+                    border.width: 0
                     implicitWidth: chipStateRow.implicitWidth + 12
 
                     Row {
@@ -494,9 +491,8 @@ ColumnLayout {
         Rectangle {
             height: 26
             radius: 13
-            color: btModule.colChipBg
-            border.width: 1
-            border.color: btModule.isDiscovering ? Qt.alpha(btModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.08)
+            color: btModule.isDiscovering ? Qt.alpha(btModule.colAccent, 0.22) : (scanMouse.containsMouse ? btModule.colCardHover : btModule.colChipBg)
+            border.width: 0
             implicitWidth: scanRow.implicitWidth + 16
             visible: btModule.isEnabled
 
@@ -528,7 +524,9 @@ ColumnLayout {
             }
 
             MouseArea {
+                id: scanMouse
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     if (btModule.adapter) btModule.adapter.discovering = !btModule.adapter.discovering;
@@ -637,8 +635,7 @@ ColumnLayout {
             height: isExpanded ? 92 : 50
             radius: 12
             color: modelData.connected ? (cardHover.containsMouse ? btModule.colCardHover : btModule.colCardActive) : (cardHover.containsMouse ? btModule.colCardHover : btModule.colCard)
-            border.width: modelData.connected ? 1 : 0
-            border.color: modelData.connected ? Qt.alpha(btModule.colAccent, 0.35) : "transparent"
+            border.width: 0
             clip: true
 
             Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutExpo } }
@@ -668,8 +665,7 @@ ColumnLayout {
                         height: 34
                         radius: 10
                         color: btModule.colChipBg
-                        border.width: modelData.connected ? 1 : 0
-                        border.color: Qt.alpha(btModule.colAccent, 0.25)
+                        border.width: 0
 
                         Text {
                             anchors.centerIn: parent
@@ -786,9 +782,10 @@ ColumnLayout {
                         Layout.fillWidth: true
                         height: 28
                         radius: 8
-                        color: btActionMouse.containsMouse ? btModule.colCardHover : btModule.colChipBg
-                        border.width: 1
-                        border.color: modelData.connected ? Qt.alpha(btModule.colRed, 0.40) : Qt.alpha(btModule.colAccent, 0.40)
+                        color: btActionMouse.containsMouse 
+                            ? (modelData.connected ? Qt.alpha(btModule.colRed, 0.25) : Qt.alpha(btModule.colAccent, 0.25)) 
+                            : (modelData.connected ? Qt.alpha(btModule.colRed, 0.16) : Qt.alpha(btModule.colAccent, 0.16))
+                        border.width: 0
 
                         Row {
                             anchors.centerIn: parent

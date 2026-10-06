@@ -60,5 +60,5 @@ if status is-interactive
 end
 
 
-# Added by Antigravity CLI installer
-set -gx PATH "/home/ricing/.local/bin" $PATH
+# Add local bin to PATH
+set -gx PATH "$HOME/.local/bin" $PATH

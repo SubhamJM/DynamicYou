@@ -113,6 +113,8 @@ EOF
     CANDIDATES=(
         "$HOME/Pictures/Wallpapers/$TARGET_THEME"
         "$HOME/Pictures/Wallpapers/$THEME_LOWER"
+        "$HOME/git/DynamicYou/Wallpapers/$TARGET_THEME"
+        "$HOME/git/DynamicYou/Wallpapers/$THEME_LOWER"
         "$HOME/git/MyLinuxSetup/Wallpapers/$TARGET_THEME"
         "$HOME/git/MyLinuxSetup/Wallpapers/$THEME_LOWER"
         "$HOME/Wallpapers/$TARGET_THEME"
@@ -140,7 +142,7 @@ EOF
     fi
     # Global fallback if theme folder had no matching wallpapers
     if [[ -z "$RANDOM_WALLPAPER" ]]; then
-        for fallback_dir in "$HOME/Pictures/Wallpapers" "$HOME/git/MyLinuxSetup/Wallpapers"; do
+        for fallback_dir in "$HOME/Pictures/Wallpapers" "$HOME/git/DynamicYou/Wallpapers" "$HOME/git/MyLinuxSetup/Wallpapers"; do
             if [[ -d "$fallback_dir" ]]; then
                 RANDOM_WALLPAPER=$(find "$fallback_dir" -maxdepth 3 -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.webp" \) | shuf -n 1)
                 [[ -n "$RANDOM_WALLPAPER" ]] && break

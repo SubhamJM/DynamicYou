@@ -519,8 +519,7 @@ Item {
                 Layout.preferredHeight: 26
                 radius: 13
                 color: Qt.rgba(0.18, 0.82, 0.34, 0.22)
-                border.width: 1
-                border.color: Qt.rgba(0.18, 0.82, 0.34, 0.45)
+                border.width: 0
                 Layout.alignment: Qt.AlignVCenter
 
                 Text {
@@ -560,8 +559,7 @@ Item {
                 Layout.preferredWidth: pomoNextActionText.implicitWidth + 16
                 radius: 12
                 color: pomoNextMouse.containsMouse ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.accent, 0.20)
-                border.width: 1
-                border.color: Qt.alpha(Theme.accent, 0.40)
+                border.width: 0
                 scale: pomoNextMouse.pressed ? 0.94 : 1.0
                 Behavior on scale { NumberAnimation { duration: 90 } }
 
@@ -1025,8 +1023,7 @@ Item {
                     width: idlePomoRow.implicitWidth + 12
                     radius: 10
                     color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
-                    border.width: 1
-                    border.color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.15) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.40) : Qt.rgba(0.18, 0.82, 0.34, 0.40))
+                    border.width: 0
                     anchors.verticalCenter: parent.verticalCenter
 
                     Row {
@@ -1192,8 +1189,7 @@ Item {
                         width: musicIdlePomoRow.implicitWidth + 12
                         radius: 10
                         color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
-                        border.width: 1
-                        border.color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.15) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.40) : Qt.rgba(0.18, 0.82, 0.34, 0.40))
+                        border.width: 0
                         anchors.verticalCenter: parent.verticalCenter
 
                         Row {

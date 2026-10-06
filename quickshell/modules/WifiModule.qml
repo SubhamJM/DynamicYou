@@ -419,8 +419,7 @@ ColumnLayout {
             Rectangle {
                 width: 28; height: 28; radius: 8
                 color: wifiBackMouse.containsMouse ? wifiMaster.colCardHover : "transparent"
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+                border.width: 0
                 scale: wifiBackMouse.pressed ? 0.90 : 1.0
                 Behavior on scale { NumberAnimation { duration: 90 } }
 
@@ -444,8 +443,7 @@ ColumnLayout {
             Rectangle {
                 width: 38; height: 38; radius: 14
                 color: wifiMaster.colChipBg
-                border.width: wifiMaster.isConnected ? 1 : 0
-                border.color: Qt.alpha(wifiMaster.colAccent, 0.25)
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 200 } }
 
                 MaterialSymbol {
@@ -551,9 +549,8 @@ ColumnLayout {
             // Wi-Fi Segment
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: 18
-                color: wifiMaster.activeTab === "wifi" ? wifiMaster.colChipBg : (wifiSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
-                border.width: wifiMaster.activeTab === "wifi" ? 1 : 0
-                border.color: Qt.alpha(wifiMaster.colAccent, 0.40)
+                color: wifiMaster.activeTab === "wifi" ? Qt.alpha(wifiMaster.colAccent, 0.18) : (wifiSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
                 RowLayout {
@@ -582,9 +579,8 @@ ColumnLayout {
             // Hotspot Segment
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; radius: 18
-                color: wifiMaster.activeTab === "hotspot" ? wifiMaster.colChipBg : (hotspotSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
-                border.width: wifiMaster.activeTab === "hotspot" ? 1 : 0
-                border.color: Qt.alpha(wifiMaster.colAccent, 0.40)
+                color: wifiMaster.activeTab === "hotspot" ? Qt.alpha(wifiMaster.colAccent, 0.18) : (hotspotSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
                 RowLayout {
@@ -798,8 +794,7 @@ ColumnLayout {
                 color: inUse 
                     ? (rowPressArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colCardActive)
                     : (rowPressArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colCard)
-                border.width: inUse ? 1 : 0
-                border.color: inUse ? Qt.alpha(wifiMaster.colAccent, 0.35) : "transparent"
+                border.width: 0
 
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Behavior on radius { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
@@ -822,8 +817,7 @@ ColumnLayout {
                         Rectangle {
                             width: 38; height: 38; radius: 14
                             color: wifiMaster.colChipBg
-                            border.width: inUse ? 1 : 0
-                            border.color: Qt.alpha(wifiMaster.colAccent, 0.25)
+                            border.width: 0
                             Behavior on radius { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
 
                             MaterialSymbol {
@@ -975,9 +969,8 @@ ColumnLayout {
                             Layout.preferredWidth: disconnectRow.implicitWidth + 18
                             Layout.minimumWidth: disconnectRow.implicitWidth + 18
                             radius: 15
-                            color: disconnectArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg
-                            border.width: 1
-                            border.color: Qt.alpha(wifiMaster.colRed, 0.40)
+                            color: disconnectArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)
+                            border.width: 0
                             Behavior on color { ColorAnimation { duration: 140 } }
 
                             RowLayout {
@@ -1033,9 +1026,8 @@ ColumnLayout {
                         // Connect Button
                         Rectangle {
                             Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 14
-                            color: isCurrentlyConnecting ? "transparent" : (connectArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg)
-                            border.width: 1
-                            border.color: Qt.alpha(wifiMaster.colAccent, 0.35)
+                            color: isCurrentlyConnecting ? Qt.alpha(wifiMaster.colAccent, 0.12) : (connectArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
+                            border.width: 0
                             Behavior on color { ColorAnimation { duration: 140 } }
 
                             Text { 
@@ -1158,9 +1150,8 @@ ColumnLayout {
                                 Layout.preferredWidth: isCurrentlyConnecting ? 84 : 58
                                 Layout.preferredHeight: 38
                                 radius: 12
-                                color: isCurrentlyConnecting ? wifiMaster.colCardHover : (joinArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg)
-                                border.width: 1
-                                border.color: Qt.alpha(wifiMaster.colAccent, 0.35)
+                                color: isCurrentlyConnecting ? wifiMaster.colCardHover : (joinArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
+                                border.width: 0
                                 Behavior on Layout.preferredWidth { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                                 Behavior on color { ColorAnimation { duration: 140 } }
                                 function submit() { if (!isCurrentlyConnecting) wifiMaster.initiateConnection(ssid, passField.text, index); }
@@ -1263,8 +1254,7 @@ ColumnLayout {
                     Rectangle {
                         width: 36; height: 36; radius: 13
                         color: wifiMaster.colChipBg
-                        border.width: wifiMaster.hotspotActive ? 1 : 0
-                        border.color: Qt.alpha(wifiMaster.colAccent, 0.35)
+                        border.width: 0
                         Behavior on color { ColorAnimation { duration: 200 } }
                         MaterialSymbol { 
                             anchors.centerIn: parent
@@ -1372,9 +1362,8 @@ ColumnLayout {
                 Rectangle {
                     Layout.fillWidth: true; Layout.preferredHeight: 38; radius: 12
                     Layout.bottomMargin: 2
-                    color: wifiMaster.hotspotActive ? Qt.alpha(wifiMaster.colRed, 0.16) : (startArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg)
-                    border.width: 1
-                    border.color: wifiMaster.hotspotActive ? Qt.alpha(wifiMaster.colRed, 0.40) : Qt.alpha(wifiMaster.colAccent, 0.35)
+                    color: wifiMaster.hotspotActive ? (startArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)) : (startArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
+                    border.width: 0
                     Behavior on color { ColorAnimation { duration: 150 } }
 
                     RowLayout {

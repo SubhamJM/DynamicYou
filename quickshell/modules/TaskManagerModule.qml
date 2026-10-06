@@ -579,8 +579,7 @@ Item {
                 Layout.preferredHeight: 38
                 radius: 19
                 color: searchInput.activeFocus ? Qt.rgba(255, 255, 255, 0.09) : Qt.rgba(255, 255, 255, 0.05)
-                border.width: searchInput.activeFocus ? 1 : 0
-                border.color: taskManagerRoot.colAccent
+                border.width: 0
 
                 RowLayout {
                     anchors.fill: parent
@@ -674,8 +673,7 @@ Item {
                     color: taskManagerRoot.sortField === "cpu" 
                         ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.22) 
                         : (cpuSortMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: taskManagerRoot.sortField === "cpu" ? 1 : 0
-                    border.color: taskManagerRoot.colAccent
+                    border.width: 0
 
                     RowLayout {
                         id: cpuSortRow
@@ -723,8 +721,7 @@ Item {
                     color: taskManagerRoot.sortField === "mem" 
                         ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.22) 
                         : (memSortMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: taskManagerRoot.sortField === "mem" ? 1 : 0
-                    border.color: taskManagerRoot.colAccent
+                    border.width: 0
 
                     RowLayout {
                         id: memSortRow
@@ -772,8 +769,7 @@ Item {
             Layout.fillHeight: true
             radius: 16
             color: Qt.rgba(255, 255, 255, 0.02)
-            border.width: 1
-            border.color: Qt.rgba(255, 255, 255, 0.05)
+            border.width: 0
             clip: true
 
             ListView {
@@ -806,8 +802,7 @@ Item {
                     color: (processList.currentIndex === index)
                         ? taskManagerRoot.colCardSelected
                         : (rowMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: (processList.currentIndex === index) ? 1 : 0
-                    border.color: taskManagerRoot.colAccent
+                    border.width: 0
 
                     scale: rowMouse.pressed ? 0.99 : 1.0
                     Behavior on scale { NumberAnimation { duration: 80 } }

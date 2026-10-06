@@ -55,7 +55,7 @@ QtObject {
         "battery":       { width: 460, height: 285, radius: 26 },
         "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
-        "clipboard":     { width: 460, height: 380, radius: 12 },
+        "clipboard":     { width: 580, height: 500, radius: 26 },
         "utility":       { width: 484, height: 342, radius: 26 },
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
@@ -84,8 +84,8 @@ QtObject {
     }
 
     function calculateClipboardHeight(count) {
-        if (count === 0) return 220;
-        return Math.min(440, Math.max(180, 66 + (count * 48)));
+        if (count === 0) return 260;
+        return Math.min(520, Math.max(240, 120 + (count * 72)));
     }
 
     function calculateLauncherHeight(count, allAppsLength, browsing = false) {

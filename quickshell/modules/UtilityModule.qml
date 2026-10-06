@@ -539,17 +539,13 @@ Item {
         radius: 23
 
         color: pill.isActive
-            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.14)
+            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.16)
             : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? utilModule.colCardHover : utilModule.colCard)
-        border.width: 1
-        border.color: pill.isActive
-            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.28)
-            : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
+        border.width: 0
 
         scale: pillBodyMouse.pressed ? 0.982 : ((discMouse.containsMouse || pillBodyMouse.containsMouse) ? 1.008 : 1.0)
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
 
         RowLayout {
             anchors.fill: parent
@@ -700,12 +696,10 @@ Item {
         implicitHeight: 46
         radius: height / 2
         color: Qt.rgba(255, 255, 255, 0.08)
-        border.width: 1
-        border.color: scardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+        border.width: 0
 
         scale: scardMouse.pressed ? 0.985 : (scardMouse.containsMouse ? 1.006 : 1.0)
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-        Behavior on border.color { ColorAnimation { duration: 150 } }
 
         // Dynamic Fill Stadium Track
         Item {
@@ -1618,10 +1612,7 @@ Item {
                     Layout.preferredHeight: 136
                     radius: 18
                     color: utilModule.colCard
-                    border.width: 1
-                    border.color: root.pomoRunning
-                        ? (root.pomoPaused ? Qt.rgba(1, 1, 1, 0.12) : Qt.alpha(Theme.accent, 0.35))
-                        : Qt.rgba(255, 255, 255, 0.05)
+                    border.width: 0
 
                     ColumnLayout {
                         anchors.centerIn: parent
@@ -1731,11 +1722,13 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 36
                             radius: 12
-                            color: chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
-                            border.width: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? 1.5 : 0
-                            border.color: Theme.accent
+                            color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60)
+                                ? Qt.alpha(Theme.accent, 0.20)
+                                : (chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
+                            border.width: 0
                             scale: chipMouse.pressed ? 0.96 : 1.0
                             Behavior on scale { NumberAnimation { duration: 90 } }
+                            Behavior on color { ColorAnimation { duration: 120 } }
 
                             Row {
                                 anchors.centerIn: parent
@@ -1783,10 +1776,10 @@ Item {
                         Layout.preferredHeight: 40
                         radius: 14
                         color: root.pomoPaused ? Qt.alpha(Theme.accent, 0.22) : utilModule.colCard
-                        border.width: 1
-                        border.color: root.pomoPaused ? Theme.accent : Qt.rgba(255, 255, 255, 0.08)
+                        border.width: 0
                         scale: pauseMouse.pressed ? 0.97 : 1.0
                         Behavior on scale { NumberAnimation { duration: 90 } }
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
                         Row {
                             anchors.centerIn: parent

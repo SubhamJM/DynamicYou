@@ -893,9 +893,7 @@ Item {
                         Layout.preferredHeight: 42
                         radius: 21
                         color: notesRoot.m3SurfaceContainer
-                        border.width: newTodoInput.activeFocus ? 1 : 0
-                        border.color: notesRoot.m3Primary
-                        Behavior on border.width { NumberAnimation { duration: 120 } }
+                        border.width: 0
 
                         RowLayout {
                             anchors.fill: parent

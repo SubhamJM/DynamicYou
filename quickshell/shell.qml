@@ -551,6 +551,8 @@ theme_lower = theme.lower()
 candidates = [
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
+    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme}'),
+    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme_lower}'),
     os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
     os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
     os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
@@ -563,7 +565,7 @@ for c in candidates:
         break
 
 if not wall_dir:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/DynamicYou/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
         if os.path.isdir(base):
             for d in os.listdir(base):
                 if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
