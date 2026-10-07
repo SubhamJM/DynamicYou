@@ -52,7 +52,7 @@ QtObject {
         "wifi":          { width: 420, height: 380, radius: 26 }, 
         "bluetooth":     { width: 420, height: 380, radius: 26 },
         "recorder":      { width: 420, height: 275, radius: 26 },
-        "battery":       { width: 460, height: 285, radius: 26 },
+        "battery":       { width: 460, height: 320, radius: 26 },
         "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 580, height: 500, radius: 26 },

@@ -1566,7 +1566,7 @@ Item {
 
             // Battery
             Rectangle {
-                width: battRow.implicitWidth + 16; height: 26; radius: 8
+                width: battRow.implicitWidth + 16; height: 26; radius: 13
                 color: battMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
                 border.width: 0
                 border.color: "transparent"

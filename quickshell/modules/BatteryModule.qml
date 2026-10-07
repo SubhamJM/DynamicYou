@@ -17,20 +17,23 @@ Item {
     }
 
     // ========================================================
-    // MATERIAL YOU / M3 COLOR TOKENS
+    // MATERIAL YOU (M3) TONAL PALETTE & MOTION TOKENS
     // ========================================================
-    readonly property color accentColor: Theme.colors.accent ?? "#a7c080"
-    readonly property color cardBg: "#0e0e12"
-    readonly property color hoverBg: "#18181c"
-    readonly property color borderColor: Qt.rgba(255, 255, 255, 0.05)
-    readonly property color borderHover: Qt.rgba(255, 255, 255, 0.10)
-    readonly property color textPrimary: "#f8fafc"
-    readonly property color textSecondary: "#94a3b8"
-    readonly property color bgBase: "#000000"
+    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
+    readonly property color colOnAccent: "#0e121a"
+    readonly property color colAccentContainer: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.16)
+    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
+    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.10)
+    readonly property color colCardActive: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.18)
+    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.08)
+    readonly property color colText: "#f5f5f7"
+    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.62)
+    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)
 
-    readonly property color chargingColor: "#8FDEB4"
-    readonly property color warningColor: "#e0af68"
-    readonly property color errorColor: "#e67e80"
+    readonly property color colGreen: "#8FDEB4"
+    readonly property color colWarning: "#fbbf24"
+    readonly property color colRed: "#f87171"
+    readonly property var motionCurve: (typeof NotchConfig !== "undefined" && NotchConfig.motionCurve) ? NotchConfig.motionCurve : [0.05, 0.7, 0.1, 1, 1, 1]
 
     // ========================================================
     // REACTIVE HARDWARE STATE
@@ -57,18 +60,18 @@ Item {
     readonly property bool isLowLevel: batteryLevel <= 15 && !isCharging
 
     readonly property color statusColor: {
-        if (isCharging) return chargingColor;
-        if (isLowLevel) return errorColor;
-        if (isWarningLevel) return warningColor;
-        return accentColor;
+        if (isCharging) return colGreen;
+        if (isLowLevel) return colRed;
+        if (isWarningLevel) return colWarning;
+        return colAccent;
     }
 
     // Telemetry properties
-    property real currentPowerW: 10.7
+    property real currentPowerW: 0.0
     property real voltageV: 12.0
-    property real currentEnergyWh: 37.7
-    property real fullEnergyWh: 38.9
-    property int healthPercentage: 77
+    property real currentEnergyWh: 0.0
+    property real fullEnergyWh: 0.0
+    property int healthPercentage: 100
     property string timeRemainingStr: "Calculating..."
     property int chargeThreshold: 100
     property int refreshRate: 144
@@ -195,97 +198,130 @@ Item {
     }
 
     // ========================================================
-    // REUSABLE MATERIAL YOU QUICK SETTINGS STADIUM TILE
-    // (Matches Android Quick Settings tiles shown in attachment)
+    // REUSABLE MATERIAL YOU (M3) COMPONENTS
     // ========================================================
-    // ========================================================
-    // REUSABLE MATERIAL YOU QUICK SETTINGS STADIUM TILE
-    // ========================================================
-    component QsStadiumTile: Rectangle {
-        id: tileRoot
-        property string icon: ""
+
+    // 1. Material You Circular Action Button
+    component MaterialCircleBtn: Rectangle {
+        id: cbtn
+        property string glyph: ""
+        property color iconColor: batteryModule.colText
+        signal clicked()
+
+        Layout.preferredWidth: 32
+        Layout.preferredHeight: 32
+        radius: 16
+        color: cmouse.containsMouse ? batteryModule.colCardHover : batteryModule.colCard
+        border.width: 0
+
+        scale: cmouse.pressed ? 0.90 : (cmouse.containsMouse ? 1.05 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: cbtn.glyph
+            iconSize: 17
+            color: cbtn.iconColor
+        }
+
+        MouseArea {
+            id: cmouse
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: cbtn.clicked()
+        }
+    }
+
+    // 2. Material You Quick Settings Stadium Tile (Matches Control Center)
+    component MaterialPill: Rectangle {
+        id: pill
+        property string glyph: ""
         property string title: ""
         property string subtitle: ""
-        property bool active: false
-        property color activeColor: batteryModule.accentColor
+        property bool isActive: false
+        property color activeColor: batteryModule.colAccent
         signal clicked()
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 46
-        radius: 16
+        implicitHeight: 46
+        radius: 23
 
-        // Smooth background tone: soft tinted container when active, dark surface when inactive
-        color: tileMouse.containsMouse ? batteryModule.hoverBg : batteryModule.cardBg
-        border.width: 1
-        border.color: tileMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05)
+        color: pill.isActive
+            ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.16)
+            : (pillMouse.containsMouse ? batteryModule.colCardHover : batteryModule.colCard)
+        border.width: 0
 
-        scale: tileMouse.pressed ? 0.96 : (tileMouse.containsMouse ? 1.01 : 1.0)
-        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 150 } }
-        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-        MouseArea {
-            id: tileMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: tileRoot.clicked()
-        }
+        scale: pillMouse.pressed ? 0.982 : (pillMouse.containsMouse ? 1.008 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 120 } }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 10
-            spacing: 9
+            anchors.leftMargin: 5
+            anchors.rightMargin: 12
+            spacing: 10
 
-            // Circular icon container on the left
+            // Left: Circular Icon Disc
             Rectangle {
-                id: iconCircle
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
-                radius: 16
-                color: tileRoot.active ? tileRoot.activeColor : Qt.rgba(1, 1, 1, 0.08)
-                Behavior on color { ColorAnimation { duration: 150 } }
+                width: 36
+                height: 36
+                radius: 18
+                color: pill.isActive ? pill.activeColor : (pillMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.085))
 
-                Text {
+                scale: pillMouse.pressed ? 0.92 : 1.0
+                Behavior on scale { NumberAnimation { duration: 90 } }
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                MaterialSymbol {
                     anchors.centerIn: parent
-                    text: tileRoot.icon
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: tileRoot.active ? batteryModule.bgBase : batteryModule.textSecondary
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    text: pill.glyph
+                    fill: pill.isActive ? 1 : 0
+                    iconSize: 19
+                    color: pill.isActive ? "#101318" : batteryModule.colText
+                    Behavior on color { ColorAnimation { duration: 100 } }
                 }
             }
 
-            // Title and state subtitle
+            // Right: Text Content Area
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 1
                 Layout.alignment: Qt.AlignVCenter
 
                 Text {
-                    text: tileRoot.title
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    color: batteryModule.textPrimary
-                    elide: Text.ElideRight
                     Layout.fillWidth: true
+                    text: pill.title
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    color: pill.isActive ? "#ffffff" : batteryModule.colText
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
                     renderType: Text.NativeRendering
                 }
 
                 Text {
-                    text: tileRoot.subtitle
-                    font.family: "Noto Sans"
-                    font.pixelSize: 9
-                    font.weight: Font.Normal
-                    color: tileRoot.active ? tileRoot.activeColor : batteryModule.textSecondary
-                    elide: Text.ElideRight
                     Layout.fillWidth: true
+                    text: pill.subtitle
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.Normal
+                    color: pill.isActive ? pill.activeColor : batteryModule.colSubtext
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
                     renderType: Text.NativeRendering
                 }
             }
+        }
+
+        MouseArea {
+            id: pillMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: pill.clicked()
         }
     }
 
@@ -294,247 +330,328 @@ Item {
     // ========================================================
     ColumnLayout {
         anchors.fill: parent
-        spacing: 9
+        anchors.leftMargin: 4
+        anchors.rightMargin: 4
+        anchors.topMargin: 2
+        anchors.bottomMargin: 2
+        spacing: 8
 
         // ══════════════════════════════════════════════════════════
-        // 1. HERO BATTERY DISPLAY (Modern, Minimalist & Eye-Pleasing)
+        // 1. MATERIAL YOU TOP HEADER
+        // ══════════════════════════════════════════════════════════
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            spacing: 8
+
+            // Back to Control Center
+            MaterialCircleBtn {
+                glyph: "arrow_back"
+                iconColor: batteryModule.colAccent
+                onClicked: root.switchMode("utility", true)
+            }
+
+            // Title & Live Summary
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    text: "Battery & Power"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    color: batteryModule.colText
+                    renderType: Text.NativeRendering
+                }
+
+                Text {
+                    text: {
+                        if (batteryModule.isFull) return "AC Power Connected • Fully Charged";
+                        if (batteryModule.isCharging) {
+                            return "Fast Charging • " + (batteryModule.timeRemainingStr !== "Calculating..." ? batteryModule.timeRemainingStr : "Plugged In");
+                        }
+                        return batteryModule.timeRemainingStr !== "Calculating..." ? (batteryModule.timeRemainingStr + " • Discharging") : "Discharging on Battery";
+                    }
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.Normal
+                    color: batteryModule.colSubtext
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            // Diagnostics / Refresh Button
+            MaterialCircleBtn {
+                glyph: "refresh"
+                iconColor: batteryModule.colSubtext
+                onClicked: batteryModule.pollAll()
+            }
+
+            // Close Button
+            MaterialCircleBtn {
+                glyph: "close"
+                iconColor: batteryModule.colSubtext
+                onClicked: root.collapseToIdle()
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 2. MATERIAL YOU HERO BATTERY WIDGET CARD
         // ══════════════════════════════════════════════════════════
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 84
-            radius: 18
-            color: batteryModule.cardBg
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.05)
+            Layout.preferredHeight: 102
+            radius: 20
+            color: batteryModule.colCard
+            border.width: 0
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 12
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10
                 spacing: 8
 
-                // Top Line: Icon badge + Big Percentage + State subtitle & Time + Right Telemetry
+                // Top Line: Big Expressive Percentage + Dynamic Status Pill + Power Draw Metric
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 11
+                    spacing: 8
 
-                    // Tactile Back to Utility Button
-                    Rectangle {
-                        width: 28; height: 28; radius: 8
-                        color: battBackMouse.containsMouse ? batteryModule.hoverBg : "transparent"
-                        border.width: 1
-                        border.color: Qt.rgba(1, 1, 1, 0.08)
-                        scale: battBackMouse.pressed ? 0.90 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 90 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "󰁍"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
-                            color: batteryModule.textPrimary
-                        }
-
-                        MouseArea {
-                            id: battBackMouse
-                            anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: root.switchMode("utility", true)
-                        }
+                    // Big Expressive Percentage
+                    Text {
+                        text: batteryModule.batteryLevel + "%"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 26
+                        font.weight: Font.Bold
+                        color: batteryModule.statusColor
+                        renderType: Text.NativeRendering
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
-                    // Refined circular icon badge
+                    // Dynamic Material You Status Pill
                     Rectangle {
-                        width: 38
-                        height: 38
-                        radius: 19
-                        color: Qt.rgba(batteryModule.statusColor.r, batteryModule.statusColor.g, batteryModule.statusColor.b, 0.16)
+                        height: 24
+                        radius: 12
+                        color: Qt.rgba(batteryModule.statusColor.r, batteryModule.statusColor.g, batteryModule.statusColor.b, 0.18)
+                        border.width: 0
+                        implicitWidth: statusPillRow.implicitWidth + 16
+                        Layout.alignment: Qt.AlignVCenter
 
-                        Text {
+                        Row {
+                            id: statusPillRow
                             anchors.centerIn: parent
-                            text: batteryModule.isCharging ? "󱐋" : (batteryModule.isFull ? "󰚥" : (batteryModule.isLowLevel ? "󰂃" : "󰁹"))
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 18
-                            color: batteryModule.statusColor
-                        }
-                    }
+                            spacing: 5
 
-                    // Percentage and Status info
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-
-                        RowLayout {
-                            spacing: 8
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: batteryModule.isCharging ? "bolt" : (batteryModule.isFull ? "power" : (batteryModule.isLowLevel ? "battery_alert" : "battery_full"))
+                                fill: 1
+                                iconSize: 14
+                                color: batteryModule.statusColor
+                            }
 
                             Text {
-                                text: batteryModule.batteryLevel + "%"
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: batteryModule.isCharging ? "Charging" : (batteryModule.isFull ? "Fully Charged" : (batteryModule.isLowLevel ? "Low Battery" : "On Battery"))
                                 font.family: "Noto Sans"
-                                font.pixelSize: 22
-                                font.weight: Font.Bold
-                                color: batteryModule.textPrimary
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: batteryModule.statusColor
                                 renderType: Text.NativeRendering
                             }
-
-                            // Subtle state badge
-                            Rectangle {
-                                height: 18
-                                radius: 9
-                                color: Qt.rgba(batteryModule.statusColor.r, batteryModule.statusColor.g, batteryModule.statusColor.b, 0.15)
-                                width: stateText.implicitWidth + 12
-
-                                Text {
-                                    id: stateText
-                                    anchors.centerIn: parent
-                                    text: batteryModule.isCharging ? "Charging" : (batteryModule.isFull ? "Fully Charged" : "Discharging")
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                    color: batteryModule.statusColor
-                                    renderType: Text.NativeRendering
-                                }
-                            }
-                        }
-
-                        Text {
-                            text: {
-                                if (batteryModule.isFull) return "AC Power Connected";
-                                if (batteryModule.timeRemainingStr && batteryModule.timeRemainingStr !== "Calculating...") {
-                                    return batteryModule.timeRemainingStr;
-                                }
-                                return batteryModule.isCharging ? "Fast Charging" : "Calculating remaining time...";
-                            }
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            color: batteryModule.textSecondary
-                            renderType: Text.NativeRendering
                         }
                     }
 
-                    // Power draw rate and health badge on right
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    Item { Layout.fillWidth: true }
 
-                        Text {
-                            text: (batteryModule.currentPowerW > 0 ? batteryModule.currentPowerW.toFixed(1) + " W" : "0.0 W")
-                            font.family: "Noto Sans"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            color: batteryModule.statusColor
-                            Layout.alignment: Qt.AlignRight
-                            renderType: Text.NativeRendering
-                        }
+                    // Power Draw Metric Chip
+                    Rectangle {
+                        height: 24
+                        radius: 12
+                        color: batteryModule.colChipBg
+                        border.width: 0
+                        implicitWidth: powerMetricRow.implicitWidth + 14
+                        Layout.alignment: Qt.AlignVCenter
 
-                        Text {
-                            text: batteryModule.healthPercentage + "% Health"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 10
-                            color: batteryModule.textSecondary
-                            Layout.alignment: Qt.AlignRight
-                            renderType: Text.NativeRendering
+                        Row {
+                            id: powerMetricRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "electric_bolt"
+                                iconSize: 13
+                                color: batteryModule.statusColor
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (batteryModule.currentPowerW > 0 ? batteryModule.currentPowerW.toFixed(1) + " W" : "0.0 W")
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                color: batteryModule.colText
+                                renderType: Text.NativeRendering
+                            }
                         }
                     }
                 }
 
-                // Sleek, refined, slim progress track (not a bulky 44px block)
+                // Middle: Material 3 Expressive Stadium Track
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 6
-                    radius: 3
-                    color: Qt.rgba(1, 1, 1, 0.08)
+                    height: 12
+                    radius: 6
+                    color: Qt.rgba(255, 255, 255, 0.08)
                     clip: true
 
                     Rectangle {
+                        id: progressFill
                         height: parent.height
-                        radius: 3
+                        radius: parent.radius
                         color: batteryModule.statusColor
                         width: parent.width * (Math.min(100, Math.max(0, batteryModule.batteryLevel)) / 100.0)
 
                         Behavior on width {
-                            NumberAnimation { duration: 350; easing.type: Easing.OutCubic }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ══════════════════════════════════════════════════════════
-        // 2. POWER PROFILES (Power Saver / Balanced / Performance)
-        // ══════════════════════════════════════════════════════════
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 38
-            spacing: 8
-
-            readonly property var profiles: [
-                { id: "power-saver", label: "Power Saver", icon: "󰌪" },
-                { id: "balanced",    label: "Balanced",    icon: "󰾅" },
-                { id: "performance", label: "Performance", icon: "󰓅" }
-            ]
-
-            Repeater {
-                model: parent.profiles
-
-                Rectangle {
-                    id: profilePill
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    radius: 19
-
-                    readonly property bool isSelected: batteryModule.activeProfile === modelData.id
-
-                    color: profMouse.containsMouse ? batteryModule.hoverBg : batteryModule.cardBg
-
-                    border.width: 1
-                    border.color: isSelected
-                        ? Qt.rgba(batteryModule.accentColor.r, batteryModule.accentColor.g, batteryModule.accentColor.b, 0.45)
-                        : (profMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.05))
-
-                    scale: profMouse.pressed ? 0.96 : (profMouse.containsMouse ? 1.01 : 1.0)
-                    Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-                    Behavior on color { ColorAnimation { duration: 150 } }
-                    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                    MouseArea {
-                        id: profMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: batteryModule.setPowerProfile(modelData.id)
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 6
-                        anchors.rightMargin: 10
-                        spacing: 7
-
-                        Rectangle {
-                            Layout.preferredWidth: 28
-                            Layout.preferredHeight: 28
-                            radius: 14
-                            color: profilePill.isSelected ? batteryModule.accentColor : Qt.rgba(1, 1, 1, 0.08)
-                            Behavior on color { ColorAnimation { duration: 150 } }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData.icon
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 13
-                                color: profilePill.isSelected ? batteryModule.bgBase : batteryModule.textSecondary
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                            NumberAnimation {
+                                duration: 380
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: batteryModule.motionCurve
                             }
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData.label
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            color: profilePill.isSelected ? batteryModule.accentColor : batteryModule.textPrimary
-                            elide: Text.ElideRight
-                            renderType: Text.NativeRendering
+                        // Fluid charging shimmer
+                        Rectangle {
+                            visible: batteryModule.isCharging && !batteryModule.isFull
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: Qt.rgba(1, 1, 1, 0.16)
+                            opacity: 0
+
+                            property real shimmerPos: 0
+                            x: (parent.width + width) * shimmerPos - width
+
+                            SequentialAnimation on shimmerPos {
+                                running: batteryModule.isCharging && !batteryModule.isFull
+                                loops: Animation.Infinite
+                                NumberAnimation { from: -0.3; to: 1.3; duration: 1400; easing.type: Easing.InOutSine }
+                                PauseAnimation { duration: 300 }
+                            }
+
+                            SequentialAnimation on opacity {
+                                running: batteryModule.isCharging && !batteryModule.isFull
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 0.04; to: 0.20; duration: 700; easing.type: Easing.InOutSine }
+                                NumberAnimation { from: 0.20; to: 0.04; duration: 700; easing.type: Easing.InOutSine }
+                            }
+                        }
+                    }
+                }
+
+                // Bottom Line: Material 3 Tonal Info Chips
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    // Chip 1: Time remaining
+                    Rectangle {
+                        height: 22
+                        radius: 11
+                        color: batteryModule.colChipBg
+                        border.width: 0
+                        implicitWidth: chipTimeRow.implicitWidth + 14
+
+                        Row {
+                            id: chipTimeRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "schedule"
+                                iconSize: 12
+                                color: batteryModule.colSubtext
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: batteryModule.timeRemainingStr
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                                color: batteryModule.colSubtext
+                                renderType: Text.NativeRendering
+                            }
+                        }
+                    }
+
+                    // Chip 2: Health
+                    Rectangle {
+                        height: 22
+                        radius: 11
+                        color: batteryModule.colChipBg
+                        border.width: 0
+                        implicitWidth: chipHealthRow.implicitWidth + 14
+
+                        Row {
+                            id: chipHealthRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "health_and_safety"
+                                iconSize: 12
+                                color: batteryModule.colSubtext
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: batteryModule.healthPercentage + "% Health"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                                color: batteryModule.colSubtext
+                                renderType: Text.NativeRendering
+                            }
+                        }
+                    }
+
+                    // Chip 3: Voltage
+                    Rectangle {
+                        height: 22
+                        radius: 11
+                        color: batteryModule.colChipBg
+                        border.width: 0
+                        implicitWidth: chipVoltRow.implicitWidth + 14
+
+                        Row {
+                            id: chipVoltRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "speed"
+                                iconSize: 12
+                                color: batteryModule.colSubtext
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: batteryModule.voltageV.toFixed(1) + " V"
+                                font.family: "Noto Sans"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                                color: batteryModule.colSubtext
+                                renderType: Text.NativeRendering
+                            }
                         }
                     }
                 }
@@ -542,7 +659,83 @@ Item {
         }
 
         // ══════════════════════════════════════════════════════════
-        // 3. HARDWARE & ECO TILES (2x2 Grid)
+        // 3. POWER PROFILES (Material 3 Segmented Stadium Button)
+        // ══════════════════════════════════════════════════════════
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 38
+            radius: 19
+            color: batteryModule.colCard
+            border.width: 0
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 3
+                spacing: 4
+
+                readonly property var profiles: [
+                    { id: "power-saver", label: "Power Saver", icon: "energy_savings_leaf" },
+                    { id: "balanced",    label: "Balanced",    icon: "tune" },
+                    { id: "performance", label: "Performance", icon: "rocket_launch" }
+                ]
+
+                Repeater {
+                    model: parent.profiles
+
+                    Rectangle {
+                        id: segPill
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 16
+
+                        readonly property bool isSelected: batteryModule.activeProfile === modelData.id
+
+                        color: isSelected ? batteryModule.colAccent : (segMouse.containsMouse ? batteryModule.colCardHover : "transparent")
+                        border.width: 0
+
+                        scale: segMouse.pressed ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 140 } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.icon
+                                iconSize: 16
+                                fill: segPill.isSelected ? 1 : 0
+                                color: segPill.isSelected ? batteryModule.colOnAccent : (segMouse.containsMouse ? "#ffffff" : batteryModule.colSubtext)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.label
+                                font.family: "Noto Sans"
+                                font.pixelSize: 11
+                                font.weight: segPill.isSelected ? Font.DemiBold : Font.Medium
+                                color: segPill.isSelected ? batteryModule.colOnAccent : (segMouse.containsMouse ? "#ffffff" : batteryModule.colText)
+                                renderType: Text.NativeRendering
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: segMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: batteryModule.setPowerProfile(modelData.id)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════
+        // 4. HARDWARE & ECO TILES (Material 3 Stadium Tiles Grid)
         // ══════════════════════════════════════════════════════════
         GridLayout {
             Layout.fillWidth: true
@@ -551,42 +744,42 @@ Item {
             rowSpacing: 8
 
             // Tile 1: Battery Care (80% Asus Charge Threshold)
-            QsStadiumTile {
-                icon: "󱊞"
+            MaterialPill {
+                glyph: "battery_saver"
                 title: "Battery Care"
                 subtitle: batteryModule.chargeThreshold === 80 ? "80% Limit (Healthy)" : "100% Full Capacity"
-                active: batteryModule.chargeThreshold === 80
-                activeColor: batteryModule.accentColor
+                isActive: batteryModule.chargeThreshold === 80
+                activeColor: batteryModule.colAccent
                 onClicked: batteryModule.toggleChargeThreshold()
             }
 
-            // Tile 2: Display 60Hz Eco Mode
-            QsStadiumTile {
-                icon: "󰍹"
+            // Tile 2: Display Eco 60Hz Mode
+            MaterialPill {
+                glyph: "desktop_windows"
                 title: "Display Eco"
-                subtitle: batteryModule.refreshRate <= 60 ? "60 Hz Active (~2W saved)" : "144 Hz Smooth"
-                active: batteryModule.refreshRate <= 60
-                activeColor: batteryModule.accentColor
+                subtitle: batteryModule.refreshRate <= 60 ? "60 Hz Active (Eco)" : "144 Hz Smooth"
+                isActive: batteryModule.refreshRate <= 60
+                activeColor: batteryModule.colAccent
                 onClicked: batteryModule.toggleRefreshRate()
             }
 
             // Tile 3: Keyboard Backlight
-            QsStadiumTile {
-                icon: "󰌌"
+            MaterialPill {
+                glyph: "keyboard"
                 title: "Kbd Backlight"
                 subtitle: batteryModule.kbdBacklight > 0 ? "Illumination On" : "Off (Power Saver)"
-                active: batteryModule.kbdBacklight > 0
-                activeColor: batteryModule.accentColor
+                isActive: batteryModule.kbdBacklight > 0
+                activeColor: batteryModule.colAccent
                 onClicked: batteryModule.toggleKbdBacklight()
             }
 
             // Tile 4: Instant Telemetry / Power Draw Rate
-            QsStadiumTile {
-                icon: "󱐋"
-                title: "Power Draw"
+            MaterialPill {
+                glyph: "bolt"
+                title: "Power Telemetry"
                 subtitle: (batteryModule.currentPowerW > 0 ? batteryModule.currentPowerW.toFixed(1) + " W rate" : "0.0 W idle") + " • " + batteryModule.voltageV.toFixed(1) + "V"
-                active: batteryModule.isCharging
-                activeColor: batteryModule.chargingColor
+                isActive: batteryModule.isCharging
+                activeColor: batteryModule.colGreen
                 onClicked: batteryModule.pollAll()
             }
         }

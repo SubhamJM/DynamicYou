@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Services.UPower
 import "../"
 
-// Android-style animated battery, with a quickshell/caelestia-flavoured expanded charge pill
+// Material You (Material 3) animated battery pill with dynamic charging state
 Item {
     id: root
 
@@ -24,7 +24,7 @@ Item {
     readonly property bool isLow: isReady && batteryLevel <= 15
     readonly property bool isCritical: isLow && !isPluggedIn
 
-    // Caelestia-flavoured "emphasized decelerate" motion curve — smooth, no bounce.
+    // Material 3 emphasized decelerate motion curve
     readonly property var motionCurve: (typeof NotchConfig !== "undefined" && NotchConfig.motionCurve) ? NotchConfig.motionCurve : [0.05, 0.7, 0.1, 1, 1, 1]
 
     // Track state changes for animations
@@ -53,16 +53,15 @@ Item {
         }
     }
 
-    // Colors
+    // Material 3 Dynamic Tonal Colors
     readonly property color normalColor: {
-        if (!isReady) return Theme.colors.text_primary ?? "#c0caf5"
-        if (isLow) return Theme.colors.error ?? "#f44336"
-        if (isWarning) return Theme.colors.warning ?? "#e0af68"
-        return Theme.colors.text_primary ?? "#c0caf5"
+        if (!isReady) return Theme.colors.text_primary ?? "#f8fafc"
+        if (isLow) return Theme.colors.error ?? "#f87171"
+        if (isWarning) return Theme.colors.warning ?? "#fbbf24"
+        return Theme.accent ?? "#7aa2f7"
     }
 
     readonly property color chargingColor: "#8FDEB4"
-    readonly property color liquidColor: Qt.lighter("#8FDEB4", 1.2)
     readonly property color compactBatteryColor: {
         if (showExpandedMode || justPluggedIn) return chargingColor
         if (isPluggedIn && (isLow || isWarning)) return normalColor
@@ -86,7 +85,7 @@ Item {
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // STATE 1 & 3: Normal / Charging compact view — macOS style
+        // STATE 1 & 3: Normal / Charging compact view — Material You Capsule
         // ═══════════════════════════════════════════════════════════════
         Row {
             id: normalBattery
@@ -103,10 +102,11 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: (root.isReady ? batteryLevel : "--") + "%"
-                font.family: "Inter"
+                font.family: "Noto Sans"
                 font.pixelSize: 12
-                font.weight: (isWarning || isLow) ? Font.Bold : Font.Medium
+                font.weight: (isWarning || isLow) ? Font.Bold : Font.DemiBold
                 color: compactBatteryColor
+                renderType: Text.NativeRendering
 
                 Behavior on color {
                     ColorAnimation { duration: 280 }
@@ -121,20 +121,17 @@ Item {
                 }
             }
 
-            // Battery icon — macOS Golden Gate style
+            // Material You Battery Stadium Capsule
             Item {
-                width: 26
+                width: 24
                 height: 12
                 anchors.verticalCenter: parent.verticalCenter
 
-                // Battery body
+                // Stadium Capsule Body
                 Rectangle {
                     id: batteryBody
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 23
-                    height: 12
-                    radius: 3.5
+                    anchors.fill: parent
+                    radius: 6
                     color: "transparent"
                     border.width: 1.2
                     border.color: compactBatteryColor
@@ -143,7 +140,7 @@ Item {
                         ColorAnimation { duration: 280 }
                     }
 
-                    // Fill level — macOS style inner rounded fill
+                    // Fluid inner fill
                     Rectangle {
                         id: fillRect
                         anchors.left: parent.left
@@ -151,7 +148,7 @@ Item {
                         anchors.bottom: parent.bottom
                         anchors.margins: 1.5
                         width: Math.max(0, (parent.width - 3) * (root.isReady ? root.percentage : 0))
-                        radius: 2
+                        radius: 4.5
                         color: compactBatteryColor
 
                         Behavior on width {
@@ -164,7 +161,7 @@ Item {
                             visible: isCharging && !isFullyCharged && !showExpandedMode
                             anchors.fill: parent
                             radius: parent.radius
-                            color: Qt.rgba(1, 1, 1, 0.12)
+                            color: Qt.rgba(1, 1, 1, 0.16)
                             opacity: 0
 
                             property real shimmerPos: 0
@@ -180,61 +177,46 @@ Item {
                             SequentialAnimation on opacity {
                                 running: isCharging && !isFullyCharged && !showExpandedMode
                                 loops: Animation.Infinite
-                                NumberAnimation { from: 0.04; to: 0.16; duration: 600; easing.type: Easing.InOutSine }
-                                NumberAnimation { from: 0.16; to: 0.04; duration: 600; easing.type: Easing.InOutSine }
+                                NumberAnimation { from: 0.04; to: 0.18; duration: 600; easing.type: Easing.InOutSine }
+                                NumberAnimation { from: 0.18; to: 0.04; duration: 600; easing.type: Easing.InOutSine }
                             }
                         }
                     }
-                }
 
-                // Terminal nub — macOS style
-                Rectangle {
-                    anchors.left: batteryBody.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 2.5
-                    height: 4
-                    radius: 1
-                    color: compactBatteryColor
+                    // Charging bolt icon
+                    MaterialSymbol {
+                        visible: isPluggedIn && !showExpandedMode
+                        anchors.centerIn: parent
+                        text: "bolt"
+                        fill: 1
+                        iconSize: 11
+                        color: Theme.colors.bg ?? "#000000"
 
-                    Behavior on color {
-                        ColorAnimation { duration: 280 }
-                    }
-                }
-
-                // Charging bolt icon
-                Text {
-                    visible: isPluggedIn && !showExpandedMode
-                    anchors.centerIn: batteryBody
-                    text: "󱐋"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 11
-                    color: Theme.colors.bg ?? "#16161e"
-                    opacity: 0.9
-
-                    SequentialAnimation on scale {
-                        running: isCharging && !isFullyCharged && !showExpandedMode
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 1.2; duration: 400; easing.type: Easing.OutCubic }
-                        NumberAnimation { to: 1.0; duration: 400; easing.type: Easing.InCubic }
+                        SequentialAnimation on scale {
+                            running: isCharging && !isFullyCharged && !showExpandedMode
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 1.25; duration: 400; easing.type: Easing.OutCubic }
+                            NumberAnimation { to: 1.0; duration: 400; easing.type: Easing.InCubic }
+                        }
                     }
                 }
             }
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // STATE 2: Just plugged in — quickshell-style charge pill
+        // STATE 2: Just plugged in — Material You Expressive Pill
         // ═══════════════════════════════════════════════════════════════
         Rectangle {
             id: expandedPill
             anchors.centerIn: parent
-            width: pillRow.implicitWidth + 26
+            width: pillRow.implicitWidth + 24
             height: 22
             radius: 11
             visible: showExpandedMode
             opacity: showExpandedMode ? 1 : 0
-            color: Qt.rgba(0.1, 0.12, 0.18, 0.94)
+            color: Qt.rgba(0.06, 0.08, 0.12, 0.94)
             border.width: 1
-            border.color: Qt.rgba(chargingColor.r, chargingColor.g, chargingColor.b, 0.45)
+            border.color: Qt.rgba(chargingColor.r, chargingColor.g, chargingColor.b, 0.50)
 
             Behavior on opacity {
                 NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: root.motionCurve }
@@ -260,13 +242,12 @@ Item {
             Row {
                 id: pillRow
                 anchors.centerIn: parent
-                anchors.verticalCenterOffset: -1
-                spacing: 6
+                spacing: 5
 
-                Text {
-                    text: "󱐋"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
+                MaterialSymbol {
+                    text: "bolt"
+                    fill: 1
+                    iconSize: 13
                     color: chargingColor
                     anchors.verticalCenter: parent.verticalCenter
 
@@ -280,12 +261,12 @@ Item {
 
                 Text {
                     text: (root.isReady ? batteryLevel : "--") + "%"
-                    font.family: "Inter"
-                    font.pixelSize: 13
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
-                    font.features: { "tnum": 1 }
-                    color: Theme.colors.text_primary ?? "#c0caf5"
+                    color: Theme.colors.text_primary ?? "#ffffff"
                     anchors.verticalCenter: parent.verticalCenter
+                    renderType: Text.NativeRendering
                 }
             }
 
