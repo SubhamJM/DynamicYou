@@ -313,10 +313,28 @@ def get_hyprland_windows():
         pass
     return client_pids
 
+def get_all_pss():
+    pss_map = {}
+    try:
+        for entry in os.scandir('/proc'):
+            if entry.is_dir() and entry.name.isdigit():
+                try:
+                    with open(f'{entry.path}/smaps_rollup', 'r') as f:
+                        for line in f:
+                            if line.startswith('Pss:'):
+                                pss_map[int(entry.name)] = int(line.split()[1])
+                                break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return pss_map
+
 def list_processes():
     mem_info = get_mem_info()
     cpu_info = get_cpu_info()
     client_pids = get_hyprland_windows()
+    pss_map = get_all_pss()
 
     try:
         out = subprocess.check_output(
@@ -350,14 +368,20 @@ def list_processes():
 
             is_kernel = (ppid == 2 or pid == 2 or comm.startswith('kworker') or comm.startswith('kthread') or (args.startswith('[') and args.endswith(']')))
 
+            # PSS for proportional shared memory, RSS for resident set size matching btop/top
+            pss_kb = pss_map.get(pid, rss_kb)
+            proc_mem_mb = round(rss_kb / 1024.0, 1)
+            proc_mem_pct = round((rss_kb * 1024.0 / mem_info['mem_total_bytes']) * 100.0, 1) if mem_info['mem_total_bytes'] > 0 else 0.0
+
             procs[pid] = {
                 'pid': pid,
                 'ppid': ppid,
                 'user': user,
                 'cpu': cpu,
-                'mem_pct': mem_pct,
+                'mem_pct': proc_mem_pct,
+                'mem_kb': pss_kb,
                 'rss_kb': rss_kb,
-                'mem_mb': round(rss_kb / 1024.0, 1),
+                'mem_mb': proc_mem_mb,
                 'comm': comm,
                 'args': args,
                 'is_kernel': is_kernel
@@ -442,9 +466,12 @@ def list_processes():
 
         all_pids = [w_pid] + [c['pid'] for c in children]
         tot_cpu = round((root_proc['cpu'] if root_proc else 0.0) + sum(c['cpu'] for c in children), 1)
-        tot_rss_kb = (root_proc['rss_kb'] if root_proc else 0) + sum(c['rss_kb'] for c in children)
-        tot_mb = round(tot_rss_kb / 1024.0, 1)
-        tot_pct = round((tot_rss_kb * 1024 / mem_info['mem_total_bytes']) * 100.0, 1) if mem_info['mem_total_bytes'] > 0 else 0.0
+        if children:
+            tot_mem_kb = (root_proc['mem_kb'] if root_proc else 0) + sum(c['mem_kb'] for c in children)
+        else:
+            tot_mem_kb = root_proc['rss_kb'] if root_proc else 0
+        tot_mb = round(tot_mem_kb / 1024.0, 1)
+        tot_pct = round((tot_mem_kb * 1024 / mem_info['mem_total_bytes']) * 100.0, 1) if mem_info['mem_total_bytes'] > 0 else 0.0
 
         title = w_info.get('title') or (root_proc['args'].split()[0] if root_proc and root_proc['args'] else comm)
         user = root_proc['user'] if root_proc else ''
@@ -472,7 +499,7 @@ def list_processes():
             "class": p_class,
             "category": "app",
             "cpu": tot_cpu,
-            "mem_bytes": tot_rss_kb * 1024,
+            "mem_bytes": tot_mem_kb * 1024,
             "mem_mb": tot_mb,
             "mem_percent": tot_pct,
             "user": user,
@@ -495,9 +522,12 @@ def list_processes():
 
         all_pids = [s_pid] + [c['pid'] for c in children]
         tot_cpu = round(s_proc['cpu'] + sum(c['cpu'] for c in children), 1)
-        tot_rss_kb = s_proc['rss_kb'] + sum(c['rss_kb'] for c in children)
-        tot_mb = round(tot_rss_kb / 1024.0, 1)
-        tot_pct = round((tot_rss_kb * 1024 / mem_info['mem_total_bytes']) * 100.0, 1) if mem_info['mem_total_bytes'] > 0 else 0.0
+        if children:
+            tot_mem_kb = s_proc['mem_kb'] + sum(c['mem_kb'] for c in children)
+        else:
+            tot_mem_kb = s_proc['rss_kb']
+        tot_mb = round(tot_mem_kb / 1024.0, 1)
+        tot_pct = round((tot_mem_kb * 1024 / mem_info['mem_total_bytes']) * 100.0, 1) if mem_info['mem_total_bytes'] > 0 else 0.0
 
         title = s_proc['args'].split()[0] if s_proc['args'] else comm
 
@@ -524,7 +554,7 @@ def list_processes():
             "class": "",
             "category": "app",
             "cpu": tot_cpu,
-            "mem_bytes": tot_rss_kb * 1024,
+            "mem_bytes": tot_mem_kb * 1024,
             "mem_mb": tot_mb,
             "mem_percent": tot_pct,
             "user": s_proc['user'],

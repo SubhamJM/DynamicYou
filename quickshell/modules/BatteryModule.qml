@@ -75,7 +75,7 @@ Item {
     // ========================================================
     // 3. BACKEND PROCESSES & ON-DEMAND POLLING
     // ========================================================
-    readonly property string scriptPath: (Quickshell.shellDir || Quickshell.configDir) + "/scripts/battery_telemetry.py"
+    readonly property string scriptPath: NotchConfig.scriptsDir + "/battery_telemetry.py"
 
     Process {
         id: telemetryPoller

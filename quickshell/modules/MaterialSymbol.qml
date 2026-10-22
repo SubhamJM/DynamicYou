@@ -23,12 +23,7 @@ Text {
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
 
-    font.variableAxes: isNerd ? ({}) : ({
-        "FILL": Number(fill).toFixed(1),
-        "GRAD": grad,
-        "opsz": fontInfo.pixelSize > 0 ? fontInfo.pixelSize : iconSize,
-        "wght": fontInfo.weight > 0 ? fontInfo.weight : 400
-    })
+    font.variableAxes: (!isNerd && root.fill > 0.5) ? ({ "FILL": 1 }) : ({})
 
     Behavior on color {
         ColorAnimation { duration: (typeof Theme !== "undefined" && Theme.animFast) ? Theme.animFast : 100 }

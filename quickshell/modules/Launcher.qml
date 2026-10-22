@@ -260,7 +260,7 @@ ColumnLayout {
         property string pendingQuery: ""
         onTriggered: {
             if (pendingQuery !== "") {
-                calcProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/calc_helper.py", pendingQuery];
+                calcProcess.command = [NotchConfig.scriptsDir + "/calc_helper.py", pendingQuery];
                 calcProcess.running = true;
             }
         }

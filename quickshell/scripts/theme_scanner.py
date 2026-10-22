@@ -67,9 +67,21 @@ def scan_themes():
             except Exception:
                 pass
 
+        # Check for theme-name.txt for proper display name
+        display_name = t
+        tn_path = os.path.join(p, "theme-name.txt")
+        if os.path.exists(tn_path):
+            try:
+                with open(tn_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        display_name = content
+            except Exception:
+                pass
+
         result.append({
             "rawName": t,
-            "themeName": t.lower(),
+            "themeName": display_name,
             "cardBg": bg,
             "accentColor": accent,
             "textColor": text,

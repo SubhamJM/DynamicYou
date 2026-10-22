@@ -93,7 +93,7 @@ Item {
     Process {
         id: parserProcess
         running: false
-        command: ["python3", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/keybinds_parser.py", "list"]
+        command: ["python3", NotchConfig.scriptsDir + "/keybinds_parser.py", "list"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (!this.text || this.text.trim() === "") return;
@@ -189,7 +189,7 @@ Item {
         if (addProcess.running) addProcess.running = false;
         addProcess.command = [
             "python3",
-            (Quickshell.shellDir || Quickshell.configDir) + "/scripts/keybinds_parser.py",
+            NotchConfig.scriptsDir + "/keybinds_parser.py",
             "add",
             "--key", k,
             "--cmd", c,
@@ -204,7 +204,7 @@ Item {
         if (removeProcess.running) removeProcess.running = false;
         var args = [
             "python3",
-            (Quickshell.shellDir || Quickshell.configDir) + "/scripts/keybinds_parser.py",
+            NotchConfig.scriptsDir + "/keybinds_parser.py",
             "remove"
         ];
         if (item.lineNum && item.lineNum > 0) {

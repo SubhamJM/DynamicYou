@@ -1644,7 +1644,6 @@ Item {
                     hoverIconColor: "#ff5449"
                     onClicked: root.switchMode("powermenu", false)
                 }
-                }
             }
         }
     }

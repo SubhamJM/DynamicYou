@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import Quickshell
 
 QtObject {
     id: config
@@ -33,6 +34,7 @@ QtObject {
     readonly property int timerNetPopup: 1500       // Duration for Network handoff island popup
     readonly property int timerIslandText: 3500     // Duration for Island textual info labels
     readonly property int timerFullscreenHideGrace: 250 // Duration before auto-hiding when leaving top hover in fullscreen
+    readonly property string scriptsDir: (Quickshell.env("HOME") || "") + "/.config/quickshell/scripts"
 
     // ==========================================
     // 4. STATIC NOTCH BASE DIMENSIONS

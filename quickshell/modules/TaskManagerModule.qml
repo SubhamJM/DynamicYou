@@ -119,7 +119,7 @@ Item {
 
         taskKiller.command = [
             "python3",
-            (Quickshell.shellDir || Quickshell.configDir) + "/scripts/task_manager.py",
+            NotchConfig.scriptsDir + "/task_manager.py",
             "kill",
             pid.toString(),
             force ? "--force" : ""
@@ -152,7 +152,7 @@ Item {
         onTriggered: {
             windowFocuser.command = [
                 "python3",
-                (Quickshell.shellDir || Quickshell.configDir) + "/scripts/task_manager.py",
+                NotchConfig.scriptsDir + "/task_manager.py",
                 "focus",
                 targetAddress
             ];
@@ -287,7 +287,7 @@ Item {
     // Auto-refresh timer when module is active
     Timer {
         id: autoRefreshTimer
-        interval: 1000
+        interval: 2000
         repeat: true
         running: taskManagerRoot.visible && root.activeMode === "taskmanager"
         onTriggered: {
@@ -326,7 +326,7 @@ Item {
         running: false
         command: [
             "python3",
-            (Quickshell.shellDir || Quickshell.configDir) + "/scripts/task_manager.py",
+            NotchConfig.scriptsDir + "/task_manager.py",
             "list"
         ]
         stdout: StdioCollector {

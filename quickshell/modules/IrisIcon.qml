@@ -45,7 +45,12 @@ Item {
         // Try Quickshell.iconPath on rawIcon directly
         try {
             var directPath = Quickshell.iconPath(rawIcon, true);
-            if (directPath && directPath.trim() !== "") return "file://" + directPath;
+            if (directPath && directPath.trim() !== "") {
+                if (directPath.startsWith("image://") || directPath.startsWith("file://")) {
+                    return directPath;
+                }
+                return directPath.startsWith("/") ? ("file://" + directPath) : ("file://" + directPath);
+            }
         } catch (e) {}
 
         // Try IconResolver mapping

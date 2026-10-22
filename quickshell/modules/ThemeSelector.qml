@@ -133,8 +133,8 @@ ColumnLayout {
         if (carousel.currentIndex >= 0 && carousel.currentIndex < filteredThemes.length) {
             var t = filteredThemes[carousel.currentIndex];
             if (t && t.rawName) {
-                var home = Quickshell.env("HOME") || "/home/ricing";
-                var scriptPath = home + "/.config/scripts/apply-theme.sh";
+                var home = Quickshell.env("HOME") || "";
+                var scriptPath = (home !== "") ? (home + "/.local/bin/apply-theme.sh") : "apply-theme.sh";
                 Quickshell.execDetached(["bash", scriptPath, t.rawName]);
                 Theme.currentThemeName = t.rawName;
                 root.activeMode = "idle";
@@ -153,7 +153,7 @@ ColumnLayout {
     Process {
         id: themeScanner
         running: false
-        command: ["python3", (Quickshell.shellDir || Quickshell.configDir) + "/scripts/theme_scanner.py"]
+        command: ["python3", NotchConfig.scriptsDir + "/theme_scanner.py"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

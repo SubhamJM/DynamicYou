@@ -6,6 +6,9 @@ if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
     [ -n "$HYPR_SIG" ] && export HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG"
 fi
 
+export MALLOC_ARENA_MAX=2
+export MALLOC_TRIM_THRESHOLD_=131072
+
 killall -9 qs quickshell 2>/dev/null
 while pgrep -x qs >/dev/null || pgrep -x quickshell >/dev/null; do sleep 0.05; done
 sleep 0.15

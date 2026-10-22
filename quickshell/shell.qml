@@ -411,7 +411,7 @@ ShellRoot {
 
     Timer {
         id: moduleUnloadTimer
-        interval: 30000 // 30s grace period keeps active modules warm and prevents cold reload lag
+        interval: 8000 // 8s grace period prevents cold reload lag while releasing memory promptly
         repeat: false
         onTriggered: {
             if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd") {
@@ -519,10 +519,10 @@ for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
 
     Timer {
         id: globalAppScanTimer
-        interval: 12000 // 12 seconds background app scanner
-        running: true
-        repeat: true
-        triggeredOnStart: true
+        interval: 1000
+        running: false
+        repeat: false
+        triggeredOnStart: false
         onTriggered: {
             if (!globalAppScanner.running) globalAppScanner.running = true;
         }
@@ -600,10 +600,10 @@ for f in sorted_files:
 
     Timer {
         id: globalWallpaperScanTimer
-        interval: 8000 // 8 seconds background wallpaper scan
-        running: true
-        repeat: true
-        triggeredOnStart: true
+        interval: 1500
+        running: false
+        repeat: false
+        triggeredOnStart: false
         onTriggered: {
             if (!globalWallpaperScanner.running) globalWallpaperScanner.running = true;
         }
@@ -718,7 +718,10 @@ for f in sorted_files:
         }
 
         if (activeMode === "launcher") {
+            if (root.cachedApps.length === 0 && !globalAppScanner.running) globalAppScanner.running = true;
             if (root.launcherMod) root.launcherMod.onOpened();
+        } else if (activeMode === "wallpaper") {
+            if (root.cachedWallpapers.length === 0 && !globalWallpaperScanner.running) globalWallpaperScanner.running = true;
         }
 
         Qt.callLater(() => {
@@ -909,7 +912,7 @@ for f in sorted_files:
 
     Timer {
         id: fullscreenPollTimer
-        interval: 2000
+        interval: 5000
         running: true
         repeat: true
         triggeredOnStart: true

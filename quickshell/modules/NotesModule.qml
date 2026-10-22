@@ -98,7 +98,7 @@ Item {
     Process {
         id: loadProcess
         running: false
-        command: [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "load"]
+        command: [NotchConfig.scriptsDir + "/notes_store.py", "load"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (!this.text || this.text.trim() === "") return;
@@ -129,7 +129,7 @@ Item {
         onTriggered: {
             notesRoot.isSaving = true;
             var enc = encodeURIComponent(notepadArea.text);
-            saveScratchProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "save_scratchpad_enc", enc];
+            saveScratchProcess.command = [NotchConfig.scriptsDir + "/notes_store.py", "save_scratchpad_enc", enc];
             saveScratchProcess.running = true;
         }
     }
@@ -158,7 +158,7 @@ Item {
             });
         }
         var enc = encodeURIComponent(JSON.stringify(list));
-        saveTodosProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "save_todos_enc", enc];
+        saveTodosProcess.command = [NotchConfig.scriptsDir + "/notes_store.py", "save_todos_enc", enc];
         saveTodosProcess.running = true;
     }
 
@@ -193,7 +193,7 @@ Item {
 
         var enc = encodeURIComponent(textContent);
         exportProcess.targetPath = path;
-        exportProcess.command = [(Quickshell.shellDir || Quickshell.configDir) + "/scripts/notes_store.py", "export_txt", path, enc];
+        exportProcess.command = [NotchConfig.scriptsDir + "/notes_store.py", "export_txt", path, enc];
         exportProcess.running = true;
     }
 
