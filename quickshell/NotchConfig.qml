@@ -108,13 +108,14 @@ QtObject {
     }
 
     function calculateBluetoothHeight(devices, stateMap) {
-        var btCount = devices ? devices.length : 0;
+        var btCount = devices ? (devices.count !== undefined ? devices.count : devices.length) : 0;
         if (btCount === 0) return 260;
 
         var listItemsHeight = 0;
         for (var i = 0; i < btCount; i++) {
-            var dev = devices[i];
-            var expanded = stateMap && stateMap[dev.mac] && stateMap[dev.mac].isExpanded;
+            var dev = (devices.get) ? devices.get(i) : devices[i];
+            var devMac = dev ? (dev.mac || "") : "";
+            var expanded = devMac && stateMap && stateMap[devMac] && stateMap[devMac].isExpanded;
             listItemsHeight += (expanded ? 92 : 50) + 6;
         }
         return Math.min(460, Math.max(260, 160 + listItemsHeight));

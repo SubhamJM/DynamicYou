@@ -67,9 +67,21 @@ ColumnLayout {
 
     // ------------------------------------------------------------------
     // Sort helper: connected first, then saved, then strongest signal.
-    // Fixes "connected network not shown at top" bug.
+    // Uses in-place move() to prevent resetting ListView scroll position.
     // ------------------------------------------------------------------
+    Timer {
+        id: wifiResortTimer
+        interval: 350
+        repeat: false
+        onTriggered: wifiMaster.sortWifiModel()
+    }
+
     function sortWifiModel() {
+        if (wifiListView.moving || wifiListView.flicking || wifiListView.dragging) {
+            wifiResortTimer.restart();
+            return;
+        }
+
         var items = [];
         for (var i = 0; i < wifiModel.count; i++) items.push(wifiModel.get(i));
 
@@ -85,15 +97,25 @@ ColumnLayout {
         }
         if (alreadySorted) return;
 
-        var snapshot = items.map(function(o) {
-            return {
-                "inUse": o.inUse, "ssid": o.ssid, "signal": o.signal, "security": o.security,
-                "band": o.band, "rate": o.rate, "isSaved": o.isSaved, "isExpanded": o.isExpanded,
-                "showPassword": o.showPassword, "hasError": o.hasError, "errorMsg": o.errorMsg
-            };
-        });
-        wifiModel.clear();
-        for (var j = 0; j < snapshot.length; j++) wifiModel.append(snapshot[j]);
+        var savedY = wifiListView.contentY;
+
+        // In-place reordering using move() — NEVER clear() the model!
+        for (var targetIdx = 0; targetIdx < items.length; targetIdx++) {
+            var desiredSsid = items[targetIdx].ssid;
+            for (var curIdx = targetIdx; curIdx < wifiModel.count; curIdx++) {
+                if (wifiModel.get(curIdx).ssid === desiredSsid) {
+                    if (curIdx !== targetIdx) {
+                        wifiModel.move(curIdx, targetIdx, 1);
+                    }
+                    break;
+                }
+            }
+        }
+
+        var maxY = Math.max(0, wifiListView.contentHeight - wifiListView.height);
+        if (savedY > 0 && maxY > 0) {
+            wifiListView.contentY = Math.min(maxY, savedY);
+        }
     }
 
     // Fast network metadata reader
@@ -195,19 +217,22 @@ ColumnLayout {
                     return ib.signal - ia.signal;
                 });
 
-                var existingMap = {};
-                for (var e = 0; e < wifiModel.count; e++) {
-                    existingMap[wifiModel.get(e).ssid] = e;
-                }
+                var isUserScrolling = wifiListView.moving || wifiListView.flicking || wifiListView.dragging;
 
                 for (var idx = wifiModel.count - 1; idx >= 0; idx--) {
                     var row = wifiModel.get(idx);
                     if (!fresh[row.ssid]) {
-                        if (!row.isExpanded && wifiMaster.connectingSsid !== row.ssid) {
-                            wifiModel.remove(idx);
+                        if (!isUserScrolling && !row.isExpanded && wifiMaster.connectingSsid !== row.ssid) {
+                            var misses = (row.missCount || 0) + 1;
+                            if (misses >= 3) {
+                                wifiModel.remove(idx);
+                            } else {
+                                wifiModel.setProperty(idx, "missCount", misses);
+                            }
                         }
                     } else {
                         var upd = fresh[row.ssid];
+                        wifiModel.setProperty(idx, "missCount", 0);
                         if (row.inUse !== upd.inUse) wifiModel.setProperty(idx, "inUse", upd.inUse);
                         if (row.signal !== upd.signal) wifiModel.setProperty(idx, "signal", upd.signal);
                         if (row.security !== upd.security) wifiModel.setProperty(idx, "security", upd.security);
@@ -217,7 +242,7 @@ ColumnLayout {
                     }
                 }
 
-                existingMap = {};
+                var existingMap = {};
                 for (var m = 0; m < wifiModel.count; m++) {
                     existingMap[wifiModel.get(m).ssid] = true;
                 }
@@ -234,19 +259,20 @@ ColumnLayout {
                             "band": itm.band,
                             "rate": itm.rate,
                             "isSaved": itm.isSaved,
+                            "missCount": 0,
                             "isExpanded": false,
                             "showPassword": false,
                             "hasError": false,
                             "errorMsg": ""
                         });
+                        existingMap[sName] = true;
                     }
                 }
 
                 wifiMaster.activeWifiSsid = foundActive;
                 wifiMaster.isScanning = false;
 
-                // Re-sort so the connected card is always row 0 — this is what
-                // actually guarantees it renders at the top of the ListView.
+                // Re-sort smoothly without resetting scroll position
                 wifiMaster.sortWifiModel();
             }
         }
