@@ -42,33 +42,34 @@ QtObject {
 
     readonly property var modeDimensions: ({
         "idle":          { width: 184, height: 32,  radius: 16 },
-		"hover":         { width: 460, height: 42,  radius: 21 },
+		"hover":         { width: 480, height: 44,  radius: 22 },
 		"switcher":      { width: 800, height: 420, radius: 14 },
         "launcher":      { width: 560, height: 246, radius: 22 },
         "theme":         { width: 660, height: 200, radius: 14 },
         "wallpaper":     { width: 760, height: 320, radius: 12 },
+        "engine":        { width: 840, height: 480, radius: 14 },
         "transition":    { width: 440, height: 320, radius: 12 },
         "osd":           { width: 280, height: 40,  radius: 16 },
         "wifi":          { width: 420, height: 380, radius: 26 }, 
-        "bluetooth":     { width: 420, height: 380, radius: 26 },
+        "bluetooth":     { width: 420, height: 236, radius: 26 },
         "recorder":      { width: 420, height: 275, radius: 26 },
-        "battery":       { width: 460, height: 320, radius: 26 },
+        "battery":       { width: 460, height: 348, radius: 26 },
         "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 580, height: 500, radius: 26 },
-        "utility":       { width: 484, height: 342, radius: 26 },
+        "utility":       { width: 360, height: 326, radius: 26 },
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
         "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 800, height: 540, radius: 18 }
+        "taskmanager":   { width: 840, height: 560, radius: 26 }
     })
 
     function calculateUtilityHeight(activeSection) {
         if (activeSection === "audio") return 384;
-        if (activeSection === "vpn") return 254;
+        if (activeSection === "vpn") return 264;
         if (activeSection === "pomo") return 360;
-        return 342;
+        return 326;
     }
 
     // ==========================================
@@ -109,7 +110,7 @@ QtObject {
 
     function calculateBluetoothHeight(devices, stateMap) {
         var btCount = devices ? (devices.count !== undefined ? devices.count : devices.length) : 0;
-        if (btCount === 0) return 260;
+        if (btCount === 0) return 210;
 
         var listItemsHeight = 0;
         for (var i = 0; i < btCount; i++) {
@@ -118,18 +119,25 @@ QtObject {
             var expanded = devMac && stateMap && stateMap[devMac] && stateMap[devMac].isExpanded;
             listItemsHeight += (expanded ? 92 : 50) + 6;
         }
-        return Math.min(460, Math.max(260, 160 + listItemsHeight));
+        return Math.min(460, Math.max(190, 145 + listItemsHeight));
     }
 
     function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight) {
-        if (activeTab === "hotspot") return 415;
-        if (!wifiEnabled) return 260;
-        if (modelCount === 0) return 280;
-        var base = 195;
-        var estimated = modelCount * 68;
-        var effectiveList = Math.max(listContentHeight || 0, estimated);
-        var dynamicListHeight = Math.min(320, Math.max(70, effectiveList));
-        return Math.min(500, Math.max(260, base + dynamicListHeight));
+        if (activeTab === "hotspot") return 390;
+        if (!wifiEnabled) return 240;
+        if (modelCount === 0) return 260;
+        var base = 192;
+        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 76);
+        var dynamicListHeight = Math.min(300, Math.max(68, effectiveList));
+        return Math.min(495, Math.max(260, base + dynamicListHeight));
+    }
+
+    function calculateTaskManagerHeight(activeTab, modelCount, listContentHeight) {
+        if (modelCount === 0) return 260;
+        var base = 170;
+        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 59);
+        var dynamicListHeight = Math.min(410, Math.max(70, effectiveList));
+        return Math.min(580, Math.max(260, base + dynamicListHeight));
     }
 
     // ==========================================

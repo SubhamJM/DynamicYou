@@ -7,42 +7,56 @@ import "../"
 
 ColumnLayout {
     id: btModule
+    anchors.fill: parent
     spacing: 8
-    Layout.fillWidth: true
     focus: true
     Keys.onEscapePressed: (event) => {
         root.collapseToIdle();
         event.accepted = true;
     }
 
-    // Sleek Dark OLED Palette with Theme Accent Hints
+    // Sleek Dark OLED Palette with Matushell Elevation
     readonly property color colSurface: "#000000"
-    readonly property color colCard: "#0e0e12"
-    readonly property color colCardHover: "#18181c"
-    readonly property color colCardActive: "#141418"
-    readonly property color colChipBg: "#16161a"
-    readonly property color colText: "#f8fafc"
-    readonly property color colSubtext: "#94a3b8"
-    readonly property color colMuted: "#64748b"
-    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
-    readonly property color colGreen: Theme.accent ?? "#30d158"
-    readonly property color colRed: "#f43f5e"
+    readonly property color colCard: Qt.rgba(255, 255, 255, 0.045)
+    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.08)
+    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.065)
+    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.07)
+    readonly property color colText: Theme.colors.text_primary ?? "#f8fafc"
+    readonly property color colSubtext: Theme.colors.text_secondary ?? "#94a3b8"
+    readonly property color colMuted: Theme.colors.text_muted ?? "#64748b"
+    readonly property color colAccent: Theme.accent ?? "#38bdf8"
+    readonly property color colGreen: "#30d158"
+    readonly property color colRed: "#ff453a"
 
     // State maps for expanded cards and live device batteries
     property var stateMap: ({})
     property var batteryMap: ({})
 
+    readonly property int calculatedHeight: {
+        var base = 152;
+        var count = filteredDevices ? filteredDevices.length : 0;
+        if (count === 0) return 200;
+        var listH = 0;
+        for (var i = 0; i < count; i++) {
+            var dev = filteredDevices[i];
+            var exp = stateMap && stateMap[dev.mac] && stateMap[dev.mac].isExpanded;
+            listH += (exp ? 96 : 50) + 6;
+        }
+        return Math.min(460, base + listH + 12);
+    }
+
     readonly property var adapter: typeof Bluetooth !== "undefined" ? Bluetooth.defaultAdapter : null
     readonly property bool isEnabled: adapter ? adapter.enabled : false
     readonly property bool isDiscovering: adapter ? adapter.discovering : false
 
-    // Batch Bluetooth Battery Scanner (queries battery percentage for all known devices)
+    // Batch Bluetooth Battery Scanner (throttled, only runs on open or manual refresh)
     Process {
         id: btBatchBatteryScanner
         running: false
         command: ["python3", Qt.resolvedUrl("../scripts/bt-status.py").toString().replace("file://", ""), "--all"]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!this.text) return;
                 var lines = this.text.trim().split("\n");
                 var bmap = {};
                 for (var i = 0; i < lines.length; i++) {
@@ -65,12 +79,12 @@ ColumnLayout {
         }
     }
 
-    // Refresh scanner periodically when Bluetooth popup is active
+    // Refresh scanner periodically when Bluetooth popup is active (throttled 4s)
     Timer {
-        interval: 1000
+        interval: 4000
         running: (root.activeMode === "bluetooth" || (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "bluetooth")) && btModule.isEnabled
         repeat: true
-        triggeredOnStart: true
+        triggeredOnStart: false
         onTriggered: {
             if (!btBatchBatteryScanner.running) btBatchBatteryScanner.running = true;
         }
@@ -80,7 +94,7 @@ ColumnLayout {
         target: root
         function onActiveModeChanged() {
             if ((root.activeMode === "bluetooth" || (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "bluetooth")) && btModule.isEnabled) {
-                btBatchBatteryScanner.running = true;
+                if (!btBatchBatteryScanner.running) btBatchBatteryScanner.running = true;
             }
         }
     }
@@ -92,29 +106,28 @@ ColumnLayout {
         btModule.stateMap = sm;
     }
 
-    // Device icon mapper based on hints
+    // Device icon mapper based on hints (Material Symbols)
     function iconFor(dev) {
         var icon = (dev.device && dev.device.icon) ? dev.device.icon.toLowerCase() : "";
         var name = (dev.name || "").toLowerCase();
         if (icon.includes("audio") || icon.includes("headset") || icon.includes("headphone") ||
             name.includes("bud") || name.includes("pod") || name.includes("wh-") || name.includes("headphone") || name.includes("ear")) {
-            return "󰋋";
+            return "headphones";
         }
-        if (icon.includes("phone") || name.includes("phone") || name.includes("iphone") || name.includes("android")) return "󰄜";
-        if (icon.includes("computer") || icon.includes("laptop") || name.includes("mac") || name.includes("pc")) return "󰌢";
-        if (icon.includes("mouse") || name.includes("mouse") || name.includes("trackpad")) return "󰍽";
-        if (icon.includes("keyboard") || name.includes("keyboard") || name.includes("key")) return "󰌌";
-        if (icon.includes("gamepad") || icon.includes("joystick") || name.includes("controller")) return "󰊖";
-        return dev.connected ? "󰂱" : "󰂯";
+        if (icon.includes("phone") || name.includes("phone") || name.includes("iphone") || name.includes("android")) return "smartphone";
+        if (icon.includes("computer") || icon.includes("laptop") || name.includes("mac") || name.includes("pc")) return "laptop";
+        if (icon.includes("mouse") || name.includes("mouse") || name.includes("trackpad")) return "mouse";
+        if (icon.includes("keyboard") || name.includes("keyboard") || name.includes("key")) return "keyboard";
+        if (icon.includes("gamepad") || icon.includes("joystick") || name.includes("controller")) return "sports_esports";
+        return dev.connected ? "bluetooth_connected" : "bluetooth";
     }
 
     function batteryIconFor(pct) {
-        if (pct >= 90) return "󰁹";
-        if (pct >= 80) return "󰂂";
-        if (pct >= 60) return "󰁿";
-        if (pct >= 40) return "󰁽";
-        if (pct >= 20) return "󰁻";
-        return "󰂎";
+        if (pct >= 85) return "battery_full";
+        if (pct >= 60) return "battery_5_bar";
+        if (pct >= 35) return "battery_3_bar";
+        if (pct >= 15) return "battery_2_bar";
+        return "battery_1_bar";
     }
 
     // Connected device summary helper
@@ -145,6 +158,9 @@ ColumnLayout {
             var mac = dev.address ? dev.address.trim() : "";
             if (!mac && !devName) continue;
 
+            // If not discovering, only show paired or connected devices
+            if (!btModule.isDiscovering && !dev.paired && !dev.connected) continue;
+
             // Filter out anonymous raw MAC hex addresses unless paired or connected
             var isRawMac = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(devName) || 
                            /^([0-9A-Fa-f]{2}-){5}([0-9A-Fa-f]{2})$/.test(devName);
@@ -172,14 +188,13 @@ ColumnLayout {
     }
 
     // ========================================================
-    // 1. HERO STATUS CARD (Material UI Solid Surface, No Border)
+    // 1. HERO STATUS CARD (Matushell Duotone Surface)
     // ========================================================
     Rectangle {
         Layout.fillWidth: true
         height: 94
         radius: 14
         color: btModule.colCard
-        border.width: 0
 
         ColumnLayout {
             anchors.fill: parent
@@ -191,28 +206,15 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 10
 
-                // Tactile Back to Utility Button
-                Rectangle {
-                    width: 28; height: 28; radius: 8
-                    color: btBackMouse.containsMouse ? btModule.colCardHover : "transparent"
-                    border.width: 0
-                    scale: btBackMouse.pressed ? 0.90 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 90 } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰁍"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: btModule.colText
-                    }
-
-                    MouseArea {
-                        id: btBackMouse
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: root.switchMode("utility", true)
-                    }
+                // Tactile Back Button
+                IrisIconButton {
+                    buttonSize: 28
+                    buttonRadius: 8
+                    flat: true
+                    icon: "arrow_back"
+                    iconSize: 15
+                    iconColor: btModule.colText
+                    onClicked: root.switchMode("utility", true)
                 }
 
                 // Squircle Icon Badge
@@ -221,17 +223,16 @@ ColumnLayout {
                     height: 38
                     radius: 11
                     color: btModule.colChipBg
-                    border.width: 0
 
-                    Text {
+                    MaterialSymbol {
                         anchors.centerIn: parent
                         text: {
-                            if (!btModule.isEnabled) return "󰂲";
+                            if (!btModule.isEnabled) return "bluetooth_disabled";
                             if (btModule.primaryConnectedDevice) return btModule.iconFor(btModule.primaryConnectedDevice);
-                            return "󰂯";
+                            return "bluetooth";
                         }
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 18
+                        iconSize: 19
+                        fill: btModule.primaryConnectedDevice ? 1 : 0
                         color: {
                             if (!btModule.isEnabled) return btModule.colMuted;
                             if (btModule.primaryConnectedDevice) return btModule.colAccent;
@@ -252,7 +253,7 @@ ColumnLayout {
                             if (btModule.primaryConnectedDevice) return btModule.primaryConnectedDevice.name;
                             return "Bluetooth Ready";
                         }
-                        font.family: "Noto Sans"
+                        font.family: "Readex Pro"
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
                         color: btModule.colText
@@ -278,8 +279,7 @@ ColumnLayout {
                 // Solid Status Pill
                 Rectangle {
                     radius: 10
-                    color: btModule.colChipBg
-                    border.width: 0
+                    color: Qt.alpha(btModule.primaryConnectedDevice ? btModule.colAccent : btModule.colMuted, 0.14)
                     implicitWidth: statusRow.implicitWidth + 14
                     implicitHeight: 22
 
@@ -297,7 +297,6 @@ ColumnLayout {
                                 if (!btModule.isEnabled) return btModule.colMuted;
                                 return btModule.colAccent;
                             }
-                            // Subtle breathing pulse when connected
                             SequentialAnimation on opacity {
                                 running: btModule.isEnabled && (btModule.primaryConnectedDevice !== null)
                                 loops: Animation.Infinite
@@ -312,7 +311,7 @@ ColumnLayout {
                                 if (btModule.primaryConnectedDevice) return "CONNECTED";
                                 return "READY";
                             }
-                            font.family: "Noto Sans"
+                            font.family: "Readex Pro"
                             font.pixelSize: 10
                             font.weight: Font.Bold
                             renderType: Text.NativeRendering
@@ -336,20 +335,20 @@ ColumnLayout {
                     height: 22
                     radius: 6
                     color: btModule.colChipBg
-                    border.width: 0
                     implicitWidth: chipMacRow.implicitWidth + 12
 
                     Row {
                         id: chipMacRow
                         anchors.centerIn: parent
                         spacing: 4
-                        Text {
-                            text: "󰌢"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
+
+                        MaterialSymbol {
+                            text: "laptop"
+                            iconSize: 12
                             color: btModule.colMuted
                             anchors.verticalCenter: parent.verticalCenter
                         }
+
                         Text {
                             text: btModule.primaryConnectedDevice ? btModule.primaryConnectedDevice.mac : (btModule.adapter ? (btModule.adapter.name || "hci0") : "hci0")
                             font.family: "Noto Sans"
@@ -371,29 +370,30 @@ ColumnLayout {
                         var pct = parseInt(btModule.primaryBattery) || 100;
                         return pct < 20 ? Qt.alpha(btModule.colRed, 0.22) : btModule.colChipBg;
                     }
-                    border.width: 0
                     implicitWidth: chipBatRow.implicitWidth + 12
 
                     Row {
                         id: chipBatRow
                         anchors.centerIn: parent
                         spacing: 4
-                        Text {
+
+                        MaterialSymbol {
                             text: {
                                 var pct = parseInt(btModule.primaryBattery) || 100;
                                 return btModule.batteryIconFor(pct);
                             }
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
+                            iconSize: 13
+                            fill: 1
                             color: {
                                 var pct = parseInt(btModule.primaryBattery) || 100;
                                 return pct < 20 ? btModule.colRed : btModule.colAccent;
                             }
                             anchors.verticalCenter: parent.verticalCenter
                         }
+
                         Text {
                             text: btModule.primaryBattery
-                            font.family: "Noto Sans"
+                            font.family: "Readex Pro"
                             font.pixelSize: 10
                             font.weight: Font.Bold
                             renderType: Text.NativeRendering
@@ -406,27 +406,31 @@ ColumnLayout {
                     }
                 }
 
-                // Chip 3: State Chip (e.g. "Audio Sink" or "Scanning Active")
+                // Chip 3: State Chip (e.g. "Scanning" or "High Quality")
                 Rectangle {
                     height: 22
                     radius: 6
                     color: btModule.colChipBg
-                    border.width: 0
                     implicitWidth: chipStateRow.implicitWidth + 12
 
                     Row {
                         id: chipStateRow
                         anchors.centerIn: parent
                         spacing: 4
-                        Text {
-                            text: btModule.isDiscovering ? "󰑓" : (btModule.primaryConnectedDevice ? "󰓃" : "󰂯")
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
+
+                        MaterialSymbol {
+                            text: btModule.isDiscovering ? "refresh" : (btModule.primaryConnectedDevice ? "volume_up" : "bluetooth")
+                            iconSize: 12
                             color: btModule.isDiscovering ? btModule.colAccent : btModule.colMuted
                             anchors.verticalCenter: parent.verticalCenter
+                            RotationAnimation on rotation {
+                                running: btModule.isDiscovering
+                                from: 0; to: 360; duration: 900; loops: Animation.Infinite
+                            }
                         }
+
                         Text {
-                            text: btModule.isDiscovering ? "Scanning" : (btModule.primaryConnectedDevice ? "High Quality" : "Bluetooth 5.3")
+                            text: btModule.isDiscovering ? "Scanning" : (btModule.primaryConnectedDevice ? "Audio Sink" : "Bluetooth 5.3")
                             font.family: "Noto Sans"
                             font.pixelSize: 10
                             font.weight: Font.Medium
@@ -443,7 +447,7 @@ ColumnLayout {
     }
 
     // ========================================================
-    // 2. ACTION STRIP & POWER TOGGLE (Solid M3 Controls, No Border)
+    // 2. ACTION STRIP & POWER TOGGLE (Solid M3 Controls)
     // ========================================================
     RowLayout {
         Layout.fillWidth: true
@@ -456,8 +460,8 @@ ColumnLayout {
 
             Text {
                 text: "Paired Devices"
-                font.family: "Noto Sans"
-                font.pixelSize: 13
+                font.family: "Readex Pro"
+                font.pixelSize: 12
                 font.weight: Font.DemiBold
                 renderType: Text.NativeRendering
                 color: btModule.colText
@@ -468,7 +472,6 @@ ColumnLayout {
                 height: 18
                 radius: 9
                 color: btModule.colChipBg
-                border.width: 0
                 implicitWidth: countText.implicitWidth + 10
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -487,24 +490,26 @@ ColumnLayout {
 
         Item { Layout.fillWidth: true }
 
-        // Solid Scanning Pill Button
+        // Scan/Refresh Button
         Rectangle {
             height: 26
             radius: 13
             color: btModule.isDiscovering ? Qt.alpha(btModule.colAccent, 0.22) : (scanMouse.containsMouse ? btModule.colCardHover : btModule.colChipBg)
-            border.width: 0
+            scale: scanMouse.pressed ? 0.94 : (scanMouse.containsMouse ? 1.02 : 1.0)
             implicitWidth: scanRow.implicitWidth + 16
             visible: btModule.isEnabled
+
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
+            Behavior on color { ColorAnimation { duration: 150 } }
 
             Row {
                 id: scanRow
                 anchors.centerIn: parent
                 spacing: 5
 
-                Text {
-                    text: "󰑓"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
+                MaterialSymbol {
+                    text: "refresh"
+                    iconSize: 14
                     color: btModule.isDiscovering ? btModule.colAccent : btModule.colSubtext
                     anchors.verticalCenter: parent.verticalCenter
                     RotationAnimation on rotation {
@@ -512,9 +517,10 @@ ColumnLayout {
                         from: 0; to: 360; duration: 900; loops: Animation.Infinite
                     }
                 }
+
                 Text {
                     text: btModule.isDiscovering ? "Scanning" : "Scan"
-                    font.family: "Noto Sans"
+                    font.family: "Readex Pro"
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     renderType: Text.NativeRendering
@@ -534,16 +540,16 @@ ColumnLayout {
             }
         }
 
-        // Material You Solid Power Switch (Zero Borders)
+        // Material You Solid Power Switch
         Item {
-            implicitWidth: 40
+            implicitWidth: 38
             implicitHeight: 22
 
             Rectangle {
                 anchors.fill: parent
                 radius: height / 2
                 color: btModule.isEnabled ? btModule.colAccent : btModule.colChipBg
-                border.width: 0
+
                 Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
                 Rectangle {
@@ -552,8 +558,8 @@ ColumnLayout {
                     radius: 8
                     anchors.verticalCenter: parent.verticalCenter
                     x: btModule.isEnabled ? parent.width - width - 3 : 3
-                    color: btModule.isEnabled ? btModule.colSurface : btModule.colSubtext
-                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                    color: btModule.isEnabled ? "#000000" : btModule.colSubtext
+                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                 }
             }
 
@@ -568,7 +574,7 @@ ColumnLayout {
     }
 
     // ========================================================
-    // 3. DEVICE CARDS LIST (Material UI Solid Polygon Cards)
+    // 3. DEVICE CARDS LIST (Matushell Expressive Visual Language)
     // ========================================================
     ListView {
         id: deviceListView
@@ -593,13 +599,11 @@ ColumnLayout {
                     height: 44
                     radius: 14
                     color: btModule.colChipBg
-                    border.width: 0
 
-                    Text {
+                    MaterialSymbol {
                         anchors.centerIn: parent
-                        text: btModule.isEnabled ? "󰂯" : "󰂲"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 22
+                        text: btModule.isEnabled ? "bluetooth" : "bluetooth_disabled"
+                        iconSize: 22
                         color: btModule.colMuted
                     }
                 }
@@ -621,7 +625,7 @@ ColumnLayout {
             width: ListView.view.width
             property bool isExpanded: btModule.stateMap[modelData.mac] ? btModule.stateMap[modelData.mac].isExpanded : false
 
-            // Strict battery resolution: ONLY show battery when device is CONNECTED. Disconnected devices NEVER show battery!
+            // Strict battery resolution: ONLY show battery when device is CONNECTED
             property string batteryLvl: {
                 if (!modelData.connected) return "";
                 if (typeof dashMod !== "undefined" && dashMod.btConnectedMac === modelData.mac && dashMod.btIslandBattery !== "") {
@@ -635,11 +639,10 @@ ColumnLayout {
             height: isExpanded ? 92 : 50
             radius: 12
             color: modelData.connected ? (cardHover.containsMouse ? btModule.colCardHover : btModule.colCardActive) : (cardHover.containsMouse ? btModule.colCardHover : btModule.colCard)
-            border.width: 0
             clip: true
 
-            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutExpo } }
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveDefaultSpatial } }
+            Behavior on color { ColorAnimation { duration: 150 } }
 
             MouseArea {
                 id: cardHover
@@ -665,13 +668,12 @@ ColumnLayout {
                         height: 34
                         radius: 10
                         color: btModule.colChipBg
-                        border.width: 0
 
-                        Text {
+                        MaterialSymbol {
                             anchors.centerIn: parent
                             text: btModule.iconFor(modelData)
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 16
+                            iconSize: 17
+                            fill: modelData.connected ? 1 : 0
                             color: modelData.connected ? btModule.colAccent : btModule.colSubtext
                         }
                     }
@@ -684,8 +686,8 @@ ColumnLayout {
                         Text {
                             text: modelData.name
                             color: btModule.colText
-                            font.family: "Noto Sans"
-                            font.pixelSize: 13
+                            font.family: "Readex Pro"
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
                             elide: Text.ElideRight
@@ -698,7 +700,6 @@ ColumnLayout {
                                 height: 16
                                 radius: 8
                                 color: btModule.colChipBg
-                                border.width: 0
                                 implicitWidth: statusChipRow.implicitWidth + 10
 
                                 Row {
@@ -735,7 +736,6 @@ ColumnLayout {
                         height: 22
                         radius: 7
                         color: (devCard.batteryPct >= 0 && devCard.batteryPct < 20) ? Qt.alpha(btModule.colRed, 0.22) : btModule.colChipBg
-                        border.width: 0
                         implicitWidth: devBatRow.implicitWidth + 10
 
                         Row {
@@ -745,17 +745,18 @@ ColumnLayout {
 
                             Text {
                                 text: devCard.batteryLvl
-                                font.family: "Noto Sans"
+                                font.family: "Readex Pro"
                                 font.pixelSize: 10
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
                                 color: (devCard.batteryPct >= 0 && devCard.batteryPct < 20) ? btModule.colRed : btModule.colText
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            Text {
+
+                            MaterialSymbol {
                                 text: btModule.batteryIconFor(devCard.batteryPct)
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
+                                iconSize: 13
+                                fill: 1
                                 color: (devCard.batteryPct >= 0 && devCard.batteryPct < 20) ? btModule.colRed : btModule.colAccent
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -763,15 +764,16 @@ ColumnLayout {
                     }
 
                     // Expand Caret Icon
-                    Text {
-                        text: devCard.isExpanded ? "󰅃" : "󰅀"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
+                    MaterialSymbol {
+                        text: "expand_more"
+                        iconSize: 18
                         color: btModule.colMuted
+                        rotation: devCard.isExpanded ? 180 : 0
+                        Behavior on rotation { NumberAnimation { duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                     }
                 }
 
-                // Drawer Action Row (Solid buttons, Zero borders)
+                // Drawer Action Row
                 RowLayout {
                     Layout.fillWidth: true
                     visible: devCard.isExpanded
@@ -785,21 +787,23 @@ ColumnLayout {
                         color: btActionMouse.containsMouse 
                             ? (modelData.connected ? Qt.alpha(btModule.colRed, 0.25) : Qt.alpha(btModule.colAccent, 0.25)) 
                             : (modelData.connected ? Qt.alpha(btModule.colRed, 0.16) : Qt.alpha(btModule.colAccent, 0.16))
-                        border.width: 0
+                        scale: btActionMouse.pressed ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
 
                         Row {
                             anchors.centerIn: parent
-                            spacing: 4
-                            Text {
-                                text: modelData.connected ? "󰂲" : "󰂱"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
+                            spacing: 5
+
+                            MaterialSymbol {
+                                text: modelData.connected ? "link_off" : "link"
+                                iconSize: 14
                                 color: modelData.connected ? btModule.colRed : btModule.colAccent
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                             Text {
                                 text: modelData.connected ? "Disconnect" : "Connect"
-                                font.family: "Noto Sans"
+                                font.family: "Readex Pro"
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
@@ -828,19 +832,21 @@ ColumnLayout {
                         Layout.preferredWidth: 80
                         height: 28
                         radius: 8
-                        color: btModule.colChipBg
-                        border.width: 0
+                        color: forgetMouse.containsMouse ? btModule.colCardHover : btModule.colChipBg
+                        scale: forgetMouse.pressed ? 0.96 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
 
                         Row {
                             anchors.centerIn: parent
                             spacing: 4
-                            Text {
-                                text: "󰆴"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
+
+                            MaterialSymbol {
+                                text: "delete"
+                                iconSize: 13
                                 color: btModule.colSubtext
                                 anchors.verticalCenter: parent.verticalCenter
                             }
+
                             Text {
                                 text: "Forget"
                                 font.family: "Noto Sans"
@@ -853,7 +859,9 @@ ColumnLayout {
                         }
 
                         MouseArea {
+                            id: forgetMouse
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 Quickshell.execDetached(["bluetoothctl", "remove", modelData.mac]);
@@ -867,7 +875,6 @@ ColumnLayout {
                         height: 28
                         radius: 8
                         color: btModule.colChipBg
-                        border.width: 0
 
                         Text {
                             anchors.centerIn: parent

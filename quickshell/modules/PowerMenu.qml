@@ -34,38 +34,22 @@ FocusScope {
         anchors.fill: parent
 
         // 1. Back to Previous Module Button (Left-aligned)
-        Rectangle {
+        IrisIconButton {
             id: backBtn
             anchors.left: parent.left
             anchors.leftMargin: 8
             anchors.verticalCenter: parent.verticalCenter
-            width: 32
-            height: 32
-            radius: 10
-            color: backMouse.containsMouse ? (Theme.colors.hover_bg ?? "#252b3d") : (Theme.colors.card_bg ?? "#181b28")
-            border.width: 1
-            border.color: backMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba(255, 255, 255, 0.06)
-            scale: backMouse.pressed ? 0.90 : (backMouse.containsMouse ? 1.04 : 1.0)
-            Behavior on scale { NumberAnimation { duration: 90 } }
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Behavior on border.color { ColorAnimation { duration: 120 } }
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: 16
-                color: backMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_primary ?? "#e2e8f0")
-            }
-
-            MouseArea {
-                id: backMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    var target = (root.previousExpandedMode && root.previousExpandedMode !== "powermenu") ? root.previousExpandedMode : "utility";
-                    root.switchMode(target, true);
-                }
+            buttonSize: 32
+            buttonRadius: 10
+            icon: "arrow_back"
+            iconSize: 16
+            backgroundColor: Theme.colors.card_bg ?? "#181b28"
+            backgroundHoverColor: Theme.colors.hover_bg ?? "#252b3d"
+            iconColor: Theme.colors.text_primary ?? "#e2e8f0"
+            hoverIconColor: Theme.colors.accent ?? "#7aa2f7"
+            onClicked: {
+                var target = (root.previousExpandedMode && root.previousExpandedMode !== "powermenu") ? root.previousExpandedMode : "utility";
+                root.switchMode(target, true);
             }
         }
 

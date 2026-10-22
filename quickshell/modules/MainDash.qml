@@ -63,10 +63,10 @@ Item {
     implicitWidth: {
         if (isIslandActive) return activeIslandWidth;
         if (root.activeMode === "hover") {
-            return Math.max(160, dashRow.implicitWidth + 32);
+            return dashRow.implicitWidth + 16;
         }
         if (dash.isMediaPlaying && root.activeMode === "idle") {
-            var baseMusic = dash.showMusicInfo ? 340 : 240;
+            var baseMusic = dash.showMusicInfo ? 360 : 270;
             if (root.pomoRunning) baseMusic += 80;
             return baseMusic;
         }
@@ -337,6 +337,12 @@ Item {
                 return;
             }
         }
+    }
+
+    function getWorkspaceWindowCount(wsId) {
+        if (typeof Hyprland === "undefined" || !Hyprland.workspaces) return 0;
+        var ws = Hyprland.workspaces.values.find(function(w) { return w.id === wsId; });
+        return (ws && ws.toplevels) ? ws.toplevels.values.length : 0;
     }
 
     Component.onCompleted: refreshWorkspaceIds()
@@ -1340,155 +1346,190 @@ Item {
     }
 
     // ========================================================
-    // 4. EXPANDED DASH ROW (Look 4: Hover state)
+    // 4. EXPANDED DASH ROW (Segmented MatusBarChrome Architecture)
     // ========================================================
-    Row {
+    RowLayout {
         id: dashRow
         anchors.centerIn: parent
-        spacing: 16
+        spacing: 8
         opacity: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.0
-        scale: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.95
+        scale: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.96
         visible: opacity > 0.01
-        layer.enabled: true
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
-        Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
+        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
+        Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
 
-        // Workspaces (left of clock)
-        Row {
-            id: leftGroup
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
-            visible: root.activeMode === "hover"
-            opacity: visible ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        // ── 1. LEFT GROUP: BRAND & WORKSPACES ────────────────────
+        Rectangle {
+            Layout.preferredHeight: 32
+            Layout.preferredWidth: leftGroupRow.implicitWidth + 12
+            radius: 12
+            color: Qt.rgba(255, 255, 255, 0.05)
+            border.width: 0
+            border.color: "transparent"
 
-            // Arch Logo (Opens Launcher)
-            Rectangle {
-                width: 26; height: 26; radius: 8
-                color: archMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: 0
-                scale: archMouse.pressed ? 0.90 : (archMouse.containsMouse ? 1.06 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            RowLayout {
+                id: leftGroupRow
+                anchors.centerIn: parent
+                spacing: 6
 
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰣇"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 15
-                    color: archMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#c0caf5")
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                // OS / Launcher Icon Button
+                IrisIconButton {
+                    buttonSize: 26
+                    buttonRadius: 8
+                    flat: true
+                    icon: "apps"
+                    iconSize: 16
+                    iconColor: Theme.accent
+                    hoverIconColor: Qt.lighter(Theme.accent, 1.2)
+                    onClicked: root.switchMode("launcher", false)
                 }
 
-                MouseArea {
-                    id: archMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.switchMode("launcher", false)
+                // Hairline Divider
+                Rectangle {
+                    width: 1; height: 16; radius: 0.5
+                    color: Qt.rgba(255, 255, 255, 0.12)
+                }
+
+                // Workspaces Pager (Scroll Wheel + Liquid Pill)
+                Row {
+                    id: wsRow
+                    spacing: 3
+
+                    Repeater {
+                        model: dash.workspaceIds
+                        delegate: Rectangle {
+                            id: wsCell
+                            width: 26; height: 26; radius: 8
+                            property int wsId: modelData
+                            property bool isFocused: typeof Hyprland !== "undefined" && Hyprland.focusedWorkspace && (wsId === Hyprland.focusedWorkspace.id)
+                            property int winCount: dash.getWorkspaceWindowCount(wsId)
+
+                            color: isFocused ? Theme.accent : (wsMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : "transparent")
+                            scale: isFocused ? 1.05 : (wsMouse.pressed ? 0.92 : (wsMouse.containsMouse ? 1.04 : 1.0))
+
+                            Behavior on color { ColorAnimation { duration: 160 } }
+                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 1
+
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData
+                                    color: wsCell.isFocused ? "#000000" : (Theme.colors.text_primary ?? "#ffffff")
+                                    font.family: "Readex Pro"
+                                    font.pixelSize: 11
+                                    font.weight: wsCell.isFocused ? Font.Bold : Font.DemiBold
+                                }
+
+                                // Window presence indicator dot
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 3; height: 3; radius: 1.5
+                                    visible: wsCell.winCount > 0
+                                    color: wsCell.isFocused ? "#000000" : Theme.accent
+                                    opacity: wsCell.isFocused ? 0.8 : 0.6
+                                }
+                            }
+
+                            MouseArea {
+                                id: wsMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (typeof Hyprland !== "undefined") Hyprland.dispatch(`hl.dsp.focus({workspace = ${modelData}})`);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            Repeater {
-                model: dash.workspaceIds
-                delegate: Rectangle {
-                    width: 26; height: 26; radius: 8
-                    property int wsId: modelData
-                    property bool isFocused: typeof Hyprland !== "undefined" && Hyprland.focusedWorkspace && (wsId === Hyprland.focusedWorkspace.id)
-                    color: isFocused ? Theme.accent : (wsMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent")
-                    border.width: 0
-                    border.color: "transparent"
-                    scale: isFocused ? 1.06 : 1.0
-                    Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                    Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: modelData
-                        color: parent.isFocused ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_primary ?? "white")
-                        font.pixelSize: 12
-                        font.bold: true
-                    }
-                    MouseArea {
-                        id: wsMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (typeof Hyprland !== "undefined") Hyprland.dispatch(`hl.dsp.focus({workspace = ${modelData}})`);
+            // Mouse wheel workspace scrolling
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                onWheel: (wheel) => {
+                    if (typeof Hyprland !== "undefined") {
+                        if (wheel.angleDelta.y > 0) {
+                            Hyprland.dispatch("workspace e+1");
+                        } else {
+                            Hyprland.dispatch("workspace e-1");
                         }
                     }
                 }
             }
         }
 
-        // Divider — workspaces | clock
+        // ── 2. CENTER GROUP: DATE, CLOCK & ACTIVE SPRINT ─────────
         Rectangle {
-            width: 1
-            height: 18
-            radius: 0.5
-            color: Theme.colors.text_secondary ?? "#565f89"
-            opacity: leftGroup.visible ? 0.25 : 0.0
-            visible: leftGroup.visible
-            anchors.verticalCenter: parent.verticalCenter
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        }
+            Layout.preferredHeight: 32
+            Layout.preferredWidth: centerGroupRow.implicitWidth + 16
+            radius: 12
+            color: Qt.rgba(255, 255, 255, 0.05)
+            border.width: 0
+            border.color: "transparent"
 
-        // Date & Time (Hover Mode)
-        Item {
-            id: centerItem
-            width: hoverCenterRow.implicitWidth
-            height: 26
-            anchors.verticalCenter: parent.verticalCenter
-
-            Row {
-                id: hoverCenterRow
+            RowLayout {
+                id: centerGroupRow
                 anchors.centerIn: parent
-                spacing: 7
+                spacing: 8
 
-                // Iris DateMark component
-                Row {
-                    id: hoverDateMark
-                    spacing: 4
-                    baselineOffset: hoverWeekdayText.baselineOffset
-                    anchors.baseline: hoverClock.baseline
+                // Calendar / Date Chip
+                Item {
+                    Layout.preferredWidth: hoverDateRow.implicitWidth
+                    Layout.preferredHeight: 26
+                    Layout.alignment: Qt.AlignVCenter
 
-                    Text {
-                        id: hoverWeekdayText
-                        text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                        color: Theme.colors.text_muted ?? "#8e8e93"
-                        font.family: "Readex Pro"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
+                    Row {
+                        id: hoverDateRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Text {
+                            id: hoverWeekdayText
+                            text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
+                            color: Theme.colors.text_muted ?? "#8e8e93"
+                            font.family: "Readex Pro"
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
+                        }
+
+                        Text {
+                            id: hoverDayText
+                            text: Qt.formatDate(clock.date, "d")
+                            color: Theme.accent
+                            font.family: "Readex Pro"
+                            font.pixelSize: 14
+                            font.weight: Font.Bold
+                            renderType: Text.NativeRendering
+                        }
                     }
 
-                    Text {
-                        id: hoverDayText
-                        anchors.baseline: hoverWeekdayText.baseline
-                        text: Qt.formatDate(clock.date, "d")
-                        color: Theme.accent
-                        font.family: "Readex Pro"
-                        font.pixelSize: 14
-                        font.weight: Font.Bold
-                        renderType: Text.NativeRendering
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.switchMode("calendar", true)
                     }
                 }
 
+                // Material You subtle separator bullet
                 Text {
                     text: "•"
-                    anchors.baseline: hoverClock.baseline
-                    anchors.baselineOffset: -0.5
+                    Layout.alignment: Qt.AlignVCenter
                     color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
                     font.family: "Readex Pro"
                     font.pixelSize: 11
                     renderType: Text.NativeRendering
                 }
 
-                // Iris Clock with accent separator
+                // Tabular Clock Time
                 IrisClock {
                     id: hoverClock
-                    anchors.verticalCenter: parent.verticalCenter
                     pixelSize: 16
                     family: "Readex Pro"
                     weight: Font.Bold
@@ -1506,8 +1547,8 @@ Item {
             }
 
             MouseArea {
-                id: timeMouse
                 anchors.fill: parent
+                z: -1
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
@@ -1520,68 +1561,89 @@ Item {
             }
         }
 
-        // Divider — clock | tray
+        // ── 3. RIGHT GROUP: STATUS PILLS & QUICK CONTROLS ────────
         Rectangle {
-            width: 1
-            height: 18
-            radius: 0.5
-            color: Theme.colors.text_secondary ?? "#565f89"
-            opacity: leftGroup.visible ? 0.25 : 0.0
-            visible: leftGroup.visible
-            anchors.verticalCenter: parent.verticalCenter
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        }
+            Layout.preferredHeight: 32
+            Layout.preferredWidth: rightGroupRow.implicitWidth + 12
+            radius: 12
+            color: Qt.rgba(255, 255, 255, 0.05)
+            border.width: 0
+            border.color: "transparent"
 
-        // System Tray Container (Unified Control Center + Battery)
-        Row {
-            id: rightGroup
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
-            visible: root.activeMode === "hover"
-            opacity: visible ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            RowLayout {
+                id: rightGroupRow
+                anchors.centerIn: parent
+                spacing: 6
 
-            // Control Center Trigger
-            Rectangle {
-                width: 28; height: 26; radius: 8
-                color: utilMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: 0
-                border.color: "transparent"
-                scale: utilMouse.pressed ? 0.90 : (utilMouse.containsMouse ? 1.06 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰘮"
-                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
-                    color: utilMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#c0caf5")
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                // Network Quick Toggle Button
+                IrisIconButton {
+                    buttonSize: 26
+                    buttonRadius: 8
+                    flat: true
+                    icon: (dash.activeNetType === "eth") ? "lan" : (dash.activeNetSignal > 0 ? "wifi" : "wifi_off")
+                    iconSize: 15
+                    iconColor: (dash.activeNetSignal > 0 || dash.activeNetType === "eth") ? Theme.accent : Qt.rgba(255, 255, 255, 0.4)
+                    hoverIconColor: Qt.lighter(Theme.accent, 1.2)
+                    fill: 1
+                    onClicked: root.switchMode("wifi", false)
                 }
-                MouseArea {
-                    id: utilMouse
-                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+
+                // Hairline Divider
+                Rectangle {
+                    width: 1; height: 16; radius: 0.5
+                    color: Qt.rgba(255, 255, 255, 0.12)
+                }
+
+                // Battery Status Pill
+                Rectangle {
+                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: battRow.implicitWidth + 12
+                    radius: 8
+                    color: battMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"
+
+                    BatteryPill {
+                        id: battRow
+                        anchors.centerIn: parent
+                    }
+
+                    MouseArea {
+                        id: battMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.switchMode("battery", false)
+                    }
+                }
+
+                // Hairline Divider
+                Rectangle {
+                    width: 1; height: 16; radius: 0.5
+                    color: Qt.rgba(255, 255, 255, 0.12)
+                }
+
+                // Control Center Toggle
+                IrisIconButton {
+                    buttonSize: 26
+                    buttonRadius: 8
+                    flat: true
+                    icon: "tune"
+                    iconSize: 15
+                    iconColor: Theme.colors.text_primary ?? "#ffffff"
+                    hoverIconColor: Theme.accent
                     onClicked: root.openUtility("", false)
                 }
-            }
 
-            // Battery
-            Rectangle {
-                width: battRow.implicitWidth + 16; height: 26; radius: 13
-                color: battMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: 0
-                border.color: "transparent"
-                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-                BatteryPill {
-                    id: battRow
-                    anchors.centerIn: parent
+                // Power Menu Toggle
+                IrisIconButton {
+                    buttonSize: 26
+                    buttonRadius: 8
+                    flat: true
+                    icon: "power_settings_new"
+                    iconSize: 15
+                    iconColor: Theme.colors.text_secondary ?? "#8e8e93"
+                    hoverIconColor: "#ff5449"
+                    onClicked: root.switchMode("powermenu", false)
                 }
-                MouseArea {
-                    id: battMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.switchMode("battery", false)
                 }
             }
         }

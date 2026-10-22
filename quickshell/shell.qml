@@ -533,46 +533,11 @@ for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
         id: globalWallpaperScanner
         running: false
         command: ["sh", "-c", `python3 -c "
-import os, glob, subprocess
+import os, subprocess
 
-theme = '${Theme.currentThemeName}'.strip()
-if not theme or theme.lower() == 'default':
-    name_file = os.path.expanduser('~/.config/active-theme/theme-name.txt')
-    if os.path.exists(name_file):
-        try:
-            with open(name_file, 'r') as f:
-                t = f.read().strip()
-                if t: theme = t
-        except Exception:
-            pass
-
-theme_lower = theme.lower()
-
-candidates = [
-    os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/current/Wallpapers/{theme}')
-]
-wall_dir = ''
-for c in candidates:
-    if os.path.isdir(c):
-        wall_dir = c
-        break
-
-if not wall_dir:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/DynamicYou/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
-        if os.path.isdir(base):
-            for d in os.listdir(base):
-                if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
-                    wall_dir = os.path.join(base, d)
-                    break
-        if wall_dir:
-            break
+wall_dir = os.path.expanduser('~/Pictures/Wallpapers')
+if not os.path.isdir(wall_dir):
+    wall_dir = os.path.expanduser('~/Pictures')
 
 active_wall = ''
 try:
@@ -587,25 +552,20 @@ try:
 except Exception:
     pass
 
-exts = ('.jpg', '.jpeg', '.png', '.webp')
+exts = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
 files = []
-if wall_dir and os.path.exists(wall_dir):
+if os.path.isdir(wall_dir):
     for root_dir, dirs, fnames in os.walk(wall_dir, followlinks=True):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fn in fnames:
             if fn.lower().endswith(exts) and not fn.startswith('.'):
                 files.append(os.path.join(root_dir, fn))
 
-if not files:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
-        if os.path.isdir(base):
-            for root_dir, dirs, fnames in os.walk(base, followlinks=True):
-                dirs[:] = [d for d in dirs if not d.startswith('.')]
-                for fn in fnames:
-                    if fn.lower().endswith(exts) and not fn.startswith('.'):
-                        files.append(os.path.join(root_dir, fn))
+def safe_mtime(p):
+    try: return os.path.getmtime(p)
+    except Exception: return 0
 
-sorted_files = sorted(list(set(files)))
+sorted_files = sorted(list(set(files)), key=safe_mtime, reverse=True)
 for f in sorted_files:
     name = os.path.basename(f)
     print(f'{name}|||{f}|||{active_wall}')
@@ -661,6 +621,7 @@ for f in sorted_files:
             case "launcher":      return Qt.resolvedUrl("modules/Launcher.qml");
             case "theme":         return Qt.resolvedUrl("modules/ThemeSelector.qml");
             case "wallpaper":     return Qt.resolvedUrl("modules/WallpaperSelector.qml");
+            case "engine":        return Qt.resolvedUrl("modules/EngineWallpaperSelector.qml");
             case "transition":    return Qt.resolvedUrl("modules/TransitionSelector.qml");
             case "bluetooth":     return Qt.resolvedUrl("modules/BluetoothModule.qml");
             case "wifi":          return Qt.resolvedUrl("modules/WifiModule.qml");
@@ -684,6 +645,7 @@ for f in sorted_files:
     readonly property var launcherMod:   (root.loadedExpandedMode === "launcher") ? moduleLoader.item : null
     readonly property var themeMod:      (root.loadedExpandedMode === "theme") ? moduleLoader.item : null
     readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper") ? moduleLoader.item : null
+    readonly property var engineMod:     (root.loadedExpandedMode === "engine") ? moduleLoader.item : null
     readonly property var transMod:      (root.loadedExpandedMode === "transition") ? moduleLoader.item : null
     readonly property var btMod:         (root.loadedExpandedMode === "bluetooth") ? moduleLoader.item : null
     readonly property var wifiMod:       (root.loadedExpandedMode === "wifi") ? moduleLoader.item : null
@@ -772,78 +734,74 @@ for f in sorted_files:
     // CENTRALIZED DIMENSIONS RESOLUTION (from NotchConfig)
     // ========================================================
     readonly property int targetWidth: {
+        var calculatedWidth = NotchConfig.modeDimensions["idle"].width;
         if (isDashMode && typeof dashMod !== "undefined" && dashMod !== null) {
-            return dashMod.implicitWidth;
+            calculatedWidth = dashMod.implicitWidth;
+        } else if (activeMode === "notes" && root.notesMod && root.notesMod.isWideMode) {
+            calculatedWidth = 820;
+        } else if (activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "vpn") {
+            calculatedWidth = 420;
+        } else {
+            var dim = NotchConfig.modeDimensions[activeMode];
+            calculatedWidth = (dim && dim.width !== undefined) ? dim.width : NotchConfig.modeDimensions["idle"].width;
         }
-        if (activeMode === "notes" && root.notesMod && root.notesMod.isWideMode) {
-            return 820;
-        }
-        if (activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "vpn") {
-            return 420;
-        }
-        var dim = NotchConfig.modeDimensions[activeMode];
-        return dim && dim.width !== undefined ? dim.width : NotchConfig.modeDimensions["idle"].width;
+        var maxW = (panel && panel.width > 0) ? (panel.width - 32) : 1920;
+        return Math.min(maxW, calculatedWidth);
     }
     
     readonly property int targetHeight: {
+        var calculatedHeight = 32;
         if (root.isPomoFinishedIslandActive && root.isDashMode) {
-            return 44;
-        }
-        if (root.isScreenshotIslandActive && root.isDashMode) {
-            return 44;
-        }
-        if (root.isNotifPopupActive && root.isDashMode) {
-            return 42;
-        }
-        if (activeMode === "cheatsheet" && root.cheatsheetMod && root.cheatsheetMod.isAddingMode) {
-            return 500;
-        }
-        if (activeMode === "launcher") {
-            return (root.launcherMod && root.launcherMod.allApps)
+            calculatedHeight = 44;
+        } else if (root.isScreenshotIslandActive && root.isDashMode) {
+            calculatedHeight = 44;
+        } else if (root.isNotifPopupActive && root.isDashMode) {
+            calculatedHeight = 42;
+        } else if (activeMode === "cheatsheet" && root.cheatsheetMod && root.cheatsheetMod.isAddingMode) {
+            calculatedHeight = 500;
+        } else if (activeMode === "launcher") {
+            calculatedHeight = (root.launcherMod && root.launcherMod.allApps)
                 ? NotchConfig.calculateLauncherHeight(root.launcherMod.calculatedCount, root.launcherMod.allApps.length, root.launcherMod.browsing)
                 : 246;
-        }
-        if (activeMode === "transition" || activeMode === "calendar" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
+        } else if (activeMode === "transition" || activeMode === "calendar" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
             var mDim = NotchConfig.modeDimensions[activeMode];
-            return mDim && mDim.height !== undefined ? mDim.height : 220;
-        }
-        if (activeMode === "notifications") {
-            return NotchConfig.calculateNotificationsHeight(globalNotifModel.count);
-        }
-        if (activeMode === "clipboard") {
-            return NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
-        }
-        if (activeMode === "recorder") {
-            return root.recMod 
+            calculatedHeight = (mDim && mDim.height !== undefined) ? mDim.height : 220;
+        } else if (activeMode === "notifications") {
+            calculatedHeight = NotchConfig.calculateNotificationsHeight(globalNotifModel.count);
+        } else if (activeMode === "clipboard") {
+            calculatedHeight = NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
+        } else if (activeMode === "recorder") {
+            calculatedHeight = root.recMod 
                 ? NotchConfig.calculateRecorderHeight(root.recMod.recordAudio, root.recMod.isMicDropdownOpen, root.recMod.isRecording) 
                 : 270;
-        }
-        if (activeMode === "bluetooth") {
-            return (root.btMod && root.btMod.filteredDevices)
-                ? NotchConfig.calculateBluetoothHeight(root.btMod.filteredDevices, root.btMod.stateMap)
-                : 380;
-        }
-        if (activeMode === "wifi") {
-            return (root.wifiMod && root.wifiMod.model)
+        } else if (activeMode === "bluetooth") {
+            calculatedHeight = (root.btMod && root.btMod.calculatedHeight)
+                ? root.btMod.calculatedHeight
+                : (NotchConfig.modeDimensions["bluetooth"] ? NotchConfig.modeDimensions["bluetooth"].height : 280);
+        } else if (activeMode === "wifi") {
+            calculatedHeight = (root.wifiMod && root.wifiMod.model)
                 ? NotchConfig.calculateWifiHeight(root.wifiMod.activeTab, root.wifiMod.wifiEnabled, root.wifiMod.model.count, root.wifiMod.listViewContentHeight)
                 : 380;
-        }
-        if (activeMode === "utility") {
-            return root.utilMod
+        } else if (activeMode === "utility") {
+            calculatedHeight = root.utilMod
                 ? NotchConfig.calculateUtilityHeight(root.utilMod.activeSection)
                 : 400;
+        } else if (activeMode === "music") {
+            calculatedHeight = (root.musicMod && root.musicMod.calculatedHeight) ? root.musicMod.calculatedHeight : 265;
+        } else if (activeMode === "taskmanager") {
+            calculatedHeight = (root.taskMgrMod)
+                ? NotchConfig.calculateTaskManagerHeight(root.taskMgrMod.activeTab, root.taskMgrMod.displayCount, root.taskMgrMod.listViewContentHeight)
+                : 520;
+        } else if (activeMode === "idle") {
+            calculatedHeight = 32;
+        } else if (activeMode === "hover") {
+            calculatedHeight = 44;
+        } else {
+            var hDim = NotchConfig.modeDimensions[activeMode];
+            calculatedHeight = (hDim && hDim.height !== undefined) ? hDim.height : NotchConfig.modeDimensions["idle"].height;
         }
-        if (activeMode === "music") {
-            return (root.musicMod && root.musicMod.calculatedHeight) ? root.musicMod.calculatedHeight : 265;
-        }
-        if (activeMode === "idle") {
-            return 32;
-        }
-        if (activeMode === "hover") {
-            return 42;
-        }
-        var hDim = NotchConfig.modeDimensions[activeMode];
-        return hDim && hDim.height !== undefined ? hDim.height : NotchConfig.modeDimensions["idle"].height;
+        var maxH = (panel && panel.height > 0) ? (panel.height - 48) : 1080;
+        return Math.min(maxH, calculatedHeight);
     } 
 
     readonly property int targetRadius: {
@@ -854,7 +812,7 @@ for f in sorted_files:
             return 16;
         }
         if (activeMode === "hover") {
-            return 21;
+            return 22;
         }
         if (activeMode === "utility") {
             return 28;
@@ -995,6 +953,7 @@ for f in sorted_files:
     }
     GlobalShortcut { name: "toggleThemeNotch"; onPressed: root.switchMode("theme", true) }
     GlobalShortcut { name: "toggleWallpaperNotch"; onPressed: root.switchMode("wallpaper", true) }
+    GlobalShortcut { name: "toggleWallpaperEngineNotch"; onPressed: root.switchMode("engine", true) }
     GlobalShortcut { name: "toggleTransitionNotch"; onPressed: root.switchMode("transition", true) }
     GlobalShortcut { name: "resetNotchToIdle"; onPressed: root.collapseToIdle() }
     GlobalShortcut { name: "toggleBatteryNotch"; onPressed: root.switchMode("battery", true) }
@@ -1157,6 +1116,26 @@ for f in sorted_files:
             }
             return "OK";
         }
+        function toggleTaskExpand(pidStr: string): string {
+            if (root.activeMode !== "taskmanager") root.switchMode("taskmanager", true);
+            var pid = parseInt(pidStr);
+            if (!isNaN(pid) && root.taskMgrMod) {
+                root.taskMgrMod.toggleExpand(pid);
+                return "OK";
+            }
+            return "ERROR";
+        }
+        function searchTask(query: string): string {
+            if (root.activeMode !== "taskmanager") root.switchMode("taskmanager", true);
+            if (root.taskMgrMod && root.taskMgrMod.searchInput) {
+                root.taskMgrMod.searchInput.text = query || "";
+                return "OK";
+            }
+            return "ERROR";
+        }
+        function getTargetHeight(): string {
+            return "" + root.targetHeight + " mode: " + root.activeMode;
+        }
         function toggleMusicPanel(panelName: string): string {
             if (root.activeMode !== "music") root.switchMode("music", true);
             if (root.musicMod) {
@@ -1313,6 +1292,7 @@ for f in sorted_files:
                 if (!topHoverSensorMouse.containsMouse && 
                     !notchHoverArea.containsMouse && 
                     !notchHoverHandler.hovered &&
+                    !root.openedViaShortcut &&
                     (root.activeMode === "idle" || root.activeMode === "hover")) {
                     root.fullscreenHoverRevealed = false;
                     if (root.activeMode === "hover") {
@@ -1465,7 +1445,7 @@ for f in sorted_files:
                     if (root.isWindowFullscreen) {
                         fullscreenHideTimer.restart();
                     }
-                    if (root.activeMode === "hover" && !notchHoverHandler.hovered) {
+                    if (root.activeMode === "hover" && !root.openedViaShortcut && !notchHoverHandler.hovered) {
                         root.collapseToIdle();
                     }
                 }
@@ -1633,7 +1613,7 @@ for f in sorted_files:
                     interval: NotchConfig.timerAutoCollapse
                     repeat: false
                     onTriggered: {
-                        if (root.activeMode === "hover" && !notchHoverHandler.hovered && !notchHoverArea.containsMouse) {
+                        if (root.activeMode === "hover" && !root.openedViaShortcut && !notchHoverHandler.hovered && !notchHoverArea.containsMouse) {
                             root.collapseToIdle();
                         }
                     }
@@ -1656,7 +1636,7 @@ for f in sorted_files:
                             if (root.isWindowFullscreen) {
                                 fullscreenHideTimer.restart();
                             }
-                            if (root.activeMode === "hover" && !notchHoverArea.containsMouse) {
+                            if (root.activeMode === "hover" && !root.openedViaShortcut && !notchHoverArea.containsMouse) {
                                 root.collapseToIdle();
                             }
                         }

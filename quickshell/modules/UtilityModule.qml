@@ -45,6 +45,7 @@ Item {
     property real displayBrightness: 0.5
 
     property bool isDraggingVolume: false
+    property bool isDraggingMic: false
     property bool isDraggingBrightness: false
 
     readonly property color colBg: "#000000"
@@ -117,7 +118,7 @@ Item {
     Process {
         id: checkHotspotStatus
         running: true
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '^802-11-wireless.*:Hotspot|^wifi.*:Hotspot' || true"]
+        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -iE '^(802-11-wireless|wifi).*:.*hotspot' || true"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var isActive = (this.text.trim().length > 0);
@@ -149,17 +150,14 @@ Item {
     function toggleHotspot() {
         var targetState = !utilModule.hotspotActive;
         utilModule.hotspotActive = targetState;
-        if (root.wifiMod) {
-            root.wifiMod.toggleHotspot(targetState);
+        if (targetState) {
+            utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.4 && (nmcli connection up Hotspot 2>/dev/null || nmcli device wifi hotspot 2>/dev/null || nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001')"];
         } else {
-            if (targetState) {
-                utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.5 && (nmcli connection up Hotspot 2>/dev/null || nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001')"];
-            } else {
-                utilHotspotRunner.command = ["sh", "-c", "nmcli connection down Hotspot 2>/dev/null || nmcli connection down id 'SubhamLaptop' 2>/dev/null || true"];
-            }
-            utilHotspotRunner.running = true;
-            hotspotSettleTimer.restart();
+            utilHotspotRunner.command = ["sh", "-c", "for uuid in $(nmcli -t -f UUID,TYPE,NAME con show --active | grep -iE ':(wifi|802-11-wireless):.*hotspot' | cut -d: -f1); do nmcli con down uuid \"$uuid\" 2>/dev/null; done; nmcli connection down Hotspot 2>/dev/null || true"];
         }
+        utilHotspotRunner.running = true;
+        if (root.wifiMod) root.wifiMod.toggleHotspot(targetState);
+        hotspotSettleTimer.restart();
     }
 
     // 2. Bluetooth Toggle & Open
@@ -171,11 +169,11 @@ Item {
         }
     }
 
-    // 3. Night Light (hyprsunset)
+    // 3. Night Light (hyprsunset / wlsunset)
     Process {
         id: checkNightLight
         running: false
-        command: ["sh", "-c", "pgrep -x hyprsunset >/dev/null && echo 'active' || echo 'inactive'"]
+        command: ["sh", "-c", "(pgrep -x hyprsunset >/dev/null || pgrep -x wlsunset >/dev/null) && echo 'active' || echo 'inactive'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 utilModule.nightLightActive = (this.text.trim() === "active");
@@ -185,10 +183,10 @@ Item {
 
     function toggleNightLight() {
         if (nightLightActive) {
-            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset 2>/dev/null"]);
+            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset wlsunset 2>/dev/null"]);
             nightLightActive = false;
         } else {
-            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset 2>/dev/null; hyprsunset -t 4500"]);
+            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset wlsunset 2>/dev/null; if command -v hyprsunset >/dev/null 2>&1; then hyprsunset -t 4500; else wlsunset -t 4500; fi"]);
             nightLightActive = true;
         }
         checkNightLight.running = true;
@@ -219,7 +217,7 @@ Item {
             Quickshell.execDetached(["sh", "-c", "rm -f /tmp/quickshell_keep_awake; pidof hypridle >/dev/null 2>&1 || hyprctl dispatch exec hypridle || hypridle &"]);
         } else {
             caffeineActive = true;
-            Quickshell.execDetached(["sh", "-c", "touch /tmp/quickshell_keep_awake; killall -9 hypridle 2>/dev/null; brightnessctl -r 2>/dev/null; hyprctl dispatch dpms on 2>/dev/null"]);
+            Quickshell.execDetached(["sh", "-c", "touch /tmp/quickshell_keep_awake; killall -9 hypridle 2>/dev/null; hyprctl dispatch dpms on 2>/dev/null"]);
             caffeineInhibitor.running = true;
         }
         checkCaffeineState.running = true;
@@ -266,11 +264,13 @@ Item {
             onStreamFinished: {
                 var txt = this.text.trim();
                 utilModule.audioMicMuted = txt.includes("[MUTED]");
-                var parts = txt.split(/\s+/);
-                if (parts.length >= 2) {
-                    var v = parseFloat(parts[1]);
-                    if (!isNaN(v)) {
-                        utilModule.audioMicVolume = Math.max(0.0, Math.min(1.0, v));
+                if (!utilModule.isDraggingMic) {
+                    var parts = txt.split(/\s+/);
+                    if (parts.length >= 2) {
+                        var v = parseFloat(parts[1]);
+                        if (!isNaN(v)) {
+                            utilModule.audioMicVolume = Math.max(0.0, Math.min(1.0, v));
+                        }
                     }
                 }
             }
@@ -303,6 +303,16 @@ Item {
         fetchMicProcess.running = true;
     }
 
+    function setMicVolume(ratio) {
+        var v = Math.max(0.0, Math.min(1.0, ratio));
+        utilModule.audioMicVolume = v;
+        if (v > 0 && utilModule.audioMicMuted) {
+            utilModule.audioMicMuted = false;
+            Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "0"]);
+        }
+        Quickshell.execDetached(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", v.toFixed(2)]);
+    }
+
     // 9. Display Brightness (brightnessctl)
     Process {
         id: fetchBrightnessProcess
@@ -327,6 +337,12 @@ Item {
     // 10. Audio Devices Data (Sinks & Sources)
     property var audioSinks: []
     property var audioSources: []
+    readonly property var defaultSink: {
+        for (var i = 0; i < utilModule.audioSinks.length; i++) {
+            if (utilModule.audioSinks[i].isDefault) return utilModule.audioSinks[i];
+        }
+        return utilModule.audioSinks.length > 0 ? utilModule.audioSinks[0] : null;
+    }
 
     Process {
         id: fetchAudioDevices
@@ -345,7 +361,8 @@ Item {
 
     function cleanDeviceName(name, desc) {
         var d = (desc && desc.length > 0) ? desc : (name || "Audio Device");
-        d = d.replace(/^Alder Lake PCH-P High Definition Audio Controller\s*/i, "");
+        d = d.replace(/^(Alder|Raptor)\s*Lake(-P\/U\/H)?\s*(cAVS|High Definition Audio Controller)?\s*/i, "");
+        d = d.replace(/\bHDMI\s*\/\s*DisplayPort\s*\d+\s*Output\b/i, "HDMI Output");
         return d.trim() || desc || name;
     }
 
@@ -518,6 +535,331 @@ Item {
     // ========================================================
 
     // ========================================================
+    // IRIS 1:1 REUSABLE DESIGN COMPONENTS (ZERO BORDERS, MATERIAL YOU)
+    // ========================================================
+
+    // 1. Iris 1:1 Wide Action Plate (2x1) - Neutral Dark Glass with Accent Disc
+    component IrisActionPlate: Rectangle {
+        id: iplate
+        property string glyph: ""
+        property string title: ""
+        property string subtitle: ""
+        property bool lit: false
+        property bool isSplit: true
+        property color tint: utilModule.colAccent
+        property bool showChevron: true
+        signal clicked()
+        signal iconClicked()
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        implicitHeight: 43.3
+        radius: 14.5
+
+        // Clean neutral dark frosted glass (never whole-card colored)
+        color: plateMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.055)
+        border.width: 0
+
+        scale: plateMouse.pressed ? 0.985 : (plateMouse.containsMouse ? 1.01 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 120 } }
+
+        // Whole card click area (opens popup / details)
+        MouseArea {
+            id: plateMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: iplate.clicked()
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            spacing: 5.25
+
+            // Left: Circular Icon Disc (toggles state specifically)
+            Rectangle {
+                id: iplateDisc
+                z: 10
+                width: 33
+                height: 33
+                radius: 16.5
+                color: iplate.lit
+                    ? iplate.tint
+                    : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.085))
+                scale: discMouse.pressed ? 0.88 : (discMouse.containsMouse ? 1.05 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 80 } }
+                Behavior on color { ColorAnimation { duration: 110 } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: iplate.glyph
+                    fill: iplate.lit ? 1 : 0
+                    iconSize: 18.5
+                    color: iplate.lit ? "#101318" : "#f5f5f7"
+                    Behavior on color { ColorAnimation { duration: 100 } }
+                }
+
+                MouseArea {
+                    id: discMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    preventStealing: true
+                    onClicked: (mouse) => {
+                        mouse.accepted = true;
+                        iplate.iconClicked();
+                    }
+                }
+            }
+
+            // Middle: Text Area
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    Layout.fillWidth: true
+                    text: iplate.title
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: "#ffffff"
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: 10
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: iplate.subtitle
+                    visible: iplate.subtitle !== ""
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.Normal
+                    color: Qt.rgba(255, 255, 255, 0.70)
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+            }
+
+            // Right: Chevron / Status Indicator
+            MaterialSymbol {
+                visible: iplate.showChevron
+                text: "chevron_right"
+                iconSize: 14
+                color: Qt.rgba(255, 255, 255, 0.40)
+                opacity: 0.8
+            }
+        }
+    }
+
+    // 2. Iris 1:1 Action Square Tile (Hotspot, Caffeine, Night Light, DND, Color, Timer)
+    component IrisGridTile: Rectangle {
+        id: gtile
+        property string glyph: ""
+        property string label: ""
+        property bool lit: false
+        property color tint: utilModule.colAccent
+        signal clicked()
+
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        radius: 12.5
+
+        // Solid accent when active, clean glass container when off
+        color: gtile.lit
+            ? gtile.tint
+            : (tileMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.065))
+        border.width: 0
+
+        scale: tileMouse.pressed ? 0.92 : (tileMouse.containsMouse ? 1.03 : 1.0)
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 110 } }
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 2
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignHCenter
+                text: gtile.glyph
+                fill: gtile.lit ? 1 : 0
+                iconSize: 18.5
+                color: gtile.lit ? "#101318" : (tileMouse.containsMouse ? "#ffffff" : "#f5f5f7")
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: gtile.width - 6
+                text: gtile.label
+                font.family: "Noto Sans"
+                font.pixelSize: 10
+                font.weight: gtile.lit ? Font.Bold : Font.DemiBold
+                color: gtile.lit ? "#101318" : (tileMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.70))
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
+        }
+
+        MouseArea {
+            id: tileMouse
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: gtile.clicked()
+        }
+    }
+
+    // 3. Iris 1:1 Vertical Capsule Slider
+    component IrisVerticalCapsuleSlider: Item {
+        id: vslider
+        property real value: 0.5
+        property string icon: "volume_up"
+        property string percentText: "50%"
+        property bool muted: false
+        property color activeColor: "#ffffff"
+        signal moved(real val)
+        signal iconClicked()
+
+        property real dragVal: -1
+        readonly property real currentRatio: Math.max(0.0, Math.min(1.0, vslider.dragVal >= 0 ? vslider.dragVal : vslider.value))
+
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+
+        Rectangle {
+            id: track
+            anchors.fill: parent
+            radius: 18
+            color: Qt.rgba(255, 255, 255, 0.08)
+            border.width: 0
+            clip: true
+
+            scale: vsliderMouse.pressed ? 0.985 : (vsliderMouse.containsMouse ? 1.015 : 1.0)
+            Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+
+            // Fluid Rising Fill with rounded top and bottom - strictly pure white (#ffffff)
+            Rectangle {
+                id: fillFace
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                visible: vslider.currentRatio > 0.02
+                height: vslider.muted ? 0 : Math.max(0, Math.min(parent.height, parent.height * vslider.currentRatio))
+                radius: 18
+                color: vslider.muted ? Qt.rgba(255, 255, 255, 0.20) : "#ffffff"
+
+                Behavior on height {
+                    enabled: vslider.dragVal < 0
+                    NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                }
+            }
+
+            // Top Numeric Percentage Readout
+            Text {
+                anchors.top: parent.top
+                anchors.topMargin: 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                z: 5
+                text: vslider.percentText
+                font.family: "Noto Sans"
+                font.pixelSize: 10
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+                color: vslider.muted
+                    ? "#ff6961"
+                    : (vslider.currentRatio >= 0.85 ? "#101318" : "#ffffff")
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
+
+            // Bottom Icon Circle Pocket (Interactive Mute / Action)
+            Rectangle {
+                id: viconPocket
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 6
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 30
+                height: 30
+                radius: 15
+                z: 6
+                color: viconMouse.containsMouse
+                    ? (vslider.currentRatio >= 0.25 ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(255, 255, 255, 0.18))
+                    : "transparent"
+                scale: viconMouse.pressed ? 0.88 : (viconMouse.containsMouse ? 1.06 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 75 } }
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: vslider.icon
+                    fill: 1
+                    iconSize: 17
+                    color: vslider.muted
+                        ? "#ff453a"
+                        : (vslider.currentRatio >= 0.22 ? "#101318" : "#ffffff")
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+
+                MouseArea {
+                    id: viconMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    preventStealing: true
+                    onClicked: (mouse) => {
+                        mouse.accepted = true;
+                        vslider.iconClicked();
+                    }
+                }
+            }
+
+            // Tactile Drag & Scroll Mouse Area
+            MouseArea {
+                id: vsliderMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                preventStealing: true
+
+                function calcRatio(mouseY) {
+                    return Math.max(0.0, Math.min(1.0, (height - mouseY) / Math.max(1, height)));
+                }
+
+                onPressed: (mouse) => {
+                    if (mouse.y >= height - 36) return; // Handled by icon pocket
+                    vslider.dragVal = calcRatio(mouse.y);
+                    vslider.moved(vslider.dragVal);
+                }
+
+                onPositionChanged: (mouse) => {
+                    if (!pressed || vslider.dragVal < 0) return;
+                    vslider.dragVal = calcRatio(mouse.y);
+                    vslider.moved(vslider.dragVal);
+                }
+
+                onReleased: {
+                    vslider.dragVal = -1;
+                    utilModule.isDraggingBrightness = false;
+                    utilModule.isDraggingVolume = false;
+                    utilModule.isDraggingMic = false;
+                }
+
+                onWheel: (wheel) => {
+                    var step = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
+                    vslider.moved(Math.max(0.0, Math.min(1.0, vslider.currentRatio + step)));
+                }
+            }
+        }
+    }
+
+    // ========================================================
     // REUSABLE MATERIAL YOU COMPONENTS
     // ========================================================
 
@@ -535,8 +877,8 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 46
-        radius: 23
+        implicitHeight: 44
+        radius: 14
 
         color: pill.isActive
             ? Qt.rgba(pill.activeColor.r, pill.activeColor.g, pill.activeColor.b, 0.16)
@@ -549,16 +891,16 @@ Item {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 5
-            anchors.rightMargin: 12
-            spacing: 10
+            anchors.leftMargin: 6
+            anchors.rightMargin: 10
+            spacing: 8
 
             // Left: Circular Icon Disc
             Rectangle {
                 id: discRect
-                width: 36
-                height: 36
-                radius: 18
+                width: 32
+                height: 32
+                radius: 16
                 color: pill.isActive ? pill.activeColor : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.085))
 
                 scale: discMouse.pressed ? 0.90 : 1.0
@@ -569,7 +911,7 @@ Item {
                     anchors.centerIn: parent
                     text: pill.glyph
                     fill: pill.isActive ? 1 : 0
-                    iconSize: 19
+                    iconSize: 18
                     color: pill.isActive ? "#101318" : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
@@ -625,7 +967,7 @@ Item {
         MouseArea {
             id: pillBodyMouse
             anchors.fill: parent
-            anchors.leftMargin: 44
+            anchors.leftMargin: 40
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
@@ -693,8 +1035,9 @@ Item {
         readonly property real currentRatio: Math.max(0.0, Math.min(1.0, scard.dragVal >= 0 ? scard.dragVal : scard.value))
 
         Layout.fillWidth: true
-        implicitHeight: 46
-        radius: height / 2
+        Layout.preferredWidth: 1
+        implicitHeight: 44
+        radius: 14
         color: Qt.rgba(255, 255, 255, 0.08)
         border.width: 0
 
@@ -725,11 +1068,11 @@ Item {
         Rectangle {
             id: iconBtn
             anchors.left: parent.left
-            anchors.leftMargin: 5
+            anchors.leftMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: 36
-            height: 36
-            radius: 18
+            width: 32
+            height: 32
+            radius: 16
             z: 6
             color: iconMouse.containsMouse ? (scard.currentRatio >= 0.14 ? Qt.rgba(0, 0, 0, 0.14) : Qt.rgba(255, 255, 255, 0.10)) : "transparent"
             scale: iconMouse.pressed ? 0.90 : 1.0
@@ -740,7 +1083,7 @@ Item {
                 anchors.centerIn: parent
                 text: scard.icon
                 fill: 1
-                iconSize: 20
+                iconSize: 18
                 color: scard.muted
                     ? "#ff6961"
                     : (scard.currentRatio >= 0.12 ? "#101318" : utilModule.colText)
@@ -759,16 +1102,16 @@ Item {
         // Right Percentage Readout + Chevron Row
         RowLayout {
             anchors.right: parent.right
-            anchors.rightMargin: 16
+            anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 6
+            spacing: 4
             z: 6
 
             Text {
                 text: scard.percentText
                 font.family: "Noto Sans"
                 font.pixelSize: 11
-                font.weight: Font.Bold
+                font.weight: Font.DemiBold
                 font.features: ({ "tnum": 1 })
                 color: scard.muted
                     ? "#ff6961"
@@ -778,9 +1121,9 @@ Item {
 
             Rectangle {
                 visible: scard.showChevron
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                radius: 13
+                Layout.preferredWidth: 22
+                Layout.preferredHeight: 22
+                radius: 11
                 color: chevronMouse.containsMouse ? (scard.currentRatio >= 0.94 ? Qt.rgba(0, 0, 0, 0.14) : Qt.rgba(255, 255, 255, 0.12)) : "transparent"
                 scale: chevronMouse.pressed ? 0.88 : 1.0
                 Behavior on scale { NumberAnimation { duration: 75 } }
@@ -789,7 +1132,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "chevron_right"
-                    iconSize: 17
+                    iconSize: 15
                     color: scard.currentRatio >= 0.94 ? "#101318" : (chevronMouse.containsMouse ? "#ffffff" : utilModule.colSubtext)
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
@@ -817,8 +1160,8 @@ Item {
             }
 
             onPressed: (mouse) => {
-                if (mouse.x <= 44) return; // Handled by iconBtn
-                if (scard.showChevron && mouse.x >= width - 44) return; // Handled by chevron
+                if (mouse.x <= 40) return; // Handled by iconBtn
+                if (scard.showChevron && mouse.x >= width - 36) return; // Handled by chevron
                 scard.dragVal = calcRatio(mouse.x);
                 scard.moved(scard.dragVal);
             }
@@ -847,16 +1190,17 @@ Item {
         id: chip
         property string glyph: ""
         property bool lit: false
+        property bool isSplit: true
         property color tint: utilModule.colAccent
         signal clicked()
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 38
-        radius: 13
+        implicitHeight: 36
+        radius: 12
 
         color: chip.lit
-            ? chip.tint
+            ? Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, 0.20)
             : (chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
         border.width: 0
 
@@ -868,8 +1212,9 @@ Item {
             anchors.centerIn: parent
             text: chip.glyph
             fill: chip.lit ? 1 : 0
-            iconSize: 19
-            color: chip.lit ? "#101318" : (chipMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
+            iconSize: 18
+            color: chip.lit ? chip.tint : (chipMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
+            Behavior on color { ColorAnimation { duration: 100 } }
         }
 
         MouseArea {
@@ -890,9 +1235,9 @@ Item {
         property color hoverBg: utilModule.colCardHover
         signal clicked()
 
-        width: 30
-        height: 30
-        radius: 15
+        width: 26
+        height: 26
+        radius: 13
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
         border.width: 0
 
@@ -903,7 +1248,7 @@ Item {
         MaterialSymbol {
             anchors.centerIn: parent
             text: hbtn.glyph
-            iconSize: 16
+            iconSize: 14.5
             color: hmouse.containsMouse ? "#f5f5f7" : hbtn.iconColor
         }
 
@@ -922,17 +1267,17 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.topMargin: 4
-        spacing: 9
+        spacing: 9.5
 
         // ── TOP HEADER BAR ─────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
-            spacing: 10
+            spacing: 8.4
 
             // Tactile Back / Exit Button
             Rectangle {
-                width: 30; height: 30; radius: 15
+                width: 29; height: 29; radius: 14.5
                 color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
                 border.width: 0
                 scale: headerBackMouse.pressed ? 0.90 : 1.0
@@ -940,9 +1285,9 @@ Item {
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: utilModule.activeSection !== "" ? "arrow_back" : "close"
-                    iconSize: 16
-                    color: utilModule.activeSection !== "" ? utilModule.colAccent : "#f5f5f7"
+                    text: utilModule.activeSection !== "" ? "arrow_back" : "tune"
+                    iconSize: 15.5
+                    color: utilModule.activeSection !== "" ? utilModule.colAccent : utilModule.colText
                 }
 
                 MouseArea {
@@ -963,6 +1308,7 @@ Item {
             // Title & Date Subtitle
             ColumnLayout {
                 spacing: 0
+                Layout.preferredWidth: 110
 
                 Text {
                     text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : (utilModule.activeSection === "pomo" ? "Focus & Pomodoro" : "Control Center"))
@@ -973,49 +1319,61 @@ Item {
                 }
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Select preferred output & input" : (utilModule.activeSection === "vpn" ? "Select VPN provider or quick-connect" : (utilModule.activeSection === "pomo" ? "Distraction-Free Focus & Productivity Timer" : Qt.formatDate(clock.date, "dddd, d MMMM")))
+                    text: utilModule.activeSection === "audio" ? "Select output sink & microphone source" : (utilModule.activeSection === "vpn" ? "Select network provider or quick-connect" : (utilModule.activeSection === "pomo" ? "Distraction-free focus & timer" : Qt.formatDate(clock.date, "dddd, d MMMM")))
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: utilModule.colSubtext
+                    elide: Text.ElideRight
                 }
             }
 
             Item { Layout.fillWidth: true }
 
-            // Quick Shortcut Badges & System Actions (Timer, Notes, Clipboard, Theme, Tasks | Lock, Power)
+            // Quick Shortcut Badges & System Actions (Notes, Clipboard, Theme, Tasks, Lock, Power)
             RowLayout {
-                spacing: 6
+                spacing: 4.2
                 Layout.alignment: Qt.AlignRight
                 visible: utilModule.activeSection === ""
 
-                // 1. Focus & Pomodoro Timer
-                HeaderQuickBtn {
-                    glyph: "timer"
-                    onClicked: utilModule.activeSection = "pomo"
-                }
-
-                // 2. Notes
+                // 1. Notes
                 HeaderQuickBtn {
                     glyph: "edit_note"
                     onClicked: root.switchMode("notes", false)
                 }
 
-                // 3. Clipboard History
+                // 2. Clipboard History
                 HeaderQuickBtn {
                     glyph: "assignment"
                     onClicked: root.switchMode("clipboard", false)
                 }
 
-                // 4. Theme Selector
+                // 3. Theme Selector
                 HeaderQuickBtn {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
                 }
 
-                // 5. Task Manager
+                // 4. Task Manager
                 HeaderQuickBtn {
                     glyph: "monitoring"
                     onClicked: root.switchMode("taskmanager", false)
+                }
+
+                // 5. Screen Lock
+                HeaderQuickBtn {
+                    glyph: "lock"
+                    onClicked: {
+                        root.collapseToIdle();
+                        Quickshell.execDetached(["hyprlock"]);
+                    }
+                }
+
+                // 6. Power Menu
+                HeaderQuickBtn {
+                    glyph: "power_settings_new"
+                    iconColor: "#ff453a"
+                    hoverBg: Qt.rgba(255, 69, 58, 0.18)
+                    onClicked: root.switchMode("powermenu", false)
                 }
             }
 
@@ -1049,231 +1407,244 @@ Item {
             }
         }
 
-        // ── 1. MAIN CONTROL CENTER VIEW (MATERIAL 3 BENTO GRID) ─────────────
+        // ── 1. MAIN CONTROL CENTER VIEW (IRIS 1:1 REFINED & PACKED) ─────────────
         ColumnLayout {
             id: mainViewContainer
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: 8
-            spacing: 8
+            Layout.topMargin: 2
+            spacing: 6.3
             visible: utilModule.activeSection === ""
 
-            // ROW 1: Wi-Fi Pill, Hotspot Circle Button, Record Pill, Lock Circle Button
+            // UPPER SECTION (Rows 1 to 4):
+            // Left stack: Ethernet (43.3px) + Bluetooth (43.3px) + 4-Button Grid Pack (107px) = 206px
+            // Right stack: 3 Sliders (152px) + [Color & Pomodoro] (47px) = 206px
             RowLayout {
-                id: row1
+                id: upperSection
                 Layout.fillWidth: true
-                spacing: 8
+                Layout.preferredHeight: 206
+                spacing: 8.4
 
-                // Wi-Fi Pill (matches Bluetooth Pill in Row 2)
-                MaterialPill {
-                    id: wifiPill
-                    Layout.fillWidth: false
-                    Layout.preferredWidth: btPill.width
-                    glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
-                    title: (utilModule.activeNetType === "eth") ? "Ethernet" : (utilModule.wifiEnabled ? (utilModule.activeNetName !== "" ? utilModule.activeNetName : "Wi-Fi") : "Wi-Fi")
-                    subtitle: {
-                        if (utilModule.activeNetType === "eth") return "Connected";
-                        if (!utilModule.wifiEnabled) return "Off";
-                        if (utilModule.activeNetName !== "") {
-                            return utilModule.activeNetSignal > 0 ? ("Connected • " + utilModule.activeNetSignal + "%") : "Connected";
-                        }
-                        return "Disconnected";
-                    }
-                    isActive: (utilModule.activeNetType === "eth") || utilModule.wifiEnabled
-                    isSplit: true
-                    activeColor: utilModule.colAccent
-                    onToggleClicked: utilModule.toggleWifi()
-                    onDetailClicked: root.switchMode("wifi", false)
-                }
-
-                // Hotspot Circular Action Button (Material You style) - directly to the right of Wi-Fi pill
-                MaterialCircleBtn {
-                    id: hotspotBtn
-                    glyph: "wifi_tethering"
-                    fill: utilModule.hotspotActive ? 1 : 0
-                    customBg: utilModule.hotspotActive ? utilModule.colAccent : utilModule.colCard
-                    hoverBg: utilModule.hotspotActive ? Qt.lighter(utilModule.colAccent, 1.15) : utilModule.colCardHover
-                    iconColor: utilModule.hotspotActive ? "#101318" : utilModule.colText
-                    onClicked: utilModule.toggleHotspot()
-                }
-
-                // Record Pill (Material You Pill - fills space up to lock button)
-                MaterialPill {
-                    id: recordPill
+                // LEFT STACK: Ethernet, Bluetooth, and the 4-Button Grid Pack
+                ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 164
+                    Layout.fillHeight: true
+                    spacing: 6.3
+
+                    // 1. Ethernet / Wi-Fi Plate
+                    IrisActionPlate {
+                        implicitHeight: 43.3
+                        glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
+                        title: (utilModule.activeNetType === "eth") ? "Ethernet" : "Wi-Fi"
+                        subtitle: {
+                            if (utilModule.activeNetType === "eth") return "Connected";
+                            if (!utilModule.wifiEnabled) return "Off";
+                            if (utilModule.activeNetName !== "") {
+                                return utilModule.activeNetSignal > 0 ? (utilModule.activeNetName + " • " + utilModule.activeNetSignal + "%") : utilModule.activeNetName;
+                            }
+                            return "Disconnected";
+                        }
+                        lit: (utilModule.activeNetType === "eth") || utilModule.wifiEnabled
+                        tint: utilModule.colAccent
+                        onIconClicked: utilModule.toggleWifi()
+                        onClicked: root.switchMode("wifi", false)
+                    }
+
+                    // 2. Bluetooth Plate
+                    IrisActionPlate {
+                        implicitHeight: 43.3
+                        glyph: utilModule.btEnabled ? "bluetooth" : "bluetooth_disabled"
+                        title: "Bluetooth"
+                        subtitle: {
+                            if (!utilModule.btEnabled) return "Off";
+                            if (utilModule.activeBtName !== "") {
+                                return utilModule.activeBtBattery !== "" ? (utilModule.activeBtName + " • " + utilModule.activeBtBattery) : utilModule.activeBtName;
+                            }
+                            return "Disconnected";
+                        }
+                        lit: utilModule.btEnabled
+                        tint: utilModule.colAccent
+                        onIconClicked: utilModule.toggleBluetooth()
+                        onClicked: root.switchMode("bluetooth", false)
+                    }
+
+                    // 3. The 4-Button Grid Pack (Hotspot, Caffeine, Night Light, DND) - Square Tiles scaled equally with plates
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 107
+                        radius: 14.5
+                        color: Qt.rgba(255, 255, 255, 0.04)
+                        border.width: 0
+
+                        GridLayout {
+                            anchors.fill: parent
+                            anchors.margins: 5.25
+                            columns: 2
+                            rowSpacing: 5.25
+                            columnSpacing: 5.25
+
+                            // Hotspot
+                            IrisGridTile {
+                                glyph: "wifi_tethering"
+                                label: "Hotspot"
+                                lit: utilModule.hotspotActive
+                                tint: "#2dd4bf"
+                                onClicked: utilModule.toggleHotspot()
+                            }
+
+                            // Caffeine
+                            IrisGridTile {
+                                glyph: "coffee"
+                                label: "Caffeine"
+                                lit: utilModule.caffeineActive
+                                tint: "#fbbf24"
+                                onClicked: utilModule.toggleCaffeine()
+                            }
+
+                            // Night Light
+                            IrisGridTile {
+                                glyph: "nightlight"
+                                label: "Night Light"
+                                lit: utilModule.nightLightActive
+                                tint: "#f59e0b"
+                                onClicked: utilModule.toggleNightLight()
+                            }
+
+                            // DND
+                            IrisGridTile {
+                                glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
+                                label: "DND"
+                                lit: root.dndEnabled
+                                tint: "#a855f7"
+                                onClicked: root.dndEnabled = !root.dndEnabled
+                            }
+                        }
+                    }
+                }
+
+                // RIGHT STACK: 3 Sliders (Volume, Brightness, Mic) + [Color & Pomodoro] (Square tiles)
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 164
+                    Layout.fillHeight: true
+                    spacing: 6.3
+
+                    // 3 Vertical Capsule Sliders side-by-side with 6.3px spacing (Volume, Brightness, Mic)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 152
+                        spacing: 6.3
+
+                        // 1. Volume Capsule Slider
+                        IrisVerticalCapsuleSlider {
+                            value: utilModule.audioVolume
+                            icon: utilModule.audioMuted ? "volume_off" : (utilModule.audioVolume > 0.5 ? "volume_up" : (utilModule.audioVolume > 0 ? "volume_down" : "volume_mute"))
+                            percentText: utilModule.audioMuted ? "Muted" : (Math.round(utilModule.audioVolume * 100) + "%")
+                            muted: utilModule.audioMuted
+                            onMoved: (val) => {
+                                utilModule.isDraggingVolume = true;
+                                utilModule.setVolume(val);
+                            }
+                            onIconClicked: utilModule.toggleMute()
+                        }
+
+                        // 2. Brightness Capsule Slider
+                        IrisVerticalCapsuleSlider {
+                            value: utilModule.displayBrightness
+                            icon: "light_mode"
+                            percentText: Math.round(utilModule.displayBrightness * 100) + "%"
+                            muted: false
+                            onMoved: (val) => {
+                                utilModule.isDraggingBrightness = true;
+                                utilModule.setBrightness(val);
+                            }
+                            onIconClicked: utilModule.setBrightness(utilModule.displayBrightness > 0.5 ? 0.2 : 0.8)
+                        }
+
+                        // 3. Microphone Capsule Slider (Last)
+                        IrisVerticalCapsuleSlider {
+                            value: utilModule.audioMicVolume
+                            icon: utilModule.audioMicMuted ? "mic_off" : "mic"
+                            percentText: utilModule.audioMicMuted ? "Muted" : (Math.round(utilModule.audioMicVolume * 100) + "%")
+                            muted: utilModule.audioMicMuted
+                            onMoved: (val) => {
+                                utilModule.isDraggingMic = true;
+                                utilModule.setMicVolume(val);
+                            }
+                            onIconClicked: utilModule.toggleMicMute()
+                        }
+                    }
+
+                    // Directly Under Sliders: Color Picker & Pomodoro (Square tiles matching the grid)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 47
+                        spacing: 6.3
+
+                        IrisGridTile {
+                            glyph: "colorize"
+                            label: "Color"
+                            lit: false
+                            tint: "#ec4899"
+                            onClicked: utilModule.triggerColorPicker()
+                        }
+
+                        IrisGridTile {
+                            glyph: "timer"
+                            label: root.pomoRunning
+                                ? (root.pomoPaused ? "Paused" : (Math.floor(root.pomoSecondsRemaining / 60) + ":" + ((root.pomoSecondsRemaining % 60) < 10 ? "0" : "") + (root.pomoSecondsRemaining % 60)))
+                                : "Timer"
+                            lit: root.pomoRunning
+                            tint: "#f43f5e"
+                            onClicked: utilModule.activeSection = "pomo"
+                        }
+                    }
+                }
+            }
+
+            // LOWER SECTION (Bottom Row - Wide Plates: Audio Output & Screen Record)
+            RowLayout {
+                id: lowerSection
+                Layout.fillWidth: true
+                Layout.preferredHeight: 43.3
+                spacing: 8.4
+
+                // Audio Output (wide plate)
+                IrisActionPlate {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 164
+                    implicitHeight: 43.3
+                    glyph: utilModule.audioMuted ? "volume_off" : (utilModule.defaultSink ? utilModule.getSinkIcon(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "speaker")
+                    title: "Audio Output"
+                    subtitle: utilModule.defaultSink ? utilModule.cleanDeviceName(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "Default Device"
+                    lit: !utilModule.audioMuted
+                    tint: utilModule.colAccent
+                    onIconClicked: utilModule.toggleMute()
+                    onClicked: {
+                        utilModule.activeSection = "audio";
+                        fetchAudioDevices.running = true;
+                    }
+                }
+
+                // Screen Record (wide plate)
+                IrisActionPlate {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 164
+                    implicitHeight: 43.3
                     glyph: root.isScreenRecording ? "stop_circle" : "radio_button_checked"
-                    title: "Record"
-                    subtitle: root.isScreenRecording ? "Recording" : "Screen"
-                    isActive: root.isScreenRecording
-                    isSplit: true
-                    activeColor: "#ff453a"
-                    onToggleClicked: {
+                    title: "Screen Record"
+                    subtitle: root.isScreenRecording ? "Recording" : "Ready"
+                    lit: root.isScreenRecording
+                    tint: root.isScreenRecording ? "#ff453a" : utilModule.colAccent
+                    onIconClicked: {
                         if (root.isScreenRecording) {
                             root.stopRecording();
                         } else {
                             root.startRecording(false);
                         }
                     }
-                    onDetailClicked: root.switchMode("recorder", false)
-                }
-
-                // Lock Circular Button - aligns with Power Button below!
-                MaterialCircleBtn {
-                    id: lockBtn
-                    glyph: "lock"
-                    onClicked: {
-                        root.collapseToIdle();
-                        Quickshell.execDetached(["hyprlock"]);
-                    }
-                }
-            }
-
-            // ROW 2: Bluetooth Pill, VPN Pill, Power Circle Button
-            RowLayout {
-                id: row2
-                Layout.fillWidth: true
-                spacing: 8
-
-                // Bluetooth Pill (Split: disc toggles BT, body opens BT module)
-                MaterialPill {
-                    id: btPill
-                    glyph: utilModule.btEnabled ? "bluetooth" : "bluetooth_disabled"
-                    title: {
-                        if (!utilModule.btEnabled) return "Bluetooth";
-                        if (utilModule.activeBtName !== "") return utilModule.activeBtName;
-                        return "Bluetooth";
-                    }
-                    subtitle: {
-                        if (!utilModule.btEnabled) return "Off";
-                        if (utilModule.activeBtName !== "") {
-                            return utilModule.activeBtBattery !== "" ? ("Connected • " + utilModule.activeBtBattery) : "Connected";
-                        }
-                        return "Disconnected";
-                    }
-                    isActive: utilModule.btEnabled
-                    isSplit: true
-                    activeColor: utilModule.colAccent
-                    onToggleClicked: utilModule.toggleBluetooth()
-                    onDetailClicked: root.switchMode("bluetooth", false)
-                }
-
-                // VPN Pill (Split: disc quick-toggles default VPN, body opens VPN provider list)
-                MaterialPill {
-                    id: vpnPill
-                    glyph: (utilModule.vpnActive || utilModule.vpnConnecting) ? "shield" : "vpn_key"
-                    title: "VPN"
-                    subtitle: {
-                        if (utilModule.vpnConnecting) return "Connecting...";
-                        if (utilModule.vpnActive) return utilModule.activeVpnName;
-                        return (utilModule.defaultVpnId === "warp" ? "Cloudflare WARP" : "Off");
-                    }
-                    isActive: utilModule.vpnActive || utilModule.vpnConnecting
-                    isSplit: true
-                    activeColor: utilModule.colAccent
-                    onToggleClicked: utilModule.toggleVpn()
-                    onDetailClicked: {
-                        utilModule.activeSection = "vpn";
-                        fetchVpnStatus.running = true;
-                    }
-                }
-
-                // Power Circular Button
-                MaterialCircleBtn {
-                    id: powerBtn
-                    glyph: "power_settings_new"
-                    iconColor: "#ff453a"
-                    customBg: utilModule.colCard
-                    hoverBg: Qt.rgba(255, 69, 58, 0.18)
-                    onClicked: root.switchMode("powermenu", false)
-                }
-            }
-
-            // BENTO ROW 3: Sound Stadium Slider (with chevron to audio devices subview)
-            MaterialSliderCard {
-                Layout.topMargin: 2
-                value: utilModule.audioVolume
-                icon: utilModule.audioMuted ? "volume_off" : (utilModule.audioVolume > 0.5 ? "volume_up" : (utilModule.audioVolume > 0 ? "volume_down" : "volume_mute"))
-                percentText: utilModule.audioMuted ? "Muted" : (Math.round(utilModule.audioVolume * 100) + "%")
-                muted: utilModule.audioMuted
-                showChevron: true
-                activeColor: utilModule.colAccent
-                onMoved: (val) => {
-                    utilModule.isDraggingVolume = true;
-                    utilModule.setVolume(val);
-                }
-                onIconClicked: utilModule.toggleMute()
-                onHeaderClicked: {
-                    utilModule.activeSection = "audio";
-                    fetchAudioDevices.running = true;
-                }
-            }
-
-            // BENTO ROW 4: Display Brightness Stadium Slider
-            MaterialSliderCard {
-                value: utilModule.displayBrightness
-                icon: "light_mode"
-                percentText: Math.round(utilModule.displayBrightness * 100) + "%"
-                showChevron: false
-                activeColor: utilModule.colAccent
-                onMoved: (val) => {
-                    utilModule.isDraggingBrightness = true;
-                    utilModule.setBrightness(val);
-                }
-                onIconClicked: utilModule.setBrightness(utilModule.displayBrightness > 0.5 ? 0.2 : 0.8)
-            }
-
-            // ROW 5: Secondary Hardware Tools (6 Squircles: Mic, Caffeine, Night Light, Capture, DND, Picker)
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 5
-                spacing: 8
-
-                // 1. Microphone Mute
-                MaterialChipBtn {
-                    glyph: utilModule.audioMicMuted ? "mic_off" : "mic"
-                    lit: !utilModule.audioMicMuted
-                    tint: utilModule.audioMicMuted ? "#ff453a" : utilModule.colAccent
-                    onClicked: utilModule.toggleMicMute()
-                }
-
-                // 2. Caffeine (sleep inhibitor)
-                MaterialChipBtn {
-                    glyph: "coffee"
-                    lit: utilModule.caffeineActive
-                    tint: "#ff9f0a"
-                    onClicked: utilModule.toggleCaffeine()
-                }
-
-                // 3. Night Light (hyprsunset)
-                MaterialChipBtn {
-                    glyph: "nightlight"
-                    lit: utilModule.nightLightActive
-                    tint: "#ffd60a"
-                    onClicked: utilModule.toggleNightLight()
-                }
-
-                // 4. Screen Capture (grim + slurp)
-                MaterialChipBtn {
-                    glyph: "crop"
-                    lit: false
-                    tint: "#64d2ff"
-                    onClicked: utilModule.triggerScreenshot()
-                }
-
-                // 5. Focus / DND
-                MaterialChipBtn {
-                    glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
-                    lit: root.dndEnabled
-                    tint: "#5e5ce6"
-                    onClicked: root.dndEnabled = !root.dndEnabled
-                }
-
-                // 6. Color Picker (hyprpicker)
-                MaterialChipBtn {
-                    glyph: "colorize"
-                    lit: false
-                    tint: "#30b0c7"
-                    onClicked: utilModule.triggerColorPicker()
+                    onClicked: root.switchMode("recorder", false)
                 }
             }
         }
@@ -1893,18 +2264,13 @@ Item {
                             anchors.margins: 4
                             spacing: 0
 
-                            Rectangle {
-                                width: 28; height: 28; radius: 14
-                                color: stepMinusMouse.containsMouse ? utilModule.colCardHover : "transparent"
-                                MaterialSymbol { anchors.centerIn: parent; text: "remove"; iconSize: 16 }
-                                MouseArea {
-                                    id: stepMinusMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        pomoSubviewContainer.customMinutes = Math.max(1, pomoSubviewContainer.customMinutes - 5);
-                                    }
+                            IrisIconButton {
+                                width: 28; height: 28; buttonSize: 28; buttonRadius: 14
+                                flat: true
+                                icon: "remove"
+                                iconSize: 16
+                                onClicked: {
+                                    pomoSubviewContainer.customMinutes = Math.max(1, pomoSubviewContainer.customMinutes - 5);
                                 }
                             }
 
@@ -1918,18 +2284,13 @@ Item {
                                 color: utilModule.colText
                             }
 
-                            Rectangle {
-                                width: 28; height: 28; radius: 14
-                                color: stepPlusMouse.containsMouse ? utilModule.colCardHover : "transparent"
-                                MaterialSymbol { anchors.centerIn: parent; text: "add"; iconSize: 16 }
-                                MouseArea {
-                                    id: stepPlusMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        pomoSubviewContainer.customMinutes = Math.min(120, pomoSubviewContainer.customMinutes + 5);
-                                    }
+                            IrisIconButton {
+                                width: 28; height: 28; buttonSize: 28; buttonRadius: 14
+                                flat: true
+                                icon: "add"
+                                iconSize: 16
+                                onClicked: {
+                                    pomoSubviewContainer.customMinutes = Math.min(120, pomoSubviewContainer.customMinutes + 5);
                                 }
                             }
                         }

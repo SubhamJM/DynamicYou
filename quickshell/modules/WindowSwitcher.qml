@@ -405,14 +405,13 @@ ColumnLayout {
                                 layer.smooth: true
                                 
                                 // Fallback icon for windows that reject the screencopy protocol
-                                Image {
+                                IrisIcon {
                                     anchors.centerIn: parent
                                     visible: !parent.captureSource
-                                    source: iconName ? ("image://icon/" + iconName) : ""
-                                    sourceSize.width: 96
-                                    sourceSize.height: 96
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
+                                    icon: iconName
+                                    iconSize: 64
+                                    fallbackSymbol: IconResolver.resolve(iconName, className).fallbackSymbol || "window"
+                                    color: Theme.colors.accent ?? "#7aa2f7"
                                 }
                             }
                         }
@@ -451,15 +450,13 @@ ColumnLayout {
                                     }
 
                                     // App Icon Badge
-                                    Image {
-                                        visible: iconName !== ""
+                                    IrisIcon {
                                         Layout.preferredWidth: 16
                                         Layout.preferredHeight: 16
-                                        source: iconName ? ("image://icon/" + iconName) : ""
-                                        sourceSize.width: 16
-                                        sourceSize.height: 16
-                                        fillMode: Image.PreserveAspectFit
-                                        asynchronous: true
+                                        icon: iconName
+                                        iconSize: 16
+                                        fallbackSymbol: IconResolver.resolve(iconName, className).fallbackSymbol || "window"
+                                        color: Theme.colors.accent ?? "#7aa2f7"
                                     }
 
                                     Text {

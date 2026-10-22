@@ -160,6 +160,9 @@ EOF
             --transition-fps 144 \
             --transition-step 240 \
             --transition-bezier "0.25,0.1,0.25,1.0" &
+
+        ln -sf "$RANDOM_WALLPAPER" "$ACTIVE_DIR/current-wallpaper"
+        echo "$RANDOM_WALLPAPER" > "$ACTIVE_DIR/current-wallpaper.txt"
     fi
 
     # Reload components

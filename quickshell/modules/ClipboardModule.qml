@@ -178,27 +178,17 @@ for line in lines:
         spacing: 10
 
         // Back to Utility Button — Circular M3 Pill
-        Rectangle {
-            width: 40; height: 40; radius: 20
-            color: clipBackMouse.containsMouse ? clipModule.colCardHover : clipModule.colChipBg
-            border.width: 0
-            scale: clipBackMouse.pressed ? 0.92 : 1.0
-            Behavior on scale { NumberAnimation { duration: 90 } }
-            Behavior on color { ColorAnimation { duration: 140 } }
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: 20
-                color: clipModule.colText
-            }
-            MouseArea {
-                id: clipBackMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: root.switchMode("utility", true)
-            }
+        IrisIconButton {
+            width: 40
+            height: 40
+            buttonSize: 40
+            buttonRadius: 20
+            icon: "arrow_back"
+            iconSize: 20
+            backgroundColor: clipModule.colChipBg
+            backgroundHoverColor: clipModule.colCardHover
+            iconColor: clipModule.colText
+            onClicked: root.switchMode("utility", true)
         }
 
         // Search Bar Capsule
@@ -260,26 +250,20 @@ for line in lines:
                 }
 
                 // Clear Search Text Icon
-                Rectangle {
+                IrisIconButton {
                     visible: searchInput.text.length > 0
-                    width: 26; height: 26; radius: 13
-                    color: clearTextMouse.containsMouse ? clipModule.colCardHover : "transparent"
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 16
-                        color: clipModule.colSubtext
-                    }
-                    MouseArea {
-                        id: clearTextMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: {
-                            searchInput.text = "";
-                            searchInput.forceActiveFocus();
-                        }
+                    width: 26
+                    height: 26
+                    buttonSize: 26
+                    buttonRadius: 13
+                    flat: true
+                    icon: "close"
+                    iconSize: 16
+                    iconColor: clipModule.colSubtext
+                    hoverIconColor: clipModule.colText
+                    onClicked: {
+                        searchInput.text = "";
+                        searchInput.forceActiveFocus();
                     }
                 }
             }

@@ -39,18 +39,18 @@ ColumnLayout {
     property string hotspotPass: "000000001"
     property bool hotspotShowPassword: false
 
-    // Sleek Dark OLED Palette with Theme Accent Hints
+    // Sleek Frosted Glass & Material 3 Palette
     readonly property color colSurface: "#000000"
-    readonly property color colCard: "#0e0e12"
-    readonly property color colCardHover: "#18181c"
-    readonly property color colCardActive: "#141418"
-    readonly property color colChipBg: "#16161a"
-    readonly property color colText: "#f8fafc"
-    readonly property color colSubtext: "#94a3b8"
-    readonly property color colMuted: "#64748b"
+    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
+    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.095)
+    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.075)
+    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.07)
+    readonly property color colText: "#ffffff"
+    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.70)
+    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.40)
     readonly property color colAccent: Theme.accent ?? "#7aa2f7"
-    readonly property color colGreen: Theme.accent ?? "#30d158"
-    readonly property color colRed: "#f43f5e"
+    readonly property color colGreen: "#30d158"
+    readonly property color colRed: "#ff453a"
     readonly property color colYellow: "#ebcb8b"
 
     readonly property alias model: wifiModel
@@ -397,7 +397,7 @@ ColumnLayout {
             hotspotRunner.command = ["sh", "-c", cmd];
             hotspotRunner.running = true;
         } else {
-            hotspotRunner.command = ["sh", "-c", "nmcli connection down Hotspot || nmcli connection down id '" + hotspotSsid.replace(/'/g, "'\\x27'") + "' || true"];
+            hotspotRunner.command = ["sh", "-c", "for uuid in $(nmcli -t -f UUID,TYPE,NAME con show --active | grep -iE ':(wifi|802-11-wireless):.*hotspot' | cut -d: -f1); do nmcli con down uuid \"$uuid\" 2>/dev/null; done; nmcli connection down Hotspot 2>/dev/null || true"];
             hotspotRunner.running = true;
         }
     }
@@ -442,27 +442,16 @@ ColumnLayout {
             spacing: 10
 
             // Tactile Back to Utility Button
-            Rectangle {
-                width: 28; height: 28; radius: 8
-                color: wifiBackMouse.containsMouse ? wifiMaster.colCardHover : "transparent"
-                border.width: 0
-                scale: wifiBackMouse.pressed ? 0.90 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰁍"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    color: wifiMaster.colText
-                }
-
-                MouseArea {
-                    id: wifiBackMouse
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                    hoverEnabled: true
-                    onClicked: root.switchMode("utility", true)
-                }
+            IrisIconButton {
+                width: 28
+                height: 28
+                buttonSize: 28
+                buttonRadius: 14
+                flat: true
+                icon: "arrow_back"
+                iconSize: 15
+                iconColor: wifiMaster.colText
+                onClicked: root.switchMode("utility", true)
             }
 
             // Expressive squircle icon badge
@@ -694,31 +683,18 @@ ColumnLayout {
                 Item { Layout.fillWidth: true }
 
                 // Refresh Scan Icon Button
-                Rectangle {
+                IrisIconButton {
                     visible: wifiMaster.wifiEnabled
-                    Layout.preferredWidth: 32; Layout.preferredHeight: 32; radius: 16
-                    color: scanArea.containsMouse ? wifiMaster.colCardHover : "transparent"
-                    Behavior on color { ColorAnimation { duration: 140 } }
-
-                    MaterialSymbol {
-                        id: scanIcon
-                        anchors.centerIn: parent
-                        text: "refresh"
-                        iconSize: 17
-                        color: wifiMaster.isScanning ? wifiMaster.colAccent : wifiMaster.colSubtext
-
-                        RotationAnimation on rotation {
-                            running: wifiMaster.isScanning
-                            loops: Animation.Infinite
-                            from: 0; to: 360; duration: 900
-                        }
-                    }
-
-                    MouseArea {
-                        id: scanArea
-                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: if (!wifiMaster.isScanning) wifiMaster.triggerScan()
-                    }
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    buttonSize: 32
+                    buttonRadius: 16
+                    flat: true
+                    icon: "refresh"
+                    iconSize: 17
+                    spinning: wifiMaster.isScanning
+                    iconColor: wifiMaster.isScanning ? wifiMaster.colAccent : wifiMaster.colSubtext
+                    onClicked: if (!wifiMaster.isScanning) wifiMaster.triggerScan()
                 }
             }
 

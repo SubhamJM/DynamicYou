@@ -1554,55 +1554,22 @@ with open(f, 'w') as file: json.dump(d, file)
                             anchors.rightMargin: 12
                             spacing: 10
 
-                            // Icon Container
+                            // Modular Icon Container (Matushell Inspired)
                             Item {
                                 readonly property real iconBoxSize: delegateRoot.topHit ? 34 : 26
                                 Layout.preferredWidth: iconBoxSize
                                 Layout.preferredHeight: iconBoxSize
                                 Layout.alignment: Qt.AlignVCenter
 
-                                // Material Icon
-                                MaterialSymbol {
+                                IrisIcon {
                                     anchors.centerIn: parent
-                                    visible: model.matIcon !== ""
-                                    text: model.matIcon
+                                    icon: model.matIcon !== "" 
+                                        ? model.matIcon 
+                                        : (model.nerdIcon !== "" ? model.nerdIcon : (model.iconName || "apps"))
                                     iconSize: delegateRoot.topHit ? 22 : 18
                                     color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#ffffff")
-                                }
-
-                                // Nerd Icon
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: model.nerdIcon !== "" && model.matIcon === ""
-                                    text: model.nerdIcon
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: delegateRoot.topHit ? 20 : 16
-                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#ffffff")
-                                }
-
-                                // App Icon Image
-                                Image {
-                                    id: appIcon
-                                    anchors.fill: parent
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
-                                    sourceSize.width: parent.width
-                                    sourceSize.height: parent.height
-                                    visible: model.matIcon === "" && model.nerdIcon === "" && status === Image.Ready && source != ""
-                                    source: {
-                                        if (!model.iconName || model.iconName === "") return "";
-                                        if (model.iconName.startsWith("/")) return "file://" + model.iconName;
-                                        return "image://icon/" + model.iconName;
-                                    }
-                                }
-
-                                // Fallback Icon
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    visible: model.matIcon === "" && model.nerdIcon === "" && !appIcon.visible
-                                    text: "apps"
-                                    iconSize: delegateRoot.topHit ? 20 : 16
-                                    color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_secondary ?? "#8a8f9e")
+                                    fallbackSymbol: "apps"
+                                    cornerRadius: 6
                                 }
                             }
 

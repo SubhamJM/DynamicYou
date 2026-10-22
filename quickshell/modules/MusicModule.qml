@@ -807,29 +807,19 @@ Item {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Item {
+                    IrisIcon {
                         Layout.preferredWidth: 22
                         Layout.preferredHeight: 22
-
-                        Image {
-                            id: appImg
-                            anchors.fill: parent
-                            sourceSize: Qt.size(44, 44)
-                            source: {
-                                const iconName = musicModule.streamIconName(appLevel.nodes[0]);
-                                return Quickshell.iconPath(iconName, "") || Quickshell.iconPath("audio-x-generic", "") || "";
-                            }
-                            opacity: appLevel.isMuted ? 0.45 : 1.0
+                        icon: {
+                            const iconName = musicModule.streamIconName(appLevel.nodes[0]);
+                            const p = Quickshell.iconPath(iconName, "") || Quickshell.iconPath("audio-x-generic", "");
+                            return p ? ("file://" + p) : "graphic_eq";
                         }
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            visible: appImg.status !== Image.Ready
-                            text: "graphic_eq"
-                            iconSize: 16
-                            fill: 1
-                            color: Qt.rgba(255, 255, 255, appLevel.isMuted ? 0.35 : 0.70)
-                        }
+                        iconSize: 18
+                        fill: 1
+                        fallbackSymbol: "graphic_eq"
+                        color: Qt.rgba(255, 255, 255, appLevel.isMuted ? 0.35 : 0.70)
+                        opacity: appLevel.isMuted ? 0.45 : 1.0
                     }
 
                     Text {

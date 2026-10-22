@@ -53,17 +53,34 @@ def get_telemetry():
     is_charging = status.lower() == 'charging'
     is_full = (status.lower() in ('full', 'not charging')) and cap >= 95
 
-    c_now = read_num('charge_now') or read_num('energy_now')
-    c_full = read_num('charge_full') or read_num('energy_full')
-    c_design = read_num('charge_full_design') or read_num('energy_full_design')
-    cur = read_num('current_now') or read_num('power_now')
-    v_now = read_num('voltage_now') or 11993000.0
+    has_energy = os.path.exists(os.path.join(bat, 'energy_now')) or os.path.exists(os.path.join(bat, 'energy_full'))
+    
+    if has_energy:
+        e_now = read_num('energy_now')
+        e_full = read_num('energy_full')
+        e_design = read_num('energy_full_design')
+        p_now = read_num('power_now')
+        v_now = read_num('voltage_now') or 11993000.0
 
-    # Power in Watts & Voltage
-    power_w = round((cur * v_now) / 1e12, 1)
-    voltage_v = round(v_now / 1e6, 1)
-    current_energy_wh = round((c_now * v_now) / 1e12, 1)
-    full_energy_wh = round((c_full * v_now) / 1e12, 1)
+        current_energy_wh = round(e_now / 1e6, 1)
+        full_energy_wh = round(e_full / 1e6, 1)
+        power_w = round(p_now / 1e6, 1)
+        voltage_v = round(v_now / 1e6, 1)
+        c_now = e_now
+        c_full = e_full
+        c_design = e_design
+        cur = p_now
+    else:
+        c_now = read_num('charge_now')
+        c_full = read_num('charge_full')
+        c_design = read_num('charge_full_design')
+        cur = read_num('current_now')
+        v_now = read_num('voltage_now') or 11993000.0
+
+        power_w = round((cur * v_now) / 1e12, 1)
+        voltage_v = round(v_now / 1e6, 1)
+        current_energy_wh = round((c_now * v_now) / 1e12, 1)
+        full_energy_wh = round((c_full * v_now) / 1e12, 1)
 
     # Battery Health
     health = 100

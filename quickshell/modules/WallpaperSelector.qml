@@ -612,11 +612,9 @@ for f in sorted_files:
             }
             var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
             Quickshell.execDetached([
-                "awww", "img", path,
-                "--transition-type", trans,
-                "--transition-fps", "144",
-                "--transition-step", "240",
-                "--transition-bezier", "0.25,0.1,0.25,1.0"
+                Quickshell.env("HOME") + "/.config/quickshell/scripts/apply_wallpaper.sh",
+                path,
+                trans
             ]);
             root.collapseToIdle();
         }

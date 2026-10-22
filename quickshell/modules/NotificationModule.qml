@@ -202,13 +202,14 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Image {
+                    IrisIcon {
                         Layout.preferredWidth: 16
                         Layout.preferredHeight: 16
-                        source: appIcon ? ("image://icon/" + appIcon) : ""
-                        visible: appIcon !== ""
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
+                        icon: (appIcon && appIcon !== "") ? appIcon : (appName ? appName.toLowerCase() : "notifications")
+                        iconSize: 16
+                        color: Theme.colors.accent ?? "#7aa2f7"
+                        fallbackSymbol: IconResolver.resolve(appName).fallbackSymbol || "notifications"
+                        cornerRadius: 4
                     }
 
                     Text {
@@ -221,28 +222,19 @@ ColumnLayout {
                         Layout.fillWidth: true
                     }
 
-                    Rectangle {
+                    IrisIconButton {
                         Layout.preferredWidth: 20
                         Layout.preferredHeight: 20
-                        radius: 10
-                        color: dismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "✕"
-                            font.pixelSize: 10
-                            color: dismissMouse.containsMouse ? (Theme.colors.error ?? "#f44336") : (Theme.colors.text_secondary ?? "#565f89")
-                        }
-
-                        MouseArea {
-                            id: dismissMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (notifObj) notifObj.dismiss();
-                                globalNotifModel.remove(index);
-                            }
+                        buttonSize: 20
+                        buttonRadius: 10
+                        flat: true
+                        icon: "close"
+                        iconSize: 12
+                        iconColor: Theme.colors.text_secondary ?? "#565f89"
+                        hoverIconColor: Theme.colors.error ?? "#f44336"
+                        onClicked: {
+                            if (notifObj) notifObj.dismiss();
+                            globalNotifModel.remove(index);
                         }
                     }
                 }

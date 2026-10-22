@@ -525,27 +525,19 @@ Item {
             }
 
             // Close Button
-            Rectangle {
-                width: 26; height: 26; radius: 13
-                color: closeMouse.containsMouse ? toolDeckRoot.colCardHover : "transparent"
-                scale: closeMouse.pressed ? 0.90 : 1.0
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: 16
-                    color: toolDeckRoot.colMuted
-                }
-
-                MouseArea {
-                    id: closeMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (toolDeckRoot.isEditing) toolDeckRoot.isEditing = false;
-                        root.collapseToIdle();
-                    }
+            IrisIconButton {
+                width: 26
+                height: 26
+                buttonSize: 26
+                buttonRadius: 13
+                flat: true
+                icon: "close"
+                iconSize: 16
+                iconColor: toolDeckRoot.colMuted
+                hoverIconColor: toolDeckRoot.colText
+                onClicked: {
+                    if (toolDeckRoot.isEditing) toolDeckRoot.isEditing = false;
+                    root.collapseToIdle();
                 }
             }
         }

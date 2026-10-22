@@ -83,6 +83,41 @@ QtObject {
         "warning": "#fbbf24"
     })
 
+    // --- Modular Design & Icon Tokens (Inspired by Matushell) ---
+    readonly property string fontFamilyIcon: "Material Symbols Rounded"
+    readonly property string fontFamilyNerd: "JetBrainsMono Nerd Font"
+    readonly property string fontFamilyBody: "Noto Sans"
+    readonly property int fontIconGrad: -25
+
+    // Standardized Icon Sizes
+    readonly property int iconSizeXs: 14
+    readonly property int iconSizeSm: 16
+    readonly property int iconSize: 18
+    readonly property int iconSizeMd: 20
+    readonly property int iconSizeLg: 22
+    readonly property int iconSizeXl: 26
+    readonly property int iconSizeDisplay: 32
+
+    // Standardized Button Dimensions
+    readonly property int iconBtnSizeXs: 24
+    readonly property int iconBtnSizeSm: 28
+    readonly property int iconBtnSize: 34
+    readonly property int iconBtnSizeLg: 40
+    readonly property int iconBtnSizeXl: 48
+
+    // Standardized Motion / Animation Durations
+    readonly property int animFast: 100
+    readonly property int animNormal: 180
+    readonly property int animSlow: 280
+
+    // --- Matushell Motion Curves (BezierSpline) ---
+    readonly property var curveFastSpatial: [0.27, 1.06, 0.18, 1, 1, 1]
+    readonly property var curveDefaultSpatial: [0.38, 1.21, 0.22, 1, 1, 1]
+    readonly property var curveSlowSpatial: [0.39, 1.29, 0.35, 0.98, 1, 1]
+    readonly property var curveFastEffects: [0.31, 0.94, 0.34, 1, 1, 1]
+    readonly property var curveEmphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
+    readonly property var curveGlide: [0.37, 0, 0.63, 1, 1, 1]
+
     property string currentThemeName: "default"
     property string activeTransition: "simple"
 
