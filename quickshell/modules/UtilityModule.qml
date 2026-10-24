@@ -706,7 +706,7 @@ Item {
         property string icon: "volume_up"
         property string percentText: "50%"
         property bool muted: false
-        property color activeColor: "#ffffff"
+        property color activeColor: utilModule.colAccent
         signal moved(real val)
         signal iconClicked()
 
@@ -727,7 +727,7 @@ Item {
             scale: vsliderMouse.pressed ? 0.985 : (vsliderMouse.containsMouse ? 1.015 : 1.0)
             Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
 
-            // Fluid Rising Fill with rounded top and bottom - strictly pure white (#ffffff)
+            // Fluid Rising Fill with rounded top and bottom - matching current theme
             Rectangle {
                 id: fillFace
                 anchors.left: parent.left
@@ -736,12 +736,13 @@ Item {
                 visible: vslider.currentRatio > 0.02
                 height: vslider.muted ? 0 : Math.max(0, Math.min(parent.height, parent.height * vslider.currentRatio))
                 radius: 18
-                color: vslider.muted ? Qt.rgba(255, 255, 255, 0.20) : "#ffffff"
+                color: vslider.muted ? Qt.rgba(255, 255, 255, 0.20) : vslider.activeColor
 
                 Behavior on height {
                     enabled: vslider.dragVal < 0
                     NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
                 }
+                Behavior on color { ColorAnimation { duration: 120 } }
             }
 
             // Top Numeric Percentage Readout
@@ -757,7 +758,7 @@ Item {
                 font.features: ({ "tnum": 1 })
                 color: vslider.muted
                     ? "#ff6961"
-                    : (vslider.currentRatio >= 0.85 ? "#101318" : "#ffffff")
+                    : (vslider.currentRatio >= 0.85 ? (Theme.colors.bg ?? "#000000") : "#ffffff")
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
 
@@ -785,7 +786,7 @@ Item {
                     iconSize: 17
                     color: vslider.muted
                         ? "#ff453a"
-                        : (vslider.currentRatio >= 0.22 ? "#101318" : "#ffffff")
+                        : (vslider.currentRatio >= 0.22 ? (Theme.colors.bg ?? "#000000") : "#ffffff")
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
