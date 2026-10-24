@@ -63,7 +63,7 @@ Item {
     implicitWidth: {
         if (isIslandActive) return activeIslandWidth;
         if (root.activeMode === "hover") {
-            return dashRow.implicitWidth + 16;
+            return dashRow.implicitWidth + 24;
         }
         if (dash.isMediaPlaying && root.activeMode === "idle") {
             var baseMusic = dash.showMusicInfo ? 360 : 270;
@@ -1351,7 +1351,7 @@ Item {
     RowLayout {
         id: dashRow
         anchors.centerIn: parent
-        spacing: 8
+        spacing: 10
         opacity: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.0
         scale: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.96
         visible: opacity > 0.01
@@ -1359,13 +1359,9 @@ Item {
         Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
 
         // ── 1. LEFT GROUP: BRAND & WORKSPACES ────────────────────
-        Rectangle {
+        Item {
             Layout.preferredHeight: 32
-            Layout.preferredWidth: leftGroupRow.implicitWidth + 12
-            radius: 12
-            color: Qt.rgba(255, 255, 255, 0.05)
-            border.width: 0
-            border.color: "transparent"
+            Layout.preferredWidth: leftGroupRow.implicitWidth
 
             RowLayout {
                 id: leftGroupRow
@@ -1386,8 +1382,8 @@ Item {
 
                 // Hairline Divider
                 Rectangle {
-                    width: 1; height: 16; radius: 0.5
-                    color: Qt.rgba(255, 255, 255, 0.12)
+                    width: 1; height: 16
+                    color: Qt.rgba(255, 255, 255, 0.15)
                 }
 
                 // Workspaces Pager (Scroll Wheel + Liquid Pill)
@@ -1463,14 +1459,18 @@ Item {
             }
         }
 
-        // ── 2. CENTER GROUP: DATE, CLOCK & ACTIVE SPRINT ─────────
+        // ── MAJOR SECTION DIVIDER 1 (Left <-> Center) ────────────
         Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            width: 1
+            height: 18
+            color: Qt.rgba(255, 255, 255, 0.20)
+        }
+
+        // ── 2. CENTER GROUP: DATE, CLOCK & ACTIVE SPRINT ─────────
+        Item {
             Layout.preferredHeight: 32
-            Layout.preferredWidth: centerGroupRow.implicitWidth + 16
-            radius: 12
-            color: Qt.rgba(255, 255, 255, 0.05)
-            border.width: 0
-            border.color: "transparent"
+            Layout.preferredWidth: centerGroupRow.implicitWidth
 
             RowLayout {
                 id: centerGroupRow
@@ -1561,14 +1561,18 @@ Item {
             }
         }
 
-        // ── 3. RIGHT GROUP: STATUS PILLS & QUICK CONTROLS ────────
+        // ── MAJOR SECTION DIVIDER 2 (Center <-> Right) ───────────
         Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            width: 1
+            height: 18
+            color: Qt.rgba(255, 255, 255, 0.20)
+        }
+
+        // ── 3. RIGHT GROUP: STATUS PILLS & QUICK CONTROLS ────────
+        Item {
             Layout.preferredHeight: 32
-            Layout.preferredWidth: rightGroupRow.implicitWidth + 12
-            radius: 12
-            color: Qt.rgba(255, 255, 255, 0.05)
-            border.width: 0
-            border.color: "transparent"
+            Layout.preferredWidth: rightGroupRow.implicitWidth
 
             RowLayout {
                 id: rightGroupRow
@@ -1590,14 +1594,14 @@ Item {
 
                 // Hairline Divider
                 Rectangle {
-                    width: 1; height: 16; radius: 0.5
-                    color: Qt.rgba(255, 255, 255, 0.12)
+                    width: 1; height: 16
+                    color: Qt.rgba(255, 255, 255, 0.15)
                 }
 
                 // Battery Status Pill
                 Rectangle {
                     Layout.preferredHeight: 24
-                    Layout.preferredWidth: battRow.implicitWidth + 12
+                    Layout.preferredWidth: battRow.implicitWidth + 8
                     radius: 8
                     color: battMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"
 
@@ -1617,8 +1621,8 @@ Item {
 
                 // Hairline Divider
                 Rectangle {
-                    width: 1; height: 16; radius: 0.5
-                    color: Qt.rgba(255, 255, 255, 0.12)
+                    width: 1; height: 16
+                    color: Qt.rgba(255, 255, 255, 0.15)
                 }
 
                 // Control Center Toggle
