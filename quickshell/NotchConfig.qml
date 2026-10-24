@@ -59,7 +59,7 @@ QtObject {
         "powermenu":     { width: 460, height: 108, radius: 24 },
         "calendar":      { width: 320, height: 280, radius: 12 },
         "clipboard":     { width: 580, height: 500, radius: 26 },
-        "utility":       { width: 360, height: 326, radius: 26 },
+        "utility":       { width: 424, height: 330, radius: 26 },
         "music":         { width: 480, height: 265, radius: 26 },
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
@@ -71,7 +71,7 @@ QtObject {
         if (activeSection === "audio") return 384;
         if (activeSection === "vpn") return 264;
         if (activeSection === "pomo") return 360;
-        return 326;
+        return 330;
     }
 
     // ==========================================

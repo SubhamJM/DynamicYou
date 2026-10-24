@@ -39,6 +39,16 @@ elif [ -f "$TARGET" ]; then
     fi
 fi
 
+ensure_awww() {
+    if ! pgrep -x awww-daemon >/dev/null 2>&1; then
+        awww-daemon &
+        for i in {1..30}; do
+            awww query >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+    fi
+}
+
 if [ "$is_we" = true ]; then
     killall -9 linux-wallpaperengine 2>/dev/null || true
     echo "$ITEM_DIR" > "$STATE_FILE"
@@ -63,6 +73,7 @@ if [ "$is_we" = true ]; then
         ln -sf "$HQ_POSTER" "$HOME/.config/active-theme/current-wallpaper" 2>/dev/null || true
         echo "$HQ_POSTER" > "$HOME/.config/active-theme/current-wallpaper.txt" 2>/dev/null || true
 
+        ensure_awww
         awww img "$HQ_POSTER" \
             --transition-type "$TRANSITION" \
             --transition-fps 144 \
@@ -95,6 +106,7 @@ else
     ln -sf "$TARGET" "$HOME/.config/active-theme/current-wallpaper" 2>/dev/null || true
     echo "$TARGET" > "$HOME/.config/active-theme/current-wallpaper.txt" 2>/dev/null || true
 
+    ensure_awww
     awww img "$TARGET" \
         --transition-type "$TRANSITION" \
         --transition-fps 144 \

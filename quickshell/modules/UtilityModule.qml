@@ -553,8 +553,8 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 43.3
-        radius: 14.5
+        implicitHeight: 44
+        radius: 14
 
         // Clean neutral dark frosted glass (never whole-card colored)
         color: plateMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.055)
@@ -669,7 +669,7 @@ Item {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        radius: 12.5
+        radius: 14
 
         // Solid accent when active, clean glass container when off
         color: gtile.lit
@@ -681,31 +681,13 @@ Item {
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 110 } }
 
-        ColumnLayout {
+        MaterialSymbol {
             anchors.centerIn: parent
-            spacing: 2
-
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignHCenter
-                text: gtile.glyph
-                fill: gtile.lit ? 1 : 0
-                iconSize: 18.5
-                color: gtile.lit ? "#101318" : (tileMouse.containsMouse ? "#ffffff" : "#f5f5f7")
-                Behavior on color { ColorAnimation { duration: 100 } }
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.maximumWidth: gtile.width - 6
-                text: gtile.label
-                font.family: "Noto Sans"
-                font.pixelSize: 10
-                font.weight: gtile.lit ? Font.Bold : Font.DemiBold
-                color: gtile.lit ? "#101318" : (tileMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.70))
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-                Behavior on color { ColorAnimation { duration: 100 } }
-            }
+            text: gtile.glyph
+            fill: gtile.lit ? 1 : 0
+            iconSize: 18
+            color: gtile.lit ? (Theme.colors.bg ?? "#000000") : (tileMouse.containsMouse ? "#ffffff" : "#f5f5f7")
+            Behavior on color { ColorAnimation { duration: 100 } }
         }
 
         MouseArea {
@@ -1267,13 +1249,13 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.topMargin: 4
-        spacing: 9.5
+        spacing: 10
 
         // ── TOP HEADER BAR ─────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
-            spacing: 8.4
+            spacing: 10
 
             // Tactile Back / Exit Button
             Rectangle {
@@ -1308,7 +1290,7 @@ Item {
             // Title & Date Subtitle
             ColumnLayout {
                 spacing: 0
-                Layout.preferredWidth: 110
+                Layout.preferredWidth: 150
 
                 Text {
                     text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : (utilModule.activeSection === "pomo" ? "Focus & Pomodoro" : "Control Center"))
@@ -1331,7 +1313,7 @@ Item {
 
             // Quick Shortcut Badges & System Actions (Notes, Clipboard, Theme, Tasks, Lock, Power)
             RowLayout {
-                spacing: 4.2
+                spacing: 6
                 Layout.alignment: Qt.AlignRight
                 visible: utilModule.activeSection === ""
 
@@ -1413,28 +1395,26 @@ Item {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignTop
             Layout.topMargin: 2
-            spacing: 6.3
+            spacing: 10
             visible: utilModule.activeSection === ""
 
             // UPPER SECTION (Rows 1 to 4):
-            // Left stack: Ethernet (43.3px) + Bluetooth (43.3px) + 4-Button Grid Pack (107px) = 206px
-            // Right stack: 3 Sliders (152px) + [Color & Pomodoro] (47px) = 206px
             RowLayout {
                 id: upperSection
                 Layout.fillWidth: true
                 Layout.preferredHeight: 206
-                spacing: 8.4
+                spacing: 10
 
-                // LEFT STACK: Ethernet, Bluetooth, and the 4-Button Grid Pack
+                // LEFT STACK: Ethernet, Bluetooth, Hotspot & Caffeine, Night Light & DND
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 164
+                    Layout.preferredWidth: 195
                     Layout.fillHeight: true
-                    spacing: 6.3
+                    spacing: 10
 
                     // 1. Ethernet / Wi-Fi Plate
                     IrisActionPlate {
-                        implicitHeight: 43.3
+                        implicitHeight: 44
                         glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
                         title: (utilModule.activeNetType === "eth") ? "Ethernet" : "Wi-Fi"
                         subtitle: {
@@ -1453,7 +1433,7 @@ Item {
 
                     // 2. Bluetooth Plate
                     IrisActionPlate {
-                        implicitHeight: 43.3
+                        implicitHeight: 44
                         glyph: utilModule.btEnabled ? "bluetooth" : "bluetooth_disabled"
                         title: "Bluetooth"
                         subtitle: {
@@ -1469,56 +1449,53 @@ Item {
                         onClicked: root.switchMode("bluetooth", false)
                     }
 
-                    // 3. The 4-Button Grid Pack (Hotspot, Caffeine, Night Light, DND) - Square Tiles scaled equally with plates
-                    Rectangle {
+                    // 3. Upper Action Buttons (Hotspot, Caffeine)
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 107
-                        radius: 14.5
-                        color: Qt.rgba(255, 255, 255, 0.04)
-                        border.width: 0
+                        Layout.preferredHeight: 44
+                        spacing: 10
 
-                        GridLayout {
-                            anchors.fill: parent
-                            anchors.margins: 5.25
-                            columns: 2
-                            rowSpacing: 5.25
-                            columnSpacing: 5.25
+                        // Hotspot
+                        IrisGridTile {
+                            glyph: "wifi_tethering"
+                            label: "Hotspot"
+                            lit: utilModule.hotspotActive
+                            tint: "#2dd4bf"
+                            onClicked: utilModule.toggleHotspot()
+                        }
 
-                            // Hotspot
-                            IrisGridTile {
-                                glyph: "wifi_tethering"
-                                label: "Hotspot"
-                                lit: utilModule.hotspotActive
-                                tint: "#2dd4bf"
-                                onClicked: utilModule.toggleHotspot()
-                            }
+                        // Caffeine
+                        IrisGridTile {
+                            glyph: "coffee"
+                            label: "Caffeine"
+                            lit: utilModule.caffeineActive
+                            tint: "#fbbf24"
+                            onClicked: utilModule.toggleCaffeine()
+                        }
+                    }
 
-                            // Caffeine
-                            IrisGridTile {
-                                glyph: "coffee"
-                                label: "Caffeine"
-                                lit: utilModule.caffeineActive
-                                tint: "#fbbf24"
-                                onClicked: utilModule.toggleCaffeine()
-                            }
+                    // 4. Lower Action Buttons (Night Light, DND) - Aligned with Color & Timer
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        spacing: 10
 
-                            // Night Light
-                            IrisGridTile {
-                                glyph: "nightlight"
-                                label: "Night Light"
-                                lit: utilModule.nightLightActive
-                                tint: "#f59e0b"
-                                onClicked: utilModule.toggleNightLight()
-                            }
+                        // Night Light
+                        IrisGridTile {
+                            glyph: "nightlight"
+                            label: "Night Light"
+                            lit: utilModule.nightLightActive
+                            tint: "#f59e0b"
+                            onClicked: utilModule.toggleNightLight()
+                        }
 
-                            // DND
-                            IrisGridTile {
-                                glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
-                                label: "DND"
-                                lit: root.dndEnabled
-                                tint: "#a855f7"
-                                onClicked: root.dndEnabled = !root.dndEnabled
-                            }
+                        // DND
+                        IrisGridTile {
+                            glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
+                            label: "DND"
+                            lit: root.dndEnabled
+                            tint: "#a855f7"
+                            onClicked: root.dndEnabled = !root.dndEnabled
                         }
                     }
                 }
@@ -1526,15 +1503,15 @@ Item {
                 // RIGHT STACK: 3 Sliders (Volume, Brightness, Mic) + [Color & Pomodoro] (Square tiles)
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 164
+                    Layout.preferredWidth: 195
                     Layout.fillHeight: true
-                    spacing: 6.3
+                    spacing: 10
 
-                    // 3 Vertical Capsule Sliders side-by-side with 6.3px spacing (Volume, Brightness, Mic)
+                    // 3 Vertical Capsule Sliders side-by-side with 9.5px spacing (Volume, Brightness, Mic)
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 152
-                        spacing: 6.3
+                        spacing: 9.5
 
                         // 1. Volume Capsule Slider
                         IrisVerticalCapsuleSlider {
@@ -1579,8 +1556,8 @@ Item {
                     // Directly Under Sliders: Color Picker & Pomodoro (Square tiles matching the grid)
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 47
-                        spacing: 6.3
+                        Layout.preferredHeight: 44
+                        spacing: 10
 
                         IrisGridTile {
                             glyph: "colorize"
@@ -1607,14 +1584,14 @@ Item {
             RowLayout {
                 id: lowerSection
                 Layout.fillWidth: true
-                Layout.preferredHeight: 43.3
-                spacing: 8.4
+                Layout.preferredHeight: 44
+                spacing: 10
 
                 // Audio Output (wide plate)
                 IrisActionPlate {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 164
-                    implicitHeight: 43.3
+                    Layout.preferredWidth: 195
+                    implicitHeight: 44
                     glyph: utilModule.audioMuted ? "volume_off" : (utilModule.defaultSink ? utilModule.getSinkIcon(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "speaker")
                     title: "Audio Output"
                     subtitle: utilModule.defaultSink ? utilModule.cleanDeviceName(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "Default Device"
@@ -1630,8 +1607,8 @@ Item {
                 // Screen Record (wide plate)
                 IrisActionPlate {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 164
-                    implicitHeight: 43.3
+                    Layout.preferredWidth: 195
+                    implicitHeight: 44
                     glyph: root.isScreenRecording ? "stop_circle" : "radio_button_checked"
                     title: "Screen Record"
                     subtitle: root.isScreenRecording ? "Recording" : "Ready"

@@ -292,7 +292,7 @@ Item {
                 width: 26; height: 26; radius: 13
                 color: backMouse.containsMouse ? cheatsheetRoot.hoverColor : "transparent"
                 border.width: 1
-                border.color: Theme.colors.border ?? "#16161e"
+                border.color: Theme.colors.border ?? "transparent"
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {

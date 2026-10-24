@@ -65,7 +65,7 @@ ColumnLayout {
             radius: 6
             color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : (dndMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : (Theme.colors.card_bg ?? "#1f2335"))
             border.width: 1
-            border.color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "#16161e")
+            border.color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "transparent")
             Behavior on color { ColorAnimation { duration: 150 } }
 
             RowLayout {
@@ -76,14 +76,14 @@ ColumnLayout {
                     text: root.dndEnabled ? "󰂛" : "󰂚"
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: 11
-                    color: root.dndEnabled ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_secondary ?? "#565f89")
+                    color: root.dndEnabled ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_secondary ?? "#565f89")
                 }
                 Text {
                     text: root.dndEnabled ? "DND On" : "DND"
                     font.family: "Inter"
                     font.pixelSize: 11
                     font.bold: true
-                    color: root.dndEnabled ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_secondary ?? "#565f89")
+                    color: root.dndEnabled ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_secondary ?? "#565f89")
                 }
             }
 
@@ -103,7 +103,7 @@ ColumnLayout {
             radius: 6
             color: clearMouse.containsMouse ? (Theme.colors.error ?? "#f44336") : (Theme.colors.card_bg ?? "#1f2335")
             border.width: 1
-            border.color: Theme.colors.border ?? "#16161e"
+            border.color: Theme.colors.border ?? "transparent"
             Behavior on color { ColorAnimation { duration: 150 } }
 
             Text {
@@ -187,7 +187,7 @@ ColumnLayout {
             radius: 10
             color: Theme.colors.card_bg ?? "#1f2335"
             border.width: 1
-            border.color: Theme.colors.border ?? "#16161e"
+            border.color: Theme.colors.border ?? "transparent"
             clip: true
 
             ColumnLayout {

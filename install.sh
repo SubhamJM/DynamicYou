@@ -356,7 +356,9 @@ apply_symlinks() {
 
     # Binaries in ~/.local/bin
     mkdir -p "${HOME}/.local/bin"
+    chmod +x "${TARGET_DIR}/scripts/"*.sh "${TARGET_DIR}/quickshell/scripts/"*.sh 2>/dev/null || true
     symlink_module "${TARGET_DIR}/scripts/apply-theme.sh" "${HOME}/.local/bin/apply-theme.sh"
+    symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
 
     echo

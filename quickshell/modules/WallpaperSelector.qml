@@ -591,7 +591,7 @@ for f in sorted_files:
                 anchors.centerIn: parent
                 text: "Apply"
                 font.bold: true; font.pixelSize: 12
-                color: applyMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_primary ?? "white")
+                color: applyMouse.containsMouse ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_primary ?? "white")
             }
             MouseArea {
                 id: applyMouse

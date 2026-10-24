@@ -219,7 +219,7 @@ ColumnLayout {
                         font.bold: parent.parent.isToday
                         opacity: parent.parent.isValidDay ? (cellMouse.containsMouse ? 1.0 : 0.9) : (cellMouse.containsMouse ? 0.6 : 0.3)
                         color: parent.parent.isToday 
-                            ? (Theme.colors.bg ?? "#16161e") 
+                            ? (Theme.colors.bg ?? "#000000") 
                             : (cellMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_primary ?? "white"))
                     }
 

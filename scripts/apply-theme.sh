@@ -3,6 +3,9 @@
 # The theme name is passed as the first argument ($1)
 TARGET_THEME=$1
 THEMES_DIR="$HOME/.config/themes"
+if [[ ! -d "$THEMES_DIR" && -d "$HOME/git/MyLinuxSetup/themes" ]]; then
+    THEMES_DIR="$HOME/git/MyLinuxSetup/themes"
+fi
 ACTIVE_DIR="$HOME/.config/active-theme"
 
 # Ensure target active directory exists
@@ -151,18 +154,23 @@ EOF
     fi
 
     if [[ -n "$RANDOM_WALLPAPER" ]]; then
-        if ! pgrep -x awww-daemon >/dev/null 2>&1; then
-            awww-daemon &
-            sleep 0.1
-        fi
-        awww img "$RANDOM_WALLPAPER" \
-            --transition-type "$TRANSITION" \
-            --transition-fps 144 \
-            --transition-step 240 \
-            --transition-bezier "0.25,0.1,0.25,1.0" &
-
         ln -sf "$RANDOM_WALLPAPER" "$ACTIVE_DIR/current-wallpaper"
         echo "$RANDOM_WALLPAPER" > "$ACTIVE_DIR/current-wallpaper.txt"
+
+        if [[ -n "$WAYLAND_DISPLAY" ]] || pgrep -x Hyprland >/dev/null 2>&1; then
+            if ! pgrep -x awww-daemon >/dev/null 2>&1; then
+                awww-daemon &
+                for i in {1..30}; do
+                    awww query >/dev/null 2>&1 && break
+                    sleep 0.1
+                done
+            fi
+            awww img "$RANDOM_WALLPAPER" \
+                --transition-type "$TRANSITION" \
+                --transition-fps 144 \
+                --transition-step 240 \
+                --transition-bezier "0.25,0.1,0.25,1.0" 2>/dev/null &
+        fi
     fi
 
     # Reload components

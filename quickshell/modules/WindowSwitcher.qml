@@ -384,13 +384,13 @@ ColumnLayout {
                         radius: 12
                         color: Theme.colors.card_bg ?? "#1f2335"
                         border.width: PathView.isCurrentItem ? 2 : 1
-                        border.color: PathView.isCurrentItem ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "#16161e")
+                        border.color: PathView.isCurrentItem ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "transparent")
                         clip: true
 
                         // Live Native Wayland Buffer Preview
                         Rectangle {
                             anchors.fill: parent
-                            color: Theme.colors.bg ?? "#16161e"
+                            color: Theme.colors.bg ?? "#000000"
                             
                             ScreencopyView {
                                 anchors.centerIn: parent

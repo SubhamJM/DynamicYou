@@ -454,7 +454,7 @@ Item {
                             text: "󰏫"
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 11
-                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : Theme.accent
+                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#000000") : Theme.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -463,7 +463,7 @@ Item {
                             font.family: "Inter"
                             font.pixelSize: 10
                             font.weight: Font.DemiBold
-                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#16161e") : (Theme.colors.text_primary ?? "#ffffff")
+                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_primary ?? "#ffffff")
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }

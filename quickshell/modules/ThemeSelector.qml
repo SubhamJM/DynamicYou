@@ -134,8 +134,15 @@ ColumnLayout {
             var t = filteredThemes[carousel.currentIndex];
             if (t && t.rawName) {
                 var home = Quickshell.env("HOME") || "";
-                var scriptPath = (home !== "") ? (home + "/.local/bin/apply-theme.sh") : "apply-theme.sh";
-                Quickshell.execDetached(["bash", scriptPath, t.rawName]);
+                var cmd = `
+                    for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh" "$HOME/.config/hypr/scripts/apply-theme.sh"; do
+                        if [ -x "$s" ] || [ -f "$s" ]; then
+                            exec bash "$s" "${t.rawName}"
+                        fi
+                    done
+                    apply-theme.sh "${t.rawName}"
+                `;
+                Quickshell.execDetached(["bash", "-c", cmd]);
                 Theme.currentThemeName = t.rawName;
                 root.activeMode = "idle";
             }
