@@ -17,14 +17,18 @@ Item {
     }
 
     // ========================================================
-    // 1. DESIGN TOKENS & COLORS
+    // 1. DESIGN TOKENS & TYPOGRAPHY
     // ========================================================
-    readonly property color accentColor: Theme.accent
-    readonly property color cardBg: Qt.rgba(255, 255, 255, 0.045)
-    readonly property color cardHoverBg: Qt.rgba(255, 255, 255, 0.08)
+    readonly property string fontDisplay: "Inter"
+    readonly property string fontBody: "Inter"
+
+    readonly property color accentColor: Theme.accent ?? "#38bdf8"
+    readonly property color cardBg: Qt.rgba(255, 255, 255, 0.04)
+    readonly property color cardHoverBg: Qt.rgba(255, 255, 255, 0.075)
+    readonly property color cardBorder: Qt.rgba(255, 255, 255, 0.055)
     readonly property color textPrimary: Theme.colors.text_primary ?? "#f8fafc"
-    readonly property color textSecondary: Theme.colors.text_secondary ?? "#94a3b8"
-    readonly property color textMuted: Theme.colors.text_muted ?? "#64748b"
+    readonly property color textSecondary: Qt.rgba(255, 255, 255, 0.60)
+    readonly property color textMuted: Qt.rgba(255, 255, 255, 0.38)
     readonly property color chargingColor: "#30d158"
     readonly property color warningColor: "#ffd60a"
     readonly property color errorColor: "#ff453a"
@@ -179,25 +183,22 @@ Item {
     }
 
     // ========================================================
-    // 4. MAIN LAYOUT (Matushell Expressive Visual Language)
+    // 4. MAIN LAYOUT (Consistent, Refined, Unified)
     // ========================================================
     ColumnLayout {
-        anchors.top: parent.top
-        anchors.topMargin: 2
-        anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.fill: parent
         spacing: 7
 
         // ── TOP HEADER ───────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 28
+            Layout.preferredHeight: 30
             spacing: 8
 
             // Back button (navigates back to Control Center)
             IrisIconButton {
-                buttonSize: 28
-                buttonRadius: 8
+                buttonSize: 30
+                buttonRadius: 9
                 flat: true
                 icon: "arrow_back"
                 iconSize: 16
@@ -207,7 +208,7 @@ Item {
 
             Text {
                 text: "Power & Battery"
-                font.family: "Readex Pro"
+                font.family: batteryModule.fontDisplay
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
                 color: batteryModule.textPrimary
@@ -219,33 +220,36 @@ Item {
 
             // Status chip badge
             Rectangle {
-                height: 22
-                width: statusBadgeText.implicitWidth + 14
-                radius: 11
-                color: Qt.alpha(batteryModule.statusColor, 0.15)
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: statusBadgeLayout.implicitWidth + 18
+                radius: 12
+                color: Qt.alpha(batteryModule.statusColor, 0.12)
+                border.width: 1
+                border.color: Qt.alpha(batteryModule.statusColor, 0.22)
                 Layout.alignment: Qt.AlignVCenter
 
-                Row {
+                RowLayout {
+                    id: statusBadgeLayout
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: 5
 
                     MaterialSymbol {
                         text: batteryModule.isCharging ? "bolt" : (batteryModule.isFull ? "power" : "battery_std")
-                        iconSize: 12
+                        iconSize: 13
                         fill: 1
                         color: batteryModule.statusColor
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                     Text {
                         id: statusBadgeText
                         text: batteryModule.isCharging ? "Charging" : (batteryModule.isFull ? "AC Power" : "Discharging")
-                        font.family: "Readex Pro"
+                        font.family: batteryModule.fontBody
                         font.pixelSize: 10
-                        font.weight: Font.DemiBold
+                        font.weight: Font.Medium
                         color: batteryModule.statusColor
                         renderType: Text.NativeRendering
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.alignment: Qt.AlignVCenter
                     }
                 }
             }
@@ -253,8 +257,8 @@ Item {
             // Refresh action
             IrisIconButton {
                 id: refreshBtn
-                buttonSize: 28
-                buttonRadius: 8
+                buttonSize: 30
+                buttonRadius: 9
                 flat: true
                 icon: "refresh"
                 iconSize: 15
@@ -263,18 +267,20 @@ Item {
             }
         }
 
-        // ── 1. HERO BATTERY CARD (Matushell Duotone Device Card) ──
+        // ── 1. HERO BATTERY CARD ─────────────────────────────────
         Rectangle {
             id: heroCard
             Layout.fillWidth: true
-            Layout.preferredHeight: 84
+            Layout.preferredHeight: 88
             radius: 14
             color: batteryModule.cardBg
+            border.width: 1
+            border.color: batteryModule.cardBorder
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 6
+                anchors.margins: 12
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -283,14 +289,15 @@ Item {
                     // Big percentage & state caption
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 2
+                        spacing: 3
 
                         RowLayout {
                             spacing: 8
+                            Layout.alignment: Qt.AlignLeft
 
                             Text {
                                 text: batteryModule.batteryLevel + "%"
-                                font.family: "Readex Pro"
+                                font.family: batteryModule.fontDisplay
                                 font.pixelSize: 28
                                 font.weight: Font.Bold
                                 font.features: ({ "tnum": 1 })
@@ -300,19 +307,21 @@ Item {
 
                             // Subtitle pill
                             Rectangle {
-                                height: 18
-                                width: heroSubText.implicitWidth + 10
-                                radius: 9
+                                Layout.preferredHeight: 20
+                                Layout.preferredWidth: heroSubText.implicitWidth + 14
+                                radius: 10
                                 color: Qt.alpha(batteryModule.statusColor, 0.14)
+                                border.width: 1
+                                border.color: Qt.alpha(batteryModule.statusColor, 0.22)
                                 Layout.alignment: Qt.AlignVCenter
 
                                 Text {
                                     id: heroSubText
                                     anchors.centerIn: parent
                                     text: batteryModule.isCharging ? "Fast Charge" : (batteryModule.isFull ? "Fully Charged" : "On Battery")
-                                    font.family: "Readex Pro"
-                                    font.pixelSize: 9
-                                    font.weight: Font.Bold
+                                    font.family: batteryModule.fontBody
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
                                     color: batteryModule.statusColor
                                     renderType: Text.NativeRendering
                                 }
@@ -328,8 +337,9 @@ Item {
                                 }
                                 return batteryModule.isCharging ? "Charging..." : "Calculating discharge time...";
                             }
-                            font.family: "Noto Sans"
+                            font.family: batteryModule.fontBody
                             font.pixelSize: 11
+                            font.weight: Font.Normal
                             color: batteryModule.textSecondary
                             renderType: Text.NativeRendering
                             elide: Text.ElideRight
@@ -339,16 +349,18 @@ Item {
 
                     // Circular glyph disc on the right with glowing state
                     Rectangle {
-                        width: 44
-                        height: 44
+                        Layout.preferredWidth: 44
+                        Layout.preferredHeight: 44
                         radius: 22
-                        color: Qt.alpha(batteryModule.statusColor, 0.16)
+                        color: Qt.alpha(batteryModule.statusColor, 0.12)
+                        border.width: 1
+                        border.color: Qt.alpha(batteryModule.statusColor, 0.20)
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: batteryModule.isCharging ? "bolt" : (batteryModule.isFull ? "battery_full" : (batteryModule.isLowLevel ? "battery_alert" : "battery_android_full"))
-                            iconSize: 24
+                            iconSize: 22
                             fill: 1
                             color: batteryModule.statusColor
                         }
@@ -357,7 +369,7 @@ Item {
                         SequentialAnimation on opacity {
                             running: batteryModule.isCharging
                             loops: Animation.Infinite
-                            NumberAnimation { to: 0.65; duration: 1100; easing.type: Easing.InOutQuad }
+                            NumberAnimation { to: 0.55; duration: 1100; easing.type: Easing.InOutQuad }
                             NumberAnimation { to: 1.0; duration: 1100; easing.type: Easing.InOutQuad }
                         }
                     }
@@ -366,14 +378,14 @@ Item {
                 // Smooth inset liquid progress track
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 6
-                    radius: 3
+                    height: 5
+                    radius: 2.5
                     color: Qt.rgba(255, 255, 255, 0.08)
                     clip: true
 
                     Rectangle {
                         height: parent.height
-                        radius: 3
+                        radius: 2.5
                         color: batteryModule.statusColor
                         width: parent.width * (Math.min(100, Math.max(0, batteryModule.batteryLevel)) / 100.0)
 
@@ -389,32 +401,15 @@ Item {
             }
         }
 
-        // ── 2. BATTERY HEALTH PILL (Matushell HealthFillCard) ─────
+        // ── 2. BATTERY HEALTH CARD ───────────────────────────────
         Rectangle {
-            id: healthPill
+            id: healthCard
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            radius: 16
+            Layout.preferredHeight: 34
+            radius: 12
             color: batteryModule.cardBg
-            clip: true
-
-            // Growing primary fill matching health percentage
-            Rectangle {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: parent.width * (Math.min(100, Math.max(0, batteryModule.healthPercentage)) / 100.0)
-                radius: 16
-                color: Qt.alpha(batteryModule.statusColor, 0.16)
-
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 360
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Theme.curveDefaultSpatial
-                    }
-                }
-            }
+            border.width: 1
+            border.color: batteryModule.cardBorder
 
             RowLayout {
                 anchors.fill: parent
@@ -426,40 +421,81 @@ Item {
                     text: "favorite"
                     iconSize: 14
                     fill: 1
-                    color: batteryModule.statusColor
+                    color: batteryModule.healthPercentage >= 80 ? batteryModule.accentColor : (batteryModule.healthPercentage >= 60 ? batteryModule.warningColor : batteryModule.errorColor)
                     Layout.alignment: Qt.AlignVCenter
                 }
 
                 Text {
-                    text: `Battery Health: ${batteryModule.healthPercentage}% · ${batteryModule.healthPercentage >= 80 ? "Good Condition" : "Service Recommended"}`
-                    font.family: "Readex Pro"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
+                    text: "Battery Health"
+                    font.family: batteryModule.fontBody
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
                     color: batteryModule.textPrimary
                     renderType: Text.NativeRendering
                     Layout.alignment: Qt.AlignVCenter
                 }
 
+                // Health status badge
+                Rectangle {
+                    Layout.preferredHeight: 20
+                    Layout.preferredWidth: healthBadgeText.implicitWidth + 14
+                    radius: 10
+                    color: batteryModule.healthPercentage >= 80 ? Qt.alpha(batteryModule.accentColor, 0.12) : Qt.alpha(batteryModule.warningColor, 0.15)
+                    border.width: 1
+                    border.color: batteryModule.healthPercentage >= 80 ? Qt.alpha(batteryModule.accentColor, 0.22) : Qt.alpha(batteryModule.warningColor, 0.25)
+                    Layout.alignment: Qt.AlignVCenter
+
+                    Text {
+                        id: healthBadgeText
+                        anchors.centerIn: parent
+                        text: `${batteryModule.healthPercentage}% · ${batteryModule.healthPercentage >= 80 ? "Good" : "Service Recommended"}`
+                        font.family: batteryModule.fontBody
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
+                        color: batteryModule.healthPercentage >= 80 ? batteryModule.accentColor : batteryModule.warningColor
+                        renderType: Text.NativeRendering
+                    }
+                }
+
                 Item { Layout.fillWidth: true }
 
-                Text {
-                    text: batteryModule.fullEnergyWh > 0 ? `${batteryModule.fullEnergyWh.toFixed(1)} Wh` : ""
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Medium
-                    color: batteryModule.textSecondary
-                    renderType: Text.NativeRendering
+                // Energy Capacity Wh
+                RowLayout {
+                    spacing: 4
+                    visible: batteryModule.fullEnergyWh > 0
                     Layout.alignment: Qt.AlignVCenter
+
+                    MaterialSymbol {
+                        text: "bolt"
+                        iconSize: 13
+                        fill: 1
+                        color: batteryModule.textMuted
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Text {
+                        text: `${batteryModule.fullEnergyWh.toFixed(1)} Wh`
+                        font.family: batteryModule.fontBody
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        font.features: ({ "tnum": 1 })
+                        color: batteryModule.textSecondary
+                        renderType: Text.NativeRendering
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                 }
             }
         }
 
-        // ── 3. POWER PROFILES SELECTOR (MatusConnectedButton Strip) 
+        // ── 3. POWER PROFILES SELECTOR ───────────────────────────
         Rectangle {
+            id: profileStrip
             Layout.fillWidth: true
-            Layout.preferredHeight: 35
+            Layout.preferredHeight: 36
             radius: 12
             color: batteryModule.cardBg
+            border.width: 1
+            border.color: batteryModule.cardBorder
 
             RowLayout {
                 anchors.fill: parent
@@ -479,11 +515,11 @@ Item {
                         id: segBtn
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 11
+                        radius: 9
 
                         readonly property bool isSelected: batteryModule.activeProfile === modelData.id
-                        color: isSelected ? batteryModule.accentColor : (segMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                        scale: segMouse.pressed ? 0.96 : 1.0
+                        color: isSelected ? batteryModule.accentColor : (segMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.06) : "transparent")
+                        scale: segMouse.pressed ? 0.97 : 1.0
 
                         Behavior on color { ColorAnimation { duration: 150 } }
                         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
@@ -504,17 +540,17 @@ Item {
                                 text: modelData.icon
                                 iconSize: 14
                                 fill: segBtn.isSelected ? 1 : 0
-                                color: segBtn.isSelected ? "#000000" : batteryModule.textSecondary
+                                color: segBtn.isSelected ? "#090d16" : (segMouse.containsMouse ? batteryModule.textPrimary : batteryModule.textSecondary)
                                 Layout.alignment: Qt.AlignVCenter
                                 Behavior on color { ColorAnimation { duration: 150 } }
                             }
 
                             Text {
                                 text: modelData.label
-                                font.family: "Readex Pro"
+                                font.family: batteryModule.fontBody
                                 font.pixelSize: 11
-                                font.weight: segBtn.isSelected ? Font.Bold : Font.Medium
-                                color: segBtn.isSelected ? "#000000" : batteryModule.textPrimary
+                                font.weight: segBtn.isSelected ? Font.DemiBold : Font.Medium
+                                color: segBtn.isSelected ? "#090d16" : (segMouse.containsMouse ? batteryModule.textPrimary : batteryModule.textSecondary)
                                 Layout.alignment: Qt.AlignVCenter
                                 renderType: Text.NativeRendering
                                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -536,10 +572,12 @@ Item {
             Rectangle {
                 id: careTile
                 Layout.fillWidth: true
-                Layout.preferredHeight: 41
+                Layout.preferredHeight: 51
                 radius: 12
                 color: careMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                scale: careMouse.pressed ? 0.96 : (careMouse.containsMouse ? 1.02 : 1.0)
+                border.width: 1
+                border.color: batteryModule.cardBorder
+                scale: careMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -557,44 +595,51 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    spacing: 9
+                    spacing: 10
 
                     Rectangle {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        radius: 14
-                        color: careTile.isActive ? batteryModule.accentColor : Qt.rgba(255, 255, 255, 0.08)
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 10
+                        color: careTile.isActive ? Qt.alpha(batteryModule.accentColor, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                        border.width: careTile.isActive ? 1 : 0
+                        border.color: Qt.alpha(batteryModule.accentColor, 0.30)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: "battery_saver"
-                            iconSize: 14
+                            iconSize: 16
                             fill: careTile.isActive ? 1 : 0
-                            color: careTile.isActive ? "#000000" : batteryModule.textSecondary
+                            color: careTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
                         Layout.alignment: Qt.AlignVCenter
 
                         Text {
                             text: "Battery Care"
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             color: batteryModule.textPrimary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
 
                         Text {
                             text: careTile.isActive ? "80% Limit (Healthy)" : "100% Full Capacity"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 11
+                            font.weight: Font.Normal
                             color: careTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
                     }
                 }
@@ -604,10 +649,12 @@ Item {
             Rectangle {
                 id: ecoTile
                 Layout.fillWidth: true
-                Layout.preferredHeight: 41
+                Layout.preferredHeight: 51
                 radius: 12
                 color: ecoMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                scale: ecoMouse.pressed ? 0.96 : (ecoMouse.containsMouse ? 1.02 : 1.0)
+                border.width: 1
+                border.color: batteryModule.cardBorder
+                scale: ecoMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -625,44 +672,51 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    spacing: 9
+                    spacing: 10
 
                     Rectangle {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        radius: 14
-                        color: ecoTile.isActive ? batteryModule.accentColor : Qt.rgba(255, 255, 255, 0.08)
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 10
+                        color: ecoTile.isActive ? Qt.alpha(batteryModule.accentColor, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                        border.width: ecoTile.isActive ? 1 : 0
+                        border.color: Qt.alpha(batteryModule.accentColor, 0.30)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: "speed"
-                            iconSize: 14
+                            iconSize: 16
                             fill: ecoTile.isActive ? 1 : 0
-                            color: ecoTile.isActive ? "#000000" : batteryModule.textSecondary
+                            color: ecoTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
                         Layout.alignment: Qt.AlignVCenter
 
                         Text {
                             text: "Display Eco"
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             color: batteryModule.textPrimary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
 
                         Text {
                             text: ecoTile.isActive ? "60 Hz Active (~2W saved)" : "144 Hz Smooth"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 11
+                            font.weight: Font.Normal
                             color: ecoTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
                     }
                 }
@@ -672,10 +726,12 @@ Item {
             Rectangle {
                 id: kbdTile
                 Layout.fillWidth: true
-                Layout.preferredHeight: 41
+                Layout.preferredHeight: 51
                 radius: 12
                 color: kbdMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                scale: kbdMouse.pressed ? 0.96 : (kbdMouse.containsMouse ? 1.02 : 1.0)
+                border.width: 1
+                border.color: batteryModule.cardBorder
+                scale: kbdMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -693,44 +749,51 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    spacing: 9
+                    spacing: 10
 
                     Rectangle {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        radius: 14
-                        color: kbdTile.isActive ? batteryModule.accentColor : Qt.rgba(255, 255, 255, 0.08)
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 10
+                        color: kbdTile.isActive ? Qt.alpha(batteryModule.accentColor, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                        border.width: kbdTile.isActive ? 1 : 0
+                        border.color: Qt.alpha(batteryModule.accentColor, 0.30)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: "keyboard"
-                            iconSize: 14
+                            iconSize: 16
                             fill: kbdTile.isActive ? 1 : 0
-                            color: kbdTile.isActive ? "#000000" : batteryModule.textSecondary
+                            color: kbdTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
                         Layout.alignment: Qt.AlignVCenter
 
                         Text {
                             text: "Kbd Backlight"
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             color: batteryModule.textPrimary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
 
                         Text {
                             text: kbdTile.isActive ? "Illumination Active" : "Off (Power Saver)"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 11
+                            font.weight: Font.Normal
                             color: kbdTile.isActive ? batteryModule.accentColor : batteryModule.textSecondary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
                     }
                 }
@@ -740,10 +803,12 @@ Item {
             Rectangle {
                 id: pwrTile
                 Layout.fillWidth: true
-                Layout.preferredHeight: 41
+                Layout.preferredHeight: 51
                 radius: 12
                 color: pwrMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                scale: pwrMouse.pressed ? 0.96 : (pwrMouse.containsMouse ? 1.02 : 1.0)
+                border.width: 1
+                border.color: batteryModule.cardBorder
+                scale: pwrMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
                 Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -759,44 +824,52 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
-                    spacing: 9
+                    spacing: 10
 
                     Rectangle {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        radius: 14
-                        color: batteryModule.isCharging ? Qt.alpha(batteryModule.chargingColor, 0.20) : Qt.rgba(255, 255, 255, 0.08)
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 10
+                        color: batteryModule.isCharging ? Qt.alpha(batteryModule.chargingColor, 0.20) : Qt.rgba(255, 255, 255, 0.06)
+                        border.width: batteryModule.isCharging ? 1 : 0
+                        border.color: Qt.alpha(batteryModule.chargingColor, 0.30)
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: "bolt"
-                            iconSize: 15
+                            iconSize: 16
                             fill: 1
-                            color: batteryModule.isCharging ? batteryModule.chargingColor : batteryModule.statusColor
+                            color: batteryModule.isCharging ? batteryModule.chargingColor : (batteryModule.currentPowerW > 15 ? batteryModule.warningColor : batteryModule.textSecondary)
                         }
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 1
+                        spacing: 2
                         Layout.alignment: Qt.AlignVCenter
 
                         Text {
                             text: "Power Draw"
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             color: batteryModule.textPrimary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
 
                         Text {
-                            text: (batteryModule.currentPowerW > 0 ? `${batteryModule.currentPowerW.toFixed(1)} W` : "0.0 W") + ` • ${batteryModule.voltageV.toFixed(1)}V`
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: batteryModule.statusColor
+                            text: (batteryModule.currentPowerW > 0 ? `${batteryModule.currentPowerW.toFixed(1)} W` : "0.0 W") + ` · ${batteryModule.voltageV.toFixed(1)}V`
+                            font.family: batteryModule.fontBody
+                            font.pixelSize: 11
+                            font.weight: Font.Normal
+                            font.features: ({ "tnum": 1 })
+                            color: batteryModule.isCharging ? batteryModule.chargingColor : batteryModule.textSecondary
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
                         }
                     }
                 }
