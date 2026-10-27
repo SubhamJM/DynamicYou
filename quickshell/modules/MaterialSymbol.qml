@@ -12,7 +12,7 @@ Text {
     property int grad: (typeof Theme !== "undefined" && Theme.fontIconGrad !== undefined) ? Theme.fontIconGrad : -25
     color: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#f5f5f7"
 
-    readonly property bool isNerd: text.length > 0 && text.charCodeAt(0) >= 0xE000
+    readonly property bool isNerd: text.length > 0 && ((text.codePointAt ? text.codePointAt(0) : text.charCodeAt(0)) >= 0xE000)
 
     font.family: isNerd
         ? ((typeof Theme !== "undefined" && Theme.fontFamilyNerd) ? Theme.fontFamilyNerd : "JetBrainsMono Nerd Font")

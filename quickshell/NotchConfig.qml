@@ -53,7 +53,7 @@ QtObject {
         "transition":    { width: 440, height: 320, radius: 12 },
         "osd":           { width: 280, height: 40,  radius: 16 },
         "wifi":          { width: 420, height: 380, radius: 26 }, 
-        "bluetooth":     { width: 420, height: 236, radius: 26 },
+        "bluetooth":     { width: 420, height: 285, radius: 26 },
         "recorder":      { width: 420, height: 275, radius: 26 },
         "battery":       { width: 460, height: 348, radius: 26 },
         "powermenu":     { width: 460, height: 108, radius: 24 },
@@ -112,7 +112,7 @@ QtObject {
 
     function calculateBluetoothHeight(devices, stateMap) {
         var btCount = devices ? (devices.count !== undefined ? devices.count : devices.length) : 0;
-        if (btCount === 0) return 210;
+        if (btCount === 0) return 285;
 
         var listItemsHeight = 0;
         for (var i = 0; i < btCount; i++) {
@@ -121,7 +121,7 @@ QtObject {
             var expanded = devMac && stateMap && stateMap[devMac] && stateMap[devMac].isExpanded;
             listItemsHeight += (expanded ? 92 : 50) + 6;
         }
-        return Math.min(460, Math.max(190, 145 + listItemsHeight));
+        return Math.min(480, Math.max(285, 160 + listItemsHeight + 12));
     }
 
     function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight) {

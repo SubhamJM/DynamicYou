@@ -104,7 +104,20 @@ ICON_MAPPINGS = {
     'gammastep': ('Blue Light Filter', 'preferences-system', 'nightlight'),
     'hyprpolkitagent': ('Auth Agent', 'system-lock-screen', 'security'),
     'Xwayland': ('XWayland Server', 'xorg', 'display_settings'),
-    'cava': ('CAVA Audio Visualizer', 'audio-card', 'equalizer')
+    'cava': ('CAVA Audio Visualizer', 'audio-card', 'equalizer'),
+    'python': ('Python', 'python', 'terminal'),
+    'python3': ('Python 3', 'python', 'terminal'),
+    'slurp': ('Slurp', 'camera-photo', 'crop'),
+    'grim': ('Grim Screenshot', 'camera-photo', 'screenshot_monitor'),
+    'grimblast': ('Grimblast Screenshot', 'camera-photo', 'screenshot_monitor'),
+    'hyprpicker': ('Hyprpicker', 'color-picker', 'colorize'),
+    'wf-recorder': ('Screen Recorder', 'camera-video', 'videocam'),
+    'isolated web co': ('Web Content', 'zen-browser', 'language'),
+    'isolated web content': ('Web Content', 'zen-browser', 'language'),
+    'privileged con': ('Privileged Content', 'zen-browser', 'language'),
+    'privileged content': ('Privileged Content', 'zen-browser', 'language'),
+    'socket process': ('Socket Process', 'zen-browser', 'language'),
+    'rdd process': ('Media Decoder', 'zen-browser', 'play_circle')
 }
 
 USER_APP_KEYS = {
@@ -112,6 +125,7 @@ USER_APP_KEYS = {
     'awww-daemon', 'swww-daemon', 'swww', 'hypridle', 'hyprlock', 'hyprpolkitagent',
     'kdeconnectd', 'kdeconnect', 'wlsunset', 'hyprsunset', 'gammastep',
     'wl-paste', 'cliphist', 'pipewire', 'wireplumber', 'pipewire-pulse', 'cava',
+    'python', 'python3', 'slurp', 'grim', 'grimblast', 'hyprpicker', 'wf-recorder',
     'zen-bin', 'zen', 'firefox', 'chrome', 'google-chrome', 'chromium', 'brave', 'brave-browser', 'opera', 'vivaldi', 'edge',
     'kitty', 'alacritty', 'foot', 'wezterm', 'ghostty',
     'code', 'vscodium', 'cursor', 'cursor-bin', 'nvim', 'vim', 'sublime_text', 'zed',
@@ -153,10 +167,10 @@ def clean_child_info(comm, args):
     a = (args or '').strip()
     c = (comm or '').strip().lower()
 
-    if 'zen' in c or 'firefox' in c:
-        if 'socket' in a:
+    if 'zen' in c or 'firefox' in c or 'isolated' in c or 'privileged' in c or 'socket' in c or 'rdd' in c:
+        if 'socket' in a or 'socket' in c:
             return 'Network Socket Service', 'wifi'
-        if 'rdd' in a:
+        if 'rdd' in a or 'rdd' in c:
             return 'Media Decoder (RDD)', 'play_circle'
         if 'tab' in a:
             return 'Web Content Tab', 'tab'
@@ -166,8 +180,10 @@ def clean_child_info(comm, args):
             return 'GPU Acceleration', 'speed'
         if 'utility' in a:
             return 'Utility Service', 'tune'
-        if 'privileged' in a.lower():
+        if 'privileged' in a.lower() or 'privileged' in c:
             return 'Privileged Web Content', 'security'
+        if 'isolated' in c:
+            return 'Isolated Web Content', 'language'
         return 'Web Content Process', 'language'
 
     if 'spotify' in c:
@@ -201,6 +217,12 @@ def clean_child_info(comm, args):
         return 'File Watcher', 'visibility'
     if 'node' in c:
         return 'Node.js Runtime', 'terminal'
+    if 'python' in c:
+        return 'Python Script', 'terminal'
+    if c == 'slurp':
+        return 'Slurp Selection', 'crop'
+    if c in ['grim', 'grimblast']:
+        return 'Screenshot Utility', 'screenshot_monitor'
     if c == 'bwrap':
         return 'Bubblewrap Sandbox', 'security'
 

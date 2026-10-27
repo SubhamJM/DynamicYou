@@ -24,6 +24,12 @@ QtObject {
         "opera": { name: "Opera", icon: "opera", symbol: "language" },
         "vivaldi": { name: "Vivaldi", icon: "vivaldi", symbol: "language" },
         "microsoft-edge": { name: "Microsoft Edge", icon: "microsoft-edge", symbol: "language" },
+        "isolated web content": { name: "Web Content", icon: "zen-browser", symbol: "language" },
+        "isolated web co": { name: "Web Content", icon: "zen-browser", symbol: "language" },
+        "privileged content": { name: "Privileged Content", icon: "zen-browser", symbol: "language" },
+        "privileged con": { name: "Privileged Content", icon: "zen-browser", symbol: "language" },
+        "socket process": { name: "Socket Process", icon: "zen-browser", symbol: "language" },
+        "rdd process": { name: "Media Decoder", icon: "zen-browser", symbol: "play_circle" },
 
         // Terminals
         "kitty": { name: "Kitty Terminal", icon: "kitty", symbol: "terminal" },
@@ -46,6 +52,12 @@ QtObject {
         "vim": { name: "Vim", icon: "vim", symbol: "code" },
         "sublime_text": { name: "Sublime Text", icon: "sublime-text", symbol: "code" },
         "zed": { name: "Zed Editor", icon: "dev.zed.Zed", symbol: "code" },
+        "python": { name: "Python", icon: "python", symbol: "terminal" },
+        "python3": { name: "Python 3", icon: "python", symbol: "terminal" },
+        "node": { name: "Node.js", icon: "utilities-terminal", symbol: "terminal" },
+        "nodejs": { name: "Node.js", icon: "utilities-terminal", symbol: "terminal" },
+        "perl": { name: "Perl", icon: "utilities-terminal", symbol: "terminal" },
+        "ruby": { name: "Ruby", icon: "utilities-terminal", symbol: "terminal" },
 
         // Chat & Communication
         "discord": { name: "Discord", icon: "discord", symbol: "forum" },
@@ -92,12 +104,29 @@ QtObject {
         "heroic": { name: "Heroic Games", icon: "com.heroicgameslauncher.hgl", symbol: "sports_esports" },
         "lutris": { name: "Lutris", icon: "net.lutris.Lutris", symbol: "sports_esports" },
 
+        // Screen & Wayland Utilities
+        "grim": { name: "Grim Screenshot", icon: "camera-photo", symbol: "screenshot_monitor" },
+        "grimblast": { name: "Grimblast Screenshot", icon: "camera-photo", symbol: "screenshot_monitor" },
+        "slurp": { name: "Slurp Selection", icon: "camera-photo", symbol: "crop" },
+        "hyprpicker": { name: "Hyprpicker", icon: "color-picker", symbol: "colorize" },
+        "wf-recorder": { name: "Screen Recorder", icon: "camera-video", symbol: "videocam" },
+        "wl-copy": { name: "Clipboard", icon: "clipboard", symbol: "content_paste" },
+        "wl-paste": { name: "Clipboard", icon: "clipboard", symbol: "content_paste" },
+        "cliphist": { name: "Cliphist", icon: "clipboard", symbol: "content_paste" },
+
         // System & Desktop
         "quickshell": { name: "Quickshell", icon: "quickshell", symbol: "widgets" },
         "qs": { name: "Quickshell", icon: "quickshell", symbol: "widgets" },
         "hyprland": { name: "Hyprland", icon: "hyprland", symbol: "desktop_windows" },
+        "hypridle": { name: "Hypridle", icon: "preferences-system", symbol: "bedtime" },
+        "hyprlock": { name: "Hyprlock", icon: "system-lock-screen", symbol: "lock" },
+        "cava": { name: "CAVA", icon: "audio-card", symbol: "equalizer" },
+        "fastfetch": { name: "Fastfetch", icon: "utilities-terminal", symbol: "info" },
         "btop": { name: "Btop Monitor", icon: "utilities-terminal", symbol: "monitoring" },
         "htop": { name: "Htop Monitor", icon: "utilities-terminal", symbol: "monitoring" },
+        "swaync": { name: "Notifications", icon: "preferences-system-notifications", symbol: "notifications" },
+        "dunst": { name: "Notifications", icon: "preferences-system-notifications", symbol: "notifications" },
+        "mako": { name: "Notifications", icon: "preferences-system-notifications", symbol: "notifications" },
         "systemsettings": { name: "Settings", icon: "preferences-system", symbol: "settings" },
         "gnome-control-center": { name: "Settings", icon: "preferences-system", symbol: "settings" }
     })
@@ -110,17 +139,31 @@ QtObject {
         // 1. Direct map lookup
         var entry = root.iconMap[rawKey] || root.iconMap[rawClass];
 
+        // 1b. Substring / Token lookup if no direct match
+        if (!entry) {
+            for (var k in root.iconMap) {
+                if (k.length >= 3 && (rawKey.indexOf(k) !== -1 || rawClass.indexOf(k) !== -1)) {
+                    entry = root.iconMap[k];
+                    break;
+                }
+            }
+        }
+
         var candidateIcon = entry ? entry.icon : (rawKey || rawClass);
-        var fallbackSym = entry ? entry.symbol : "apps";
+        var fallbackSym = entry ? entry.symbol : "";
         var dispName = entry ? entry.name : "";
 
         // 2. Try Quickshell iconPath lookup
         var iconPath = "";
-        if (candidateIcon && !candidateIcon.startsWith("/") && !candidateIcon.startsWith("file://")) {
+        if (candidateIcon && !candidateIcon.startsWith("/") && !candidateIcon.startsWith("file://") && !candidateIcon.startsWith("image://")) {
             try {
                 var p = Quickshell.iconPath(candidateIcon, true);
                 if (p && p.trim() !== "") {
-                    iconPath = "file://" + p;
+                    if (p.startsWith("image://") || p.startsWith("file://")) {
+                        iconPath = p;
+                    } else {
+                        iconPath = p.startsWith("/") ? ("file://" + p) : p;
+                    }
                 }
             } catch (e) {}
         } else if (candidateIcon) {

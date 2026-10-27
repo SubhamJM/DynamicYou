@@ -1368,12 +1368,12 @@ Item {
                 anchors.centerIn: parent
                 spacing: 6
 
-                // OS / Launcher Icon Button
+                // OS / Launcher Icon Button (Arch Linux)
                 IrisIconButton {
                     buttonSize: 26
                     buttonRadius: 8
                     flat: true
-                    icon: "apps"
+                    icon: "󰣇"
                     iconSize: 16
                     iconColor: Theme.accent
                     hoverIconColor: Qt.lighter(Theme.accent, 1.2)
@@ -1561,14 +1561,6 @@ Item {
             }
         }
 
-        // ── MAJOR SECTION DIVIDER 2 (Center <-> Right) ───────────
-        Rectangle {
-            Layout.alignment: Qt.AlignVCenter
-            width: 1
-            height: 18
-            color: Qt.rgba(255, 255, 255, 0.20)
-        }
-
         // ── 3. RIGHT GROUP: STATUS PILLS & QUICK CONTROLS ────────
         Item {
             Layout.preferredHeight: 32
@@ -1579,22 +1571,32 @@ Item {
                 anchors.centerIn: parent
                 spacing: 6
 
+                // Section Divider (Center <-> Network)
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    width: 1
+                    height: 16
+                    color: Qt.rgba(255, 255, 255, 0.15)
+                }
+
                 // Network Quick Toggle Button
                 IrisIconButton {
                     buttonSize: 26
                     buttonRadius: 8
                     flat: true
-                    icon: (dash.activeNetType === "eth") ? "lan" : (dash.activeNetSignal > 0 ? "wifi" : "wifi_off")
-                    iconSize: 15
+                    icon: (dash.activeNetType === "eth") ? "󰈀" : (dash.activeNetSignal > 0 ? "󰖩" : "󰖪")
+                    iconSize: 16
                     iconColor: (dash.activeNetSignal > 0 || dash.activeNetType === "eth") ? Theme.accent : Qt.rgba(255, 255, 255, 0.4)
                     hoverIconColor: Qt.lighter(Theme.accent, 1.2)
                     fill: 1
                     onClicked: root.switchMode("wifi", false)
                 }
 
-                // Hairline Divider
+                // Hairline Divider (Network <-> Battery)
                 Rectangle {
-                    width: 1; height: 16
+                    Layout.alignment: Qt.AlignVCenter
+                    width: 1
+                    height: 16
                     color: Qt.rgba(255, 255, 255, 0.15)
                 }
 
@@ -1630,8 +1632,8 @@ Item {
                     buttonSize: 26
                     buttonRadius: 8
                     flat: true
-                    icon: "tune"
-                    iconSize: 15
+                    icon: "󰘮"
+                    iconSize: 16
                     iconColor: Theme.colors.text_primary ?? "#ffffff"
                     hoverIconColor: Theme.accent
                     onClicked: root.openUtility("", false)
@@ -1642,8 +1644,8 @@ Item {
                     buttonSize: 26
                     buttonRadius: 8
                     flat: true
-                    icon: "power_settings_new"
-                    iconSize: 15
+                    icon: "󰐥"
+                    iconSize: 16
                     iconColor: Theme.colors.text_secondary ?? "#8e8e93"
                     hoverIconColor: "#ff5449"
                     onClicked: root.switchMode("powermenu", false)

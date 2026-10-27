@@ -23,7 +23,7 @@ Rectangle {
     property bool enabled: clickable
     property bool spinning: false
     property int spinDuration: 900
-    property string fallbackSymbol: "apps"
+    property string fallbackSymbol: ""
 
     property real buttonSize: (typeof Theme !== "undefined" && Theme.iconBtnSize) ? Theme.iconBtnSize : 34
     property real buttonRadius: height / 2

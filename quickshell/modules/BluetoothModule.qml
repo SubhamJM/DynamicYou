@@ -33,16 +33,16 @@ ColumnLayout {
     property var batteryMap: ({})
 
     readonly property int calculatedHeight: {
-        var base = 152;
+        var base = 160;
         var count = filteredDevices ? filteredDevices.length : 0;
-        if (count === 0) return 200;
+        if (!isEnabled || count === 0) return 285;
         var listH = 0;
         for (var i = 0; i < count; i++) {
             var dev = filteredDevices[i];
             var exp = stateMap && stateMap[dev.mac] && stateMap[dev.mac].isExpanded;
             listH += (exp ? 96 : 50) + 6;
         }
-        return Math.min(460, base + listH + 12);
+        return Math.min(480, Math.max(285, base + listH + 12));
     }
 
     readonly property var adapter: typeof Bluetooth !== "undefined" ? Bluetooth.defaultAdapter : null
@@ -192,6 +192,7 @@ ColumnLayout {
     // ========================================================
     Rectangle {
         Layout.fillWidth: true
+        Layout.preferredHeight: 94
         height: 94
         radius: 14
         color: btModule.colCard
@@ -451,6 +452,7 @@ ColumnLayout {
     // ========================================================
     RowLayout {
         Layout.fillWidth: true
+        Layout.preferredHeight: 26
         spacing: 8
 
         // Section Title + Paired Count Capsule

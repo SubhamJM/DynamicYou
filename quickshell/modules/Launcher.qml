@@ -1078,27 +1078,12 @@ with open(f, 'w') as file: json.dump(d, file)
                             scale: tileMouse.pressed ? 0.92 : (launcher.selectedTileIndex === index ? 1.04 : 1.0)
                             Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
 
-                            Image {
-                                anchors.fill: parent
-                                anchors.margins: 2
-                                fillMode: Image.PreserveAspectFit
-                                asynchronous: true
-                                sourceSize.width: 40
-                                sourceSize.height: 40
-                                visible: status === Image.Ready && source != ""
-                                source: {
-                                    if (!modelData.iconName || modelData.iconName === "") return "";
-                                    if (modelData.iconName.startsWith("/")) return "file://" + modelData.iconName;
-                                    return "image://icon/" + modelData.iconName;
-                                }
-                            }
-
-                            MaterialSymbol {
+                            IrisIcon {
                                 anchors.centerIn: parent
-                                visible: !parent.children[0].visible
-                                text: "apps"
-                                iconSize: 26
-                                color: Theme.colors.text_primary ?? "#ffffff"
+                                icon: modelData.iconName || ""
+                                iconSize: 34
+                                cornerRadius: 8
+                                fallbackSymbol: (typeof IconResolver !== "undefined" ? IconResolver.resolve(modelData.iconName, modelData.name).fallbackSymbol : "") || "apps"
                             }
                         }
 
@@ -1568,7 +1553,7 @@ with open(f, 'w') as file: json.dump(d, file)
                                         : (model.nerdIcon !== "" ? model.nerdIcon : (model.iconName || "apps"))
                                     iconSize: delegateRoot.topHit ? 22 : 18
                                     color: delegateRoot.isSelected ? launcher.accentColor : (Theme.colors.text_primary ?? "#ffffff")
-                                    fallbackSymbol: "apps"
+                                    fallbackSymbol: (typeof IconResolver !== "undefined" ? IconResolver.resolve(model.iconName, model.name).fallbackSymbol : "") || "apps"
                                     cornerRadius: 6
                                 }
                             }

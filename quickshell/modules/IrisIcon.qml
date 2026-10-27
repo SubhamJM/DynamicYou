@@ -19,7 +19,7 @@ Item {
     property int grad: (typeof Theme !== "undefined" && Theme.fontIconGrad !== undefined) ? Theme.fontIconGrad : -25
     property color color: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#ffffff"
     property real cornerRadius: 0
-    property string fallbackSymbol: "apps"
+    property string fallbackSymbol: ""
 
     property bool spinning: false
     property int spinDuration: 900
@@ -30,10 +30,21 @@ Item {
     readonly property string rawIcon: (icon || "").toString().trim()
 
     // 1. Nerd Font detection
-    readonly property bool isNerd: rawIcon.length > 0 && rawIcon.charCodeAt(0) >= 0xE000
+    readonly property bool isNerd: rawIcon.length > 0 && ((rawIcon.codePointAt ? rawIcon.codePointAt(0) : rawIcon.charCodeAt(0)) >= 0xE000)
 
     // 2. Direct file/image protocol detection
     readonly property bool isDirectFile: rawIcon.startsWith("/") || rawIcon.startsWith("file://") || rawIcon.startsWith("image://") || rawIcon.startsWith("http://") || rawIcon.startsWith("https://")
+
+    // Resolved IconResolver entry for apps/processes
+    readonly property var resolverEntry: {
+        if (!rawIcon || isNerd || isDirectFile) return null;
+        try {
+            if (typeof IconResolver !== "undefined") {
+                return IconResolver.resolve(rawIcon);
+            }
+        } catch (e) {}
+        return null;
+    }
 
     // 3. Resolve Image URL
     readonly property string resolvedImageUrl: {
@@ -42,7 +53,7 @@ Item {
             return rawIcon.startsWith("/") ? ("file://" + rawIcon) : rawIcon;
         }
 
-        // Try Quickshell.iconPath on rawIcon directly
+        // Try direct Quickshell.iconPath lookup
         try {
             var directPath = Quickshell.iconPath(rawIcon, true);
             if (directPath && directPath.trim() !== "") {
@@ -53,13 +64,10 @@ Item {
             }
         } catch (e) {}
 
-        // Try IconResolver mapping
-        try {
-            if (typeof IconResolver !== "undefined") {
-                var res = IconResolver.resolve(rawIcon);
-                if (res && res.iconPath && res.iconPath !== "") return res.iconPath;
-            }
-        } catch (e) {}
+        // Try IconResolver mapping path
+        if (resolverEntry && resolverEntry.iconPath && resolverEntry.iconPath !== "") {
+            return resolverEntry.iconPath;
+        }
 
         return "";
     }
@@ -68,28 +76,47 @@ Item {
 
     // 4. Resolve fallback glyph text when not an image
     readonly property string resolvedGlyphText: {
+        // A. Nerd font glyphs are returned directly
         if (isNerd) return rawIcon;
+
+        // B. When an image is ready, no text ligature is needed
         if (isImageIcon && appImage.status === Image.Ready) return "";
 
-        // If it was supposed to be an image or app name but couldn't load
-        if (isImageIcon || rawIcon.includes(".") || rawIcon.includes("-") || rawIcon.includes("/")) {
-            try {
-                if (typeof IconResolver !== "undefined") {
-                    var r = IconResolver.resolve(rawIcon);
-                    if (r && r.fallbackSymbol) return r.fallbackSymbol;
-                }
-            } catch (e) {}
-            return root.fallbackSymbol;
+        // C. Empty icon string: fall back gracefully
+        if (rawIcon === "") {
+            return (root.fallbackSymbol && root.fallbackSymbol !== "") ? root.fallbackSymbol : "apps";
         }
 
-        // Check if rawIcon is a known app name in IconResolver
-        try {
-            if (typeof IconResolver !== "undefined" && IconResolver.iconMap && IconResolver.iconMap[rawIcon.toLowerCase()]) {
-                return IconResolver.iconMap[rawIcon.toLowerCase()].symbol;
-            }
-        } catch (e) {}
+        // D. Image icon failed to load (Image.Error)
+        if (isImageIcon && appImage.status === Image.Error) {
+            if (root.fallbackSymbol && root.fallbackSymbol !== "") return root.fallbackSymbol;
+            if (resolverEntry && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") return resolverEntry.fallbackSymbol;
+            return "apps";
+        }
 
-        return rawIcon !== "" ? rawIcon : root.fallbackSymbol;
+        // E. Recognized application/process in IconResolver that mapped to a specific symbol
+        // (Only when rawIcon is an app like "zen", "firefox", "kitty", "obsidian" and no image was found on disk)
+        if (resolverEntry && resolverEntry.displayName && resolverEntry.displayName !== "" && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") {
+            return resolverEntry.fallbackSymbol;
+        }
+
+        // F. Detect if rawIcon is an application name, desktop file ID, or command line rather than a Material Symbol ligature.
+        // Material Symbol ligatures are strictly lowercase ascii words with underscores (e.g. "arrow_back", "wifi", "signal_wifi_4_bar").
+        // Desktop IDs, process names, and commands contain spaces, hyphens, dots, slashes, or uppercase characters.
+        var looksLikeAppName = rawIcon.indexOf(" ") !== -1 ||
+                               rawIcon.indexOf("-") !== -1 ||
+                               rawIcon.indexOf(".") !== -1 ||
+                               rawIcon.indexOf("/") !== -1 ||
+                               /[A-Z]/.test(rawIcon);
+
+        if (looksLikeAppName) {
+            if (root.fallbackSymbol && root.fallbackSymbol !== "") return root.fallbackSymbol;
+            if (resolverEntry && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") return resolverEntry.fallbackSymbol;
+            return "apps";
+        }
+
+        // G. Otherwise rawIcon is a direct Material Symbol ligature (e.g. "arrow_back", "refresh", "settings", "close", "wifi", "fast_rewind")
+        return rawIcon;
     }
 
     // Image branch with ClippingRectangle (MatusMaskedImage pattern)

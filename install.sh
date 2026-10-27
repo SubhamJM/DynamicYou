@@ -262,8 +262,11 @@ install_dependencies() {
         niri
         noto-fonts
         noto-fonts-emoji
+        inter-font
         papirus-icon-theme
         ttf-jetbrains-mono-nerd
+        python
+        python-dbus
     )
 
     # Missing pacman packages check
@@ -287,6 +290,7 @@ install_dependencies() {
         quickshell
         grimblast-git
         krabby-bin
+        ttf-material-symbols-variable-git
     )
 
     MISSING_AUR=()
