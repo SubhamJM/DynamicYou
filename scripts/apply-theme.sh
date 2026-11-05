@@ -2,9 +2,15 @@
 
 # The theme name is passed as the first argument ($1)
 TARGET_THEME=$1
-THEMES_DIR="$HOME/.config/themes"
-if [[ ! -d "$THEMES_DIR" && -d "$HOME/git/MyLinuxSetup/themes" ]]; then
-    THEMES_DIR="$HOME/git/MyLinuxSetup/themes"
+THEMES_DIR="${DYNAMIC_YOU_THEMES_DIR:-$HOME/.config/themes}"
+if [[ ! -d "$THEMES_DIR" ]]; then
+    if [[ -d "$HOME/dynamic-you/themes" ]]; then
+        THEMES_DIR="$HOME/dynamic-you/themes"
+    elif [[ -n "${DYNAMIC_YOU_SHARE_DIR:-}" && -d "${DYNAMIC_YOU_SHARE_DIR}/themes" ]]; then
+        THEMES_DIR="${DYNAMIC_YOU_SHARE_DIR}/themes"
+    elif [[ -d "$HOME/git/MyLinuxSetup/themes" ]]; then
+        THEMES_DIR="$HOME/git/MyLinuxSetup/themes"
+    fi
 fi
 ACTIVE_DIR="$HOME/.config/active-theme"
 
@@ -116,6 +122,10 @@ EOF
     CANDIDATES=(
         "$HOME/Pictures/Wallpapers/$TARGET_THEME"
         "$HOME/Pictures/Wallpapers/$THEME_LOWER"
+        "$HOME/dynamic-you/Wallpapers/$TARGET_THEME"
+        "$HOME/dynamic-you/Wallpapers/$THEME_LOWER"
+        "${DYNAMIC_YOU_SHARE_DIR:-}/Wallpapers/$TARGET_THEME"
+        "${DYNAMIC_YOU_SHARE_DIR:-}/Wallpapers/$THEME_LOWER"
         "$HOME/git/DynamicYou/Wallpapers/$TARGET_THEME"
         "$HOME/git/DynamicYou/Wallpapers/$THEME_LOWER"
         "$HOME/git/MyLinuxSetup/Wallpapers/$TARGET_THEME"

@@ -32,7 +32,7 @@ WE_STATE="$HOME/.config/active-wallpaper-engine"
 if [ -f "$WE_STATE" ] && [ -s "$WE_STATE" ]; then
     WE_DIR=$(cat "$WE_STATE" | tr -d '\n\r ')
     if [ -d "$WE_DIR" ] && [ -f "$WE_DIR/project.json" ]; then
-        for we_script in "$HOME/.config/quickshell/scripts/apply_wallpaper.sh" "$HOME/git/MyLinuxSetup/quickshell/scripts/apply_wallpaper.sh"; do
+        for we_script in "$HOME/.config/quickshell/scripts/apply_wallpaper.sh" "$HOME/dynamic-you/quickshell/scripts/apply_wallpaper.sh" "${DYNAMIC_YOU_SHARE_DIR:-}/quickshell/scripts/apply_wallpaper.sh" "$HOME/git/MyLinuxSetup/quickshell/scripts/apply_wallpaper.sh"; do
             if [ -x "$we_script" ] || [ -f "$we_script" ]; then
                 bash "$we_script" "$WE_DIR" "$TRANSITION" &
                 exit 0
@@ -72,7 +72,7 @@ else
     fi
     [ -z "$THEME" ] && THEME="Serenity"
 
-    for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh"; do
+    for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/dynamic-you/scripts/apply-theme.sh" "${DYNAMIC_YOU_SHARE_DIR:-}/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh"; do
         if [ -x "$s" ] || [ -f "$s" ]; then
             bash "$s" "$THEME"
             break
