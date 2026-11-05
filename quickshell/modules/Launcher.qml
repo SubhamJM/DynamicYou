@@ -393,20 +393,16 @@ if os.path.exists(cache_file):
     except: pass
 
 if not icon_cache:
-    for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
+    xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
+    fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
+    all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
+    search_dirs = [os.path.join(d, 'pixmaps') for d in all_dirs] + [os.path.join(d, 'icons') for d in all_dirs]
+    for base in search_dirs:
         if os.path.exists(base):
             for root, dirs, files in os.walk(base):
                 for f in files:
                     name, ext = os.path.splitext(f)
                     if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
-                        icon_cache[name] = os.path.join(root, f)
-    for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
-        base = f'/usr/share/icons/{theme}'
-        if os.path.exists(base):
-            for root, dirs, files in os.walk(base):
-                for f in files:
-                    name, ext = os.path.splitext(f)
-                    if ext.lower() in ('.png', '.svg') and name not in icon_cache:
                         icon_cache[name] = os.path.join(root, f)
     try:
         with open(cache_file, 'w') as f: json.dump(icon_cache, f)
@@ -423,7 +419,10 @@ try:
     with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
 except: pass
 
-paths = ['/usr/share/applications', os.path.expanduser('~/.local/share/applications')]
+xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
+fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
+all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
+paths = [os.path.join(d, 'applications') for d in all_dirs if os.path.isdir(os.path.join(d, 'applications'))]
 for p in paths:
     for f in glob.glob(p + '/*.desktop'):
         try:

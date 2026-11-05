@@ -410,7 +410,7 @@ ColumnLayout {
     }
 
     Timer {
-        interval: 1200; running: root.activeMode === "wifi"; repeat: true
+        interval: 7000; running: (root.activeMode === "wifi" && wifiMaster.visible); repeat: true
         onTriggered: {
             if (!wifiMaster.isScanning && !wifiMaster.isAnyWifiExpanded()) wifiSavedChecker.running = true;
             hotspotStatusChecker.running = true;

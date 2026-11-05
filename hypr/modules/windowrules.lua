@@ -26,6 +26,12 @@ hl.layer_rule({
     blur = true
 })
 
+hl.layer_rule({
+    name = "quickshell-noanim",
+    match = { namespace = "quickshell" },
+    noanim = true
+})
+
 
 -- ==================================================
 --  Floating, Centering & Dialog Rules
