@@ -21,7 +21,7 @@ hl.config({
 
         col = {
             active_border = {
-                colors = { "rgba(ffffffea)", "rgba(d0bcffea)" },
+                colors = { "rgba(ffffffff)", "rgba(a855f7ff)", "rgba(ffffffff)", "rgba(9333eaff)" },
                 angle = 45,
             },
             inactive_border = "rgba(31313688)"
