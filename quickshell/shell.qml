@@ -1,3 +1,8 @@
+//@ pragma DefaultEnv QS_NO_RELOAD_POPUP=1
+//@ pragma DefaultEnv QS_DROP_EXPENSIVE_FONTS=1
+//@ pragma DefaultEnv QSG_RENDER_LOOP=threaded
+//@ pragma DefaultEnv QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
+
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -420,111 +425,52 @@ ShellRoot {
         }
     }
 
-    // Background Global App Scanner (runs at shell startup and periodically)
-    Process {
-        id: globalAppScanner
-        running: false
-        command: ["sh", "-c", `
-            python3 -c "
-import os, glob, re, json
+    // Native DesktopEntries sync (matching Caelestia architecture)
+    Timer {
+        id: deSyncDebounce
+        interval: 60
+        repeat: false
+        onTriggered: root.syncDesktopEntries()
+    }
 
-cache_file = os.path.expanduser('~/.cache/qs_icon_cache.json')
-icon_cache = {}
-if os.path.exists(cache_file):
-    try:
-        with open(cache_file, 'r') as f: icon_cache = json.load(f)
-    except: pass
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() {
+            deSyncDebounce.restart();
+        }
+    }
 
-if not icon_cache:
-    xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
-    fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
-    all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
-    search_dirs = [os.path.join(d, 'pixmaps') for d in all_dirs] + [os.path.join(d, 'icons') for d in all_dirs]
-    for base in search_dirs:
-        if os.path.exists(base):
-            for root, dirs, files in os.walk(base):
-                for f in files:
-                    name, ext = os.path.splitext(f)
-                    if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
-                        icon_cache[name] = os.path.join(root, f)
-    try:
-        with open(cache_file, 'w') as f: json.dump(icon_cache, f)
-    except: pass
-
-def resolve_icon(i):
-    if not i: return ''
-    if os.path.isabs(i) and os.path.exists(i): return i
-    return icon_cache.get(i, '')
-
-apps = []
-usage = {}
-try:
-    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
-except: pass
-
-xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
-fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
-all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
-paths = [os.path.join(d, 'applications') for d in all_dirs if os.path.isdir(os.path.join(d, 'applications'))]
-for p in paths:
-    for f in glob.glob(p + '/*.desktop'):
-        try:
-            with open(f, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-                if 'NoDisplay=true' in content: continue
-                name = re.search(r'^Name=(.*)$', content, re.M)
-                exec_cmd = re.search(r'^Exec=(.*)$', content, re.M)
-                icon = re.search(r'^Icon=(.*)$', content, re.M)
-                comment = re.search(r'^Comment=(.*)$', content, re.M)
-                if name and exec_cmd:
-                    n = name.group(1).strip()
-                    e = re.sub(r'%[fFuUiDc]', '', exec_cmd.group(1)).strip()
-                    i_raw = icon.group(1).strip() if (icon and icon.group(1)) else ''
-                    i = resolve_icon(i_raw)
-                    c = comment.group(1).strip() if comment else ''
-                    u = usage.get(e, 0)
-                    apps.append((u, n, e, i, c))
-        except: pass
-apps = sorted(list(set(apps)), key=lambda x: (-x[0], x[1].lower()))
-for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
-"
-        `]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n");
-                var tempList = [];
-                for (var i = 0; i < lines.length; i++) {
-                    var parts = lines[i].split("|||");
-                    if (parts.length >= 3) {
-                        tempList.push({
-                            "name": parts[0],
-                            "exec": parts[1],
-                            "iconName": parts[2],
-                            "comment": parts.length > 3 ? parts[3] : ""
-                        });
-                    }
-                }
-                if (tempList.length > 0) {
-                    root.cachedApps = tempList;
-                    if (root.launcherMod) {
-                        root.launcherMod.allApps = tempList;
-                        root.launcherMod.updateSuggestions();
-                        root.launcherMod.processSearch(root.launcherMod.searchInput.text);
-                    }
-                }
+    function syncDesktopEntries() {
+        var rawApps = DesktopEntries.applications.values;
+        if (!rawApps || rawApps.length === 0) return;
+        var list = [];
+        for (var i = 0; i < rawApps.length; i++) {
+            var entry = rawApps[i];
+            if (!entry || entry.noDisplay || !entry.name) continue;
+            var execCmd = entry.command || entry.execString || "";
+            if (!execCmd) continue;
+            list.push({
+                name: entry.name,
+                exec: execCmd,
+                iconName: entry.icon || "",
+                comment: entry.comment || entry.genericName || "",
+                id: entry.id || "",
+                entry: entry
+            });
+        }
+        list.sort(function(a, b) { return a.name.localeCompare(b.name); });
+        root.cachedApps = list;
+        if (root.launcherMod) {
+            root.launcherMod.allApps = list;
+            root.launcherMod.updateSuggestions();
+            if (root.launcherMod.searchInput.text.trim() !== "") {
+                root.launcherMod.processSearch(root.launcherMod.searchInput.text);
             }
         }
     }
 
-    Timer {
-        id: globalAppScanTimer
-        interval: 1000
-        running: false
-        repeat: false
-        triggeredOnStart: false
-        onTriggered: {
-            if (!globalAppScanner.running) globalAppScanner.running = true;
-        }
+    Component.onCompleted: {
+        root.syncDesktopEntries();
     }
 
     // Background Global Wallpaper Scanner
@@ -1203,11 +1149,11 @@ for f in sorted_files:
             left: true
             right: true
         }
-        height: NotchConfig.baseExclusiveZone
+        implicitHeight: NotchConfig.baseExclusiveZone
         exclusiveZone: NotchConfig.baseExclusiveZone
         color: "transparent"
-        Item { id: emptyResItem; width: 0; height: 0 }
-        mask: Region { item: emptyResItem }
+        WlrLayershell.namespace: "notch-reserve"
+        mask: Region {}
     }
 
     // Main Notch Panel
@@ -1261,8 +1207,8 @@ for f in sorted_files:
             }
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher")
-            ? WlrKeyboardFocus.Exclusive
+        WlrLayershell.keyboardFocus: (root.activeMode === "launcher" || root.activeMode === "notes" || root.activeMode === "taskmanager" || root.activeMode === "clipboard" || root.activeMode === "theme")
+            ? WlrKeyboardFocus.OnDemand
             : WlrKeyboardFocus.None
 
         // Top hover sensor mouse trigger for fullscreen mode

@@ -120,7 +120,6 @@ ColumnLayout {
             launcher.updateSuggestions();
             launcher.processSearch(searchInput.text);
         }
-        appScanner.running = true;
         clientScanner.running = true;
     }
 
@@ -128,14 +127,11 @@ ColumnLayout {
         launcher.isCopiedFeedback = false;
         launcher.selectedTileIndex = 0;
         clientScanner.running = true;
-        if (typeof root !== "undefined" && root.cachedApps && root.cachedApps.length > 0 && launcher.allApps.length === 0) {
+        if (typeof root !== "undefined" && root.cachedApps && root.cachedApps.length > 0) {
             launcher.allApps = root.cachedApps;
         }
         launcher.updateSuggestions();
         launcher.processSearch(searchInput.text);
-        if (!appScanner.running) {
-            appScanner.running = true;
-        }
         searchInput.forceActiveFocus();
         if (resultsModel.count > 0) appList.currentIndex = 0;
     }
@@ -160,7 +156,8 @@ ColumnLayout {
                 iconName: app.iconName,
                 comment: app.comment || app.exec,
                 isRunning: rc !== null,
-                winAddress: rc ? rc.address : ""
+                winAddress: rc ? rc.address : "",
+                appEntry: app.entry || null
             });
         }
         launcher.suggestions = list;
@@ -172,6 +169,9 @@ ColumnLayout {
         if (s.isRunning && s.winAddress !== "") {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + s.winAddress + "\" })"]);
             root.collapseToIdle();
+        } else if (s.appEntry && typeof s.appEntry.execute === "function") {
+            s.appEntry.execute();
+            launcher.recordUsageAndLaunch(s.exec);
         } else {
             launcher.recordUsageAndLaunch(s.exec);
         }
@@ -377,100 +377,7 @@ ColumnLayout {
         appList.currentIndex = resultsModel.count > 0 ? 0 : -1;
     }
 
-    // Desktop Application Scanner
-    Process {
-        id: appScanner
-        running: false
-        command: ["sh", "-c", `
-            python3 -c "
-import os, glob, re, json
-
-cache_file = os.path.expanduser('~/.cache/qs_icon_cache.json')
-icon_cache = {}
-if os.path.exists(cache_file):
-    try:
-        with open(cache_file, 'r') as f: icon_cache = json.load(f)
-    except: pass
-
-if not icon_cache:
-    xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
-    fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
-    all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
-    search_dirs = [os.path.join(d, 'pixmaps') for d in all_dirs] + [os.path.join(d, 'icons') for d in all_dirs]
-    for base in search_dirs:
-        if os.path.exists(base):
-            for root, dirs, files in os.walk(base):
-                for f in files:
-                    name, ext = os.path.splitext(f)
-                    if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
-                        icon_cache[name] = os.path.join(root, f)
-    try:
-        with open(cache_file, 'w') as f: json.dump(icon_cache, f)
-    except: pass
-
-def resolve_icon(i):
-    if not i: return ''
-    if os.path.isabs(i) and os.path.exists(i): return i
-    return icon_cache.get(i, '')
-
-apps = []
-usage = {}
-try:
-    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
-except: pass
-
-xdg_dirs = [d for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
-fallback_dirs = ['/run/current-system/sw/share', os.path.expanduser('~/.nix-profile/share'), '/etc/profiles/per-user/' + os.environ.get('USER', 'kuro') + '/share', '/usr/share', os.path.expanduser('~/.local/share')]
-all_dirs = list(dict.fromkeys(xdg_dirs + fallback_dirs))
-paths = [os.path.join(d, 'applications') for d in all_dirs if os.path.isdir(os.path.join(d, 'applications'))]
-for p in paths:
-    for f in glob.glob(p + '/*.desktop'):
-        try:
-            with open(f, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-                if 'NoDisplay=true' in content: continue
-                name = re.search(r'^Name=(.*)$', content, re.M)
-                exec_cmd = re.search(r'^Exec=(.*)$', content, re.M)
-                icon = re.search(r'^Icon=(.*)$', content, re.M)
-                comment = re.search(r'^Comment=(.*)$', content, re.M)
-                if name and exec_cmd:
-                    n = name.group(1).strip()
-                    e = re.sub(r'%[fFuUiDc]', '', exec_cmd.group(1)).strip()
-                    i_raw = icon.group(1).strip() if (icon and icon.group(1)) else ''
-                    i = resolve_icon(i_raw)
-                    c = comment.group(1).strip() if comment else ''
-                    u = usage.get(e, 0)
-                    apps.append((u, n, e, i, c))
-        except: pass
-apps = sorted(list(set(apps)), key=lambda x: (-x[0], x[1].lower()))
-for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
-"
-        `]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n");
-                var tempList = [];
-                for (var i = 0; i < lines.length; i++) {
-                    var parts = lines[i].split("|||");
-                    if (parts.length >= 3) {
-                        tempList.push({
-                            "name": parts[0],
-                            "exec": parts[1],
-                            "iconName": parts[2],
-                            "comment": parts.length > 3 ? parts[3] : ""
-                        });
-                    }
-                }
-                if (tempList.length > 0) {
-                    if (typeof root !== "undefined") root.cachedApps = tempList;
-                    launcher.allApps = tempList;
-                    launcher.updateSuggestions();
-                    launcher.processSearch(searchInput.text);
-                }
-            }
-        }
-    }
-
+    // Desktop Application Runner & Usage Tracking
     Process { id: appRunner; running: false }
 
     Process {
@@ -704,7 +611,8 @@ with open(f, 'w') as file: json.dump(d, file)
                 rawVal: "",
                 isRunning: match.rc !== null,
                 winAddress: match.rc ? match.rc.address : "",
-                actionVerb: match.rc !== null ? "Switch to" : "Open"
+                actionVerb: match.rc !== null ? "Switch to" : "Open",
+                appEntry: match.app.entry || null
             });
         }
 
@@ -816,6 +724,9 @@ with open(f, 'w') as file: json.dump(d, file)
             if (item.isRunning && item.winAddress !== "") {
                 Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + item.winAddress + "\" })"]);
                 root.collapseToIdle();
+            } else if (item.appEntry && typeof item.appEntry.execute === "function") {
+                item.appEntry.execute();
+                launcher.recordUsageAndLaunch(item.execCmd);
             } else {
                 launcher.recordUsageAndLaunch(item.execCmd);
             }

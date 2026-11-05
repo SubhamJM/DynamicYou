@@ -32,6 +32,12 @@ hl.layer_rule({
     noanim = true
 })
 
+hl.layer_rule({
+    name = "notch-reserve-noanim",
+    match = { namespace = "notch-reserve" },
+    noanim = true
+})
+
 
 -- ==================================================
 --  Floating, Centering & Dialog Rules
