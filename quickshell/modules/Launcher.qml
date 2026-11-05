@@ -149,15 +149,17 @@ ColumnLayout {
         var limit = Math.min(launcher.allApps.length, 8);
         for (var i = 0; i < limit; i++) {
             var app = launcher.allApps[i];
-            var rc = launcher.getRunningClient(app.exec, app.name);
+            var execStr = String(app.exec || "");
+            var nameStr = String(app.name || "");
+            var rc = launcher.getRunningClient(execStr, nameStr);
             list.push({
-                name: app.name,
-                exec: app.exec,
-                iconName: app.iconName,
-                comment: app.comment || app.exec,
+                name: nameStr,
+                exec: execStr,
+                iconName: String(app.iconName || ""),
+                comment: String(app.comment || execStr),
                 isRunning: rc !== null,
                 winAddress: rc ? rc.address : "",
-                appEntry: app.entry || null
+                appId: String(app.id || "")
             });
         }
         launcher.suggestions = list;
@@ -169,8 +171,13 @@ ColumnLayout {
         if (s.isRunning && s.winAddress !== "") {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + s.winAddress + "\" })"]);
             root.collapseToIdle();
-        } else if (s.appEntry && typeof s.appEntry.execute === "function") {
-            s.appEntry.execute();
+        } else if (s.appId && s.appId !== "") {
+            var ent = DesktopEntries.byId(s.appId);
+            if (ent && typeof ent.execute === "function") {
+                ent.execute();
+                launcher.recordUsageAndLaunch(s.exec);
+                return;
+            }
             launcher.recordUsageAndLaunch(s.exec);
         } else {
             launcher.recordUsageAndLaunch(s.exec);
@@ -313,13 +320,13 @@ ColumnLayout {
 
     function getRunningClient(appExec, appName) {
         if (!launcher.runningClients || launcher.runningClients.length === 0) return null;
-        var execLower = (appExec || "").toLowerCase();
-        var nameLower = (appName || "").toLowerCase();
+        var execLower = String(appExec || "").toLowerCase();
+        var nameLower = String(appName || "").toLowerCase();
         for (var i = 0; i < launcher.runningClients.length; i++) {
             var c = launcher.runningClients[i];
             if (!c) continue;
-            var cClass = (c.class || "").toLowerCase();
-            var cInitial = (c.initialClass || "").toLowerCase();
+            var cClass = String(c.class || "").toLowerCase();
+            var cInitial = String(c.initialClass || "").toLowerCase();
             if ((cClass && (execLower.includes(cClass) || cClass.includes(nameLower) || nameLower.includes(cClass))) ||
                 (cInitial && (execLower.includes(cInitial) || cInitial.includes(nameLower)))) {
                 return c;
@@ -575,8 +582,9 @@ with open(f, 'w') as file: json.dump(d, file)
         var appMatches = [];
         for (var i = 0; i < launcher.allApps.length; i++) {
             var app = launcher.allApps[i];
-            var appNameLower = app.name.toLowerCase();
-            var appExecLower = app.exec.toLowerCase();
+            if (!app || !app.name) continue;
+            var appNameLower = String(app.name).toLowerCase();
+            var appExecLower = String(app.exec || "").toLowerCase();
 
             var score = -1;
             if (appNameLower === query) score = 100;
@@ -587,7 +595,7 @@ with open(f, 'w') as file: json.dump(d, file)
             else if (launcher.isSubsequence(query, appNameLower)) score = 20;
 
             if (score > 0) {
-                var rcClient = getRunningClient(app.exec, app.name);
+                var rcClient = launcher.getRunningClient(app.exec, app.name);
                 appMatches.push({
                     score: score,
                     app: app,
@@ -602,17 +610,17 @@ with open(f, 'w') as file: json.dump(d, file)
             var match = appMatches[m];
             resultsModel.append({
                 itemType: "app",
-                name: match.app.name,
-                comment: match.app.comment || match.app.exec,
-                iconName: match.app.iconName,
+                name: String(match.app.name),
+                comment: String(match.app.comment || match.app.exec),
+                iconName: String(match.app.iconName || ""),
                 matIcon: "",
                 nerdIcon: "",
-                execCmd: match.app.exec,
+                execCmd: String(match.app.exec),
                 rawVal: "",
                 isRunning: match.rc !== null,
                 winAddress: match.rc ? match.rc.address : "",
                 actionVerb: match.rc !== null ? "Switch to" : "Open",
-                appEntry: match.app.entry || null
+                appId: String(match.app.id || "")
             });
         }
 
@@ -724,9 +732,14 @@ with open(f, 'w') as file: json.dump(d, file)
             if (item.isRunning && item.winAddress !== "") {
                 Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + item.winAddress + "\" })"]);
                 root.collapseToIdle();
-            } else if (item.appEntry && typeof item.appEntry.execute === "function") {
-                item.appEntry.execute();
-                launcher.recordUsageAndLaunch(item.execCmd);
+            } else if (item.appId && item.appId !== "") {
+                var entry = DesktopEntries.byId(item.appId);
+                if (entry && typeof entry.execute === "function") {
+                    entry.execute();
+                    launcher.recordUsageAndLaunch(item.execCmd);
+                } else {
+                    launcher.recordUsageAndLaunch(item.execCmd);
+                }
             } else {
                 launcher.recordUsageAndLaunch(item.execCmd);
             }
@@ -1499,7 +1512,7 @@ with open(f, 'w') as file: json.dump(d, file)
                             // Running Badge Pill (if window is active)
                             Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
-                                visible: model.isRunning
+                                visible: !!model.isRunning
                                 height: 18
                                 width: runRow.implicitWidth + 10
                                 radius: 9
@@ -1532,7 +1545,7 @@ with open(f, 'w') as file: json.dump(d, file)
                                 width: actionHintText.implicitWidth + 14
                                 radius: 6
                                 color: delegateRoot.isSelected ? Qt.rgba(launcher.accentColor.r, launcher.accentColor.g, launcher.accentColor.b, 0.25) : Qt.rgba(1, 1, 1, 0.05)
-                                visible: delegateRoot.isSelected || model.isRunning
+                                visible: !!(delegateRoot.isSelected || model.isRunning)
 
                                 Text {
                                     id: actionHintText

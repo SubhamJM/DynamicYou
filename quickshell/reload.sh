@@ -9,8 +9,8 @@ fi
 export MALLOC_ARENA_MAX=2
 export MALLOC_TRIM_THRESHOLD_=131072
 
-pkill -9 -f quickshell 2>/dev/null
+pkill -9 -f 'bin/\.?quickshell' 2>/dev/null
 pkill -9 -x qs 2>/dev/null
-while pgrep -f quickshell >/dev/null || pgrep -x qs >/dev/null; do sleep 0.05; done
+while pgrep -f 'bin/\.?quickshell' >/dev/null || pgrep -x qs >/dev/null; do sleep 0.05; done
 sleep 0.15
-qs -d >/dev/null 2>&1
+qs -d >/dev/null 2>&1 &

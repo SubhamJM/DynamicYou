@@ -447,15 +447,28 @@ ShellRoot {
         for (var i = 0; i < rawApps.length; i++) {
             var entry = rawApps[i];
             if (!entry || entry.noDisplay || !entry.name) continue;
-            var execCmd = entry.command || entry.execString || "";
-            if (!execCmd) continue;
+            var cmdStr = "";
+            if (typeof entry.execString === "string" && entry.execString.trim() !== "") {
+                cmdStr = entry.execString.trim();
+            } else if (entry.command) {
+                if (typeof entry.command === "string") {
+                    cmdStr = entry.command.trim();
+                } else {
+                    try {
+                        cmdStr = Array.from(entry.command).join(" ").trim();
+                    } catch (e) {
+                        cmdStr = String(entry.command).trim();
+                    }
+                }
+            }
+            if (!cmdStr) continue;
+            var cleanExec = cmdStr.replace(/%[fFuUiDcnmk]/g, "").trim();
             list.push({
-                name: entry.name,
-                exec: execCmd,
-                iconName: entry.icon || "",
-                comment: entry.comment || entry.genericName || "",
-                id: entry.id || "",
-                entry: entry
+                name: String(entry.name),
+                exec: String(cleanExec),
+                iconName: (entry.icon ? String(entry.icon) : ""),
+                comment: (entry.comment ? String(entry.comment) : (entry.genericName ? String(entry.genericName) : "")),
+                id: (entry.id ? String(entry.id) : "")
             });
         }
         list.sort(function(a, b) { return a.name.localeCompare(b.name); });
