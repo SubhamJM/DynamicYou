@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # The theme name is passed as the first argument ($1)
 TARGET_THEME=$1

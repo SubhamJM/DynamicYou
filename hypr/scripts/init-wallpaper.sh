@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Initialize awww daemon and ensure desktop wallpaper is displayed on startup
 
 # 1. Start awww-daemon if not already running

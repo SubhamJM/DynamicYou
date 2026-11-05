@@ -29,8 +29,9 @@ case "$cmd" in
         exec quickshell -d -p "$qs_dir" "$@"
         ;;
     reload)
-        killall -9 qs quickshell 2>/dev/null || true
-        while pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1; do sleep 0.05; done
+        pkill -9 -f quickshell 2>/dev/null || true
+        pkill -9 -x qs 2>/dev/null || true
+        while pgrep -f quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; do sleep 0.05; done
         sleep 0.15
         qs_dir="$(resolve_qs_dir)"
         exec quickshell -d -p "$qs_dir" >/dev/null 2>&1 &
@@ -95,12 +96,12 @@ case "$cmd" in
         echo "=== DynamicYou Status ==="
         echo "Share directory: $SHARE_DIR"
         echo "Active quickshell directory: $(resolve_qs_dir)"
-        if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
+        if pgrep -f quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
             echo "QuickShell: RUNNING"
         else
             echo "QuickShell: STOPPED"
         fi
-        if pgrep -x Hyprland >/dev/null 2>&1; then
+        if pgrep -f Hyprland >/dev/null 2>&1; then
             echo "Hyprland: RUNNING"
         else
             echo "Hyprland: NOT DETECTED"
