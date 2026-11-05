@@ -17,11 +17,14 @@ hl.config({
         gaps_out = 10,
         gaps_workspaces = 20,
 
-        border_size = 0,
+        border_size = 1,
 
         col = {
-            active_border = use_matugen and colors.primary or "rgba(0DB7D455)",
-            inactive_border = use_matugen and colors.outline or "rgba(31313600)"
+            active_border = {
+                colors = { "rgba(ffffffea)", "rgba(d0bcffea)" },
+                angle = 45,
+            },
+            inactive_border = "rgba(31313688)"
         },
         resize_on_border = true,
 
@@ -37,8 +40,8 @@ hl.config({
     decoration = {
         -- 2 = circle, higher = squircle, 4 = very obvious squircle
         -- Fuck clearly visible squircles. 100% Apple brainrot.
-        rounding_power = 2.5,
-        rounding = 18,
+        rounding_power = 2.0,
+        rounding = 2,
 
 		active_opacity = 0.95,
 		inactive_opacity = 0.90,
@@ -62,7 +65,7 @@ hl.config({
             input_methods_ignorealpha = 0.8
         },
         shadow = {
-            enabled = true,
+            enabled = false,
             range = 25,
             render_power = 4,
             color = "rgba(1a1a1aee)"
