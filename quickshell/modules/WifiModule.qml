@@ -1,1433 +1,1374 @@
 import QtQuick
-import QtQuick.Layouts
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import "../"
 
-ColumnLayout {
-    id: wifiMaster
-    spacing: 10
+// ────────────────────────────────────────────────────────────
+// Lucid Wi-Fi Architecture & Design (1:1 with Lucid WifiPanel.qml & WifiShare.qml)
+// Pure copy of Lucid's padding, layouts, component metrics, and visual hierarchy.
+// ────────────────────────────────────────────────────────────
+Item {
+    id: root
+
+    // State properties (compatible with shell.qml)
+    property string activeTab: "wifi"
+    property bool wifiEnabled: true
+    property bool isScanning: wifiScanProc.running
+    property bool hotspotActive: false
+    property string connectedSsid: ""
+    property string activeIp: ""
+    property string activeDev: "wlan0"
+    property var ethernetData: null
+    property string expandedSsid: ""
+    property string pendingSsid: ""
+    property bool hiddenFormOpen: false
+    property string hiddenSsid: ""
+    property string hiddenPass: ""
+    property var failedSsidMap: ({})
+    property var shareDataMap: ({})
+
+    // Lucid 3-tier split lists
+    property var connectedNetworks: []
+    property var savedNetworks: []
+    property var nearbyNetworks: []
+
+    readonly property int totalCount: connectedNetworks.length + savedNetworks.length + nearbyNetworks.length
+    readonly property var model: ({ count: root.totalCount })
+
+    // Pixel-perfect dynamic height that hugs Lucid's content with exact padding
+    readonly property int calculatedHeight: {
+        if (!root.wifiEnabled) return 210;
+        var contentH = subHeader.height + 6 + col.implicitHeight + 24;
+        return Math.min(540, Math.max(220, contentH));
+    }
+    readonly property real listViewContentHeight: col.implicitHeight
+
+    // Lucid Shared Glyphs (copied 1:1 from WifiPanel.qml)
+    component EthernetGlyph: Item {
+        id: glyph
+        property color glyphColor: Qt.rgba(255, 255, 255, 0.65)
+        width: 16
+        height: 16
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: "lan"
+            iconSize: 18
+            fill: 1
+            color: glyph.glyphColor
+        }
+    }
+
+    component WifiStrengthGlyph: MaterialSymbol {
+        id: wsg
+        property real strength: 0
+        property bool showOff: false
+        readonly property real normalizedStrength: wsg.strength <= 1 ? wsg.strength * 100 : wsg.strength
+        readonly property int level: wsg.normalizedStrength >= 80 ? 4 : (wsg.normalizedStrength >= 60 ? 3 : (wsg.normalizedStrength >= 40 ? 2 : (wsg.normalizedStrength >= 20 ? 1 : 0)))
+
+        text: wsg.showOff ? "signal_wifi_off" : ["signal_wifi_0_bar", "network_wifi_1_bar", "network_wifi_2_bar", "network_wifi_3_bar", "signal_wifi_4_bar"][wsg.level]
+        iconSize: 20
+        fill: 1
+    }
+
+    // Backend Execution Processes
+    readonly property string helperScript: Quickshell.shellDir + "/scripts/wifi_manager.py"
+
+    function scan(forceRescan) {
+        if (!root.wifiEnabled) return;
+        var rescanArg = (forceRescan === false) ? "no" : "yes";
+        wifiScanProc.command = ["python3", root.helperScript, "scan", rescanArg];
+        wifiScanProc.running = false;
+        wifiScanProc.running = true;
+    }
+
+    function refreshStatus() {
+        wifiStatusProc.command = ["python3", root.helperScript, "status"];
+        wifiStatusProc.running = false;
+        wifiStatusProc.running = true;
+        root.scan(false);
+    }
+
+    function toggleRadio() {
+        wifiToggleProc.command = ["python3", root.helperScript, "toggle-radio"];
+        wifiToggleProc.running = true;
+        root.wifiEnabled = !root.wifiEnabled;
+    }
+
+    function connectNetwork(ssid, password) {
+        root.pendingSsid = ssid;
+        var cmd = ["python3", root.helperScript, "connect", ssid];
+        if (password && password.length > 0) cmd.push(password);
+        wifiConnectProc.targetSsid = ssid;
+        wifiConnectProc.command = cmd;
+        wifiConnectProc.running = true;
+    }
+
+    function disconnectNetwork(ssid) {
+        var cmd = ["python3", root.helperScript, "disconnect"];
+        if (ssid) cmd.push(ssid);
+        wifiActionProc.command = cmd;
+        wifiActionProc.running = true;
+    }
+
+    function disconnectEthernet() {
+        wifiActionProc.command = ["python3", root.helperScript, "disconnect-wired"];
+        wifiActionProc.running = true;
+    }
+
+    function forgetNetwork(ssid) {
+        wifiActionProc.command = ["python3", root.helperScript, "forget", ssid];
+        wifiActionProc.running = true;
+    }
+
+    function fetchSecret(ssid) {
+        wifiSecretProc.targetSsid = ssid;
+        wifiSecretProc.command = ["python3", root.helperScript, "secret", ssid];
+        wifiSecretProc.running = true;
+    }
+
+    function toggleAutoConnect(ssid, enable) {
+        wifiAutoConnectProc.command = ["python3", root.helperScript, "autoconnect", ssid, enable ? "yes" : "no"];
+        wifiAutoConnectProc.running = true;
+    }
+
+    function getStrengthLabel(signal) {
+        var sig = parseInt(signal) || 0;
+        if (sig >= 75) return "Excellent signal (" + sig + "%)";
+        if (sig >= 50) return "Good signal (" + sig + "%)";
+        if (sig >= 25) return "Fair signal (" + sig + "%)";
+        return "Weak signal (" + sig + "%)";
+    }
+
+    // Process Definitions
+    Process {
+        id: wifiStatusProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    root.wifiEnabled = !!data.radio;
+                    root.connectedSsid = data.connected_ssid || "";
+                    root.activeIp = data.active_ip || "";
+                    root.activeDev = data.active_dev || "wlan0";
+                    root.hotspotActive = !!data.hotspot_active;
+                    root.ethernetData = data.ethernet || null;
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: wifiScanProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var res = JSON.parse(this.text.trim());
+                    if (res.status) {
+                        root.wifiEnabled = !!res.status.radio;
+                        root.connectedSsid = res.status.connected_ssid || "";
+                        root.activeIp = res.status.active_ip || "";
+                        root.activeDev = res.status.active_dev || "wlan0";
+                        root.hotspotActive = !!res.status.hotspot_active;
+                        root.ethernetData = res.status.ethernet || null;
+                    }
+                    root.connectedNetworks = res.connected || [];
+                    root.savedNetworks = res.saved || [];
+                    root.nearbyNetworks = res.nearby || [];
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: wifiConnectProc
+        property string targetSsid: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.pendingSsid = "";
+                try {
+                    var out = JSON.parse(this.text.trim());
+                    if (!out.success) {
+                        var map = Object.assign({}, root.failedSsidMap);
+                        map[wifiConnectProc.targetSsid] = out.error || "Connection failed";
+                        root.failedSsidMap = map;
+                    } else {
+                        var mapClean = Object.assign({}, root.failedSsidMap);
+                        delete mapClean[wifiConnectProc.targetSsid];
+                        root.failedSsidMap = mapClean;
+                    }
+                } catch (e) {}
+                root.scan(true);
+            }
+        }
+    }
+
+    Process {
+        id: wifiActionProc
+        onExited: root.scan(true)
+    }
+
+    Process {
+        id: wifiSecretProc
+        property string targetSsid: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var secData = JSON.parse(this.text.trim());
+                    var smap = Object.assign({}, root.shareDataMap);
+                    smap[wifiSecretProc.targetSsid] = secData;
+                    root.shareDataMap = smap;
+                } catch (e) {}
+            }
+        }
+    }
+
+    Process {
+        id: wifiAutoConnectProc
+        onExited: root.scan(false)
+    }
+
+    Process {
+        id: wifiToggleProc
+        onExited: root.refreshStatus()
+    }
+
+    Timer {
+        interval: 6000
+        running: (root.visible && !root.isScanning && root.pendingSsid === "")
+        repeat: true
+        onTriggered: root.scan(false)
+    }
+
+    onVisibleChanged: {
+        if (visible) root.refreshStatus();
+    }
+
+    Component.onCompleted: root.refreshStatus()
+
+    // Keyboard support
     focus: true
     Keys.onEscapePressed: (event) => {
-        if (wifiMaster.activeTab === "hotspot") {
-            wifiMaster.activeTab = "wifi";
+        if (root.expandedSsid !== "") {
+            root.expandedSsid = "";
+        } else if (root.hiddenFormOpen) {
+            root.hiddenFormOpen = false;
         } else {
-            root.collapseToIdle();
+            root.parent.collapseToIdle ? root.parent.collapseToIdle() : null;
         }
         event.accepted = true;
     }
 
-    property string activeTab: "wifi"
-    property bool wifiEnabled: true
-    property bool hotspotActive: false
-    property string activeWifiSsid: ""
-    property real listViewContentHeight: wifiListView.contentHeight
-    property bool isScanning: false
-    property var savedConnections: ({})
-    property string connectingSsid: ""
-    readonly property bool isConnected: (typeof dashMod !== "undefined" && dashMod.activeNetName !== "")
+    // ========================================================
+    // 1. LUCID SUBHEADER (44dp: Back Button, "Internet" Title, Power Switch)
+    // ========================================================
+    Item {
+        id: subHeader
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 44
 
-    // Live Network Interface & IP Metadata
-    property string netDev: ""
-    property string netIp: ""
-    property string netGw: ""
-    property string netSpeed: ""
-    property string netWarp: ""
+        Rectangle {
+            id: backChip
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32; height: 32; radius: 16
+            color: backArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
+            scale: backArea.pressed ? 0.94 : (backArea.containsMouse ? 1.04 : 1.0)
+            Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
-    property string hotspotSsid: "SubhamLaptop"
-    property string hotspotPass: "000000001"
-    property bool hotspotShowPassword: false
-
-    // Sleek Frosted Glass & Material 3 Palette
-    readonly property color colSurface: "#000000"
-    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
-    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.095)
-    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.075)
-    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.07)
-    readonly property color colText: "#ffffff"
-    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.70)
-    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.40)
-    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
-    readonly property color colGreen: "#30d158"
-    readonly property color colRed: "#ff453a"
-    readonly property color colYellow: "#ebcb8b"
-
-    readonly property alias model: wifiModel
-
-    function isAnyWifiExpanded() {
-        if (connectingSsid !== "") return true;
-        for (var i = 0; i < wifiModel.count; i++) {
-            if (wifiModel.get(i).isExpanded) return true;
-        }
-        return false;
-    }
-
-    ListModel { id: wifiModel }
-
-    // ------------------------------------------------------------------
-    // Sort helper: connected first, then saved, then strongest signal.
-    // Uses in-place move() to prevent resetting ListView scroll position.
-    // ------------------------------------------------------------------
-    Timer {
-        id: wifiResortTimer
-        interval: 350
-        repeat: false
-        onTriggered: wifiMaster.sortWifiModel()
-    }
-
-    function sortWifiModel() {
-        if (wifiListView.moving || wifiListView.flicking || wifiListView.dragging) {
-            wifiResortTimer.restart();
-            return;
-        }
-
-        var items = [];
-        for (var i = 0; i < wifiModel.count; i++) items.push(wifiModel.get(i));
-
-        items.sort(function(a, b) {
-            if (a.inUse !== b.inUse) return a.inUse ? -1 : 1;
-            if (a.isSaved !== b.isSaved) return a.isSaved ? -1 : 1;
-            return b.signal - a.signal;
-        });
-
-        var alreadySorted = true;
-        for (var k = 0; k < items.length; k++) {
-            if (wifiModel.get(k).ssid !== items[k].ssid) { alreadySorted = false; break; }
-        }
-        if (alreadySorted) return;
-
-        var savedY = wifiListView.contentY;
-
-        // In-place reordering using move() — NEVER clear() the model!
-        for (var targetIdx = 0; targetIdx < items.length; targetIdx++) {
-            var desiredSsid = items[targetIdx].ssid;
-            for (var curIdx = targetIdx; curIdx < wifiModel.count; curIdx++) {
-                if (wifiModel.get(curIdx).ssid === desiredSsid) {
-                    if (curIdx !== targetIdx) {
-                        wifiModel.move(curIdx, targetIdx, 1);
-                    }
-                    break;
-                }
+            Text {
+                anchors.centerIn: parent
+                text: "←"
+                font.pixelSize: 16
+                color: "#ffffff"
+                renderType: Text.NativeRendering
             }
-        }
 
-        var maxY = Math.max(0, wifiListView.contentHeight - wifiListView.height);
-        if (savedY > 0 && maxY > 0) {
-            wifiListView.contentY = Math.min(maxY, savedY);
-        }
-    }
-
-    // Fast network metadata reader
-    Process {
-        id: netInfoChecker
-        running: false
-        command: [
-            "sh", "-c",
-            'DEV=$(ip route show default 2>/dev/null | awk "{print \\$5; exit}"); ' +
-            'GW=$(ip route show default 2>/dev/null | awk "{print \\$3; exit}"); ' +
-            'IP=$(ip -4 -br a show dev "$DEV" 2>/dev/null | awk "{print \\$3}" | cut -d/ -f1); ' +
-            'SPEED=$(cat /sys/class/net/"$DEV"/speed 2>/dev/null); ' +
-            '[ -n "$SPEED" ] && SPEED="${SPEED} Mbps" || SPEED=""; ' +
-            'WARP=$(ip -4 -br a show dev CloudflareWARP 2>/dev/null | awk "{print \\$3}" | cut -d/ -f1); ' +
-            'echo "$DEV|$IP|$GW|$SPEED|$WARP"'
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var parts = this.text.trim().split("|");
-                if (parts.length >= 5) {
-                    wifiMaster.netDev = parts[0];
-                    wifiMaster.netIp = parts[1];
-                    wifiMaster.netGw = parts[2];
-                    wifiMaster.netSpeed = parts[3];
-                    wifiMaster.netWarp = parts[4];
-                }
-            }
-        }
-    }
-
-    Process {
-        id: wifiSavedChecker
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show | grep -E '^802-11-wireless:|^wifi:' | cut -d: -f2-"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.trim().split("\n");
-                var map = {};
-                for (var i = 0; i < lines.length; i++) {
-                    var name = lines[i].trim();
-                    if (name !== "") map[name] = true;
-                }
-                wifiMaster.savedConnections = map;
-                wifiScanner.running = true;
-            }
-        }
-    }
-
-    Process {
-        id: wifiScanner
-        command: [
-            "sh", "-c", 
-            "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY,CHAN,FREQ,RATE dev wifi list --rescan no 2>/dev/null | awk -F':' '{ if ($2 != \"\" && $2 != \"--\") { in_use=($1==\"*\")?1:0; print in_use \"|||\" $2 \"|||\" $3 \"|||\" $4 \"|||\" $5 \"|||\" $6 \"|||\" $7 } }'"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.trim().split("\n");
-                var fresh = {};
-                var order = [];
-                var foundActive = "";
-
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i].trim();
-                    if (!line) continue;
-                    var parts = line.split("|||");
-                    if (parts.length >= 7) {
-                        var isConn = (parts[0] === "1");
-                        var ssidName = parts[1].replace(/\\:/g, ":").trim();
-                        var sig = parseInt(parts[2]) || 0;
-                        var sec = parts[3].trim();
-                        var chan = parseInt(parts[4]) || 0;
-                        var freqStr = parts[5].trim();
-                        var rateStr = parts[6].trim().replace("Mbit/s", "Mbps");
-                        var bandStr = (freqStr.indexOf("5") === 0 || chan > 14) ? "5 GHz" : "2.4 GHz";
-
-                        if (ssidName === "" || ssidName === "--") continue;
-                        if (isConn) foundActive = ssidName;
-
-                        if (!fresh[ssidName] || isConn || sig > fresh[ssidName].signal) {
-                            if (!fresh[ssidName]) order.push(ssidName);
-                            fresh[ssidName] = {
-                                "inUse": isConn,
-                                "ssid": ssidName,
-                                "signal": sig,
-                                "security": sec,
-                                "band": bandStr,
-                                "rate": rateStr,
-                                "isSaved": !!wifiMaster.savedConnections[ssidName]
-                            };
-                        }
-                    }
-                }
-
-                // Sort discovery order too: connected first, then saved, then signal.
-                // Fixes "connected network not shown at top" bug.
-                order.sort(function(a, b) {
-                    var ia = fresh[a], ib = fresh[b];
-                    if (ia.inUse !== ib.inUse) return ia.inUse ? -1 : 1;
-                    if (ia.isSaved !== ib.isSaved) return ia.isSaved ? -1 : 1;
-                    return ib.signal - ia.signal;
-                });
-
-                var isUserScrolling = wifiListView.moving || wifiListView.flicking || wifiListView.dragging;
-
-                for (var idx = wifiModel.count - 1; idx >= 0; idx--) {
-                    var row = wifiModel.get(idx);
-                    if (!fresh[row.ssid]) {
-                        if (!isUserScrolling && !row.isExpanded && wifiMaster.connectingSsid !== row.ssid) {
-                            var misses = (row.missCount || 0) + 1;
-                            if (misses >= 3) {
-                                wifiModel.remove(idx);
-                            } else {
-                                wifiModel.setProperty(idx, "missCount", misses);
-                            }
-                        }
+            MouseArea {
+                id: backArea
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    if (typeof root.parent.switchMode === "function") {
+                        root.parent.switchMode("utility", true);
                     } else {
-                        var upd = fresh[row.ssid];
-                        wifiModel.setProperty(idx, "missCount", 0);
-                        if (row.inUse !== upd.inUse) wifiModel.setProperty(idx, "inUse", upd.inUse);
-                        if (row.signal !== upd.signal) wifiModel.setProperty(idx, "signal", upd.signal);
-                        if (row.security !== upd.security) wifiModel.setProperty(idx, "security", upd.security);
-                        if (row.band !== upd.band) wifiModel.setProperty(idx, "band", upd.band);
-                        if (row.rate !== upd.rate) wifiModel.setProperty(idx, "rate", upd.rate);
-                        if (row.isSaved !== upd.isSaved) wifiModel.setProperty(idx, "isSaved", upd.isSaved);
-                    }
-                }
-
-                var existingMap = {};
-                for (var m = 0; m < wifiModel.count; m++) {
-                    existingMap[wifiModel.get(m).ssid] = true;
-                }
-
-                for (var o = 0; o < order.length; o++) {
-                    var sName = order[o];
-                    if (!existingMap[sName]) {
-                        var itm = fresh[sName];
-                        wifiModel.append({
-                            "inUse": itm.inUse,
-                            "ssid": itm.ssid,
-                            "signal": itm.signal,
-                            "security": itm.security,
-                            "band": itm.band,
-                            "rate": itm.rate,
-                            "isSaved": itm.isSaved,
-                            "missCount": 0,
-                            "isExpanded": false,
-                            "showPassword": false,
-                            "hasError": false,
-                            "errorMsg": ""
-                        });
-                        existingMap[sName] = true;
-                    }
-                }
-
-                wifiMaster.activeWifiSsid = foundActive;
-                wifiMaster.isScanning = false;
-
-                // Re-sort smoothly without resetting scroll position
-                wifiMaster.sortWifiModel();
-            }
-        }
-    }
-
-    Process {
-        id: wifiRescanTrigger
-        running: false
-        command: ["sh", "-c", "nmcli dev wifi rescan 2>/dev/null || true"]
-        onExited: wifiSavedChecker.running = true
-    }
-
-    function triggerScan() {
-        wifiMaster.isScanning = true;
-        wifiRescanTrigger.running = true;
-    }
-
-    Process { 
-        id: wifiConnector
-        running: false
-        property string targetSsid: ""
-        stdout: StdioCollector { id: connectOutCollector }
-        stderr: StdioCollector { id: connectErrCollector }
-
-        onExited: (exitCode) => {
-            var out = (connectOutCollector.text + " " + connectErrCollector.text).toLowerCase();
-            var fail = exitCode !== 0 || out.includes("error") || out.includes("secrets were required") || out.includes("failed");
-
-            if (fail) {
-                Quickshell.execDetached(["nmcli", "connection", "delete", "id", targetSsid]);
-                for (var i = 0; i < wifiModel.count; i++) {
-                    if (wifiModel.get(i).ssid === targetSsid) {
-                        wifiModel.setProperty(i, "hasError", true);
-                        wifiModel.setProperty(i, "errorMsg", "Incorrect password or connection failed.");
-                        wifiModel.setProperty(i, "isExpanded", true);
-                        wifiModel.setProperty(i, "showPassword", true);
-                        wifiModel.setProperty(i, "isSaved", false);
-                        break;
-                    }
-                }
-            } else {
-                for (var j = 0; j < wifiModel.count; j++) {
-                    if (wifiModel.get(j).ssid === targetSsid) {
-                        wifiModel.setProperty(j, "hasError", false);
-                        wifiModel.setProperty(j, "errorMsg", "");
-                        wifiModel.setProperty(j, "isExpanded", false);
-                        wifiModel.setProperty(j, "showPassword", false);
-                        wifiModel.setProperty(j, "isSaved", true);
-                        break;
+                        Quickshell.execDetached(["quickshell", "ipc", "call", "notch", "switchMode", "utility"]);
                     }
                 }
             }
-            wifiMaster.connectingSsid = "";
-            wifiSavedChecker.running = true;
-            netInfoChecker.running = true;
         }
-    }
 
-    function initiateConnection(ssid, password, idx) {
-        wifiMaster.connectingSsid = ssid;
-        wifiModel.setProperty(idx, "hasError", false);
-        wifiModel.setProperty(idx, "errorMsg", "");
-        wifiConnector.targetSsid = ssid;
+        Text {
+            anchors.left: backChip.right
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Internet"
+            font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+            font.pixelSize: 14
+            font.bold: true
+            color: "#ffffff"
+            renderType: Text.NativeRendering
+        }
 
-        var safeSsid = ssid.replace(/'/g, "'\\x27'");
-        var cmd = (password && password.length > 0)
-            ? "nmcli dev wifi connect '" + safeSsid + "' password '" + password.replace(/'/g, "'\\x27'") + "'"
-            : "nmcli connection up id '" + safeSsid + "' 2>/dev/null || nmcli dev wifi connect '" + safeSsid + "'";
+        // Master Wi-Fi Power Switch
+        Rectangle {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: 40; height: 22; radius: 11
+            color: root.wifiEnabled ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.15)
+            Behavior on color { ColorAnimation { duration: 150 } }
 
-        wifiConnector.command = ["sh", "-c", cmd];
-        wifiConnector.running = true;
-    }
+            Rectangle {
+                width: 16; height: 16; radius: 8
+                anchors.verticalCenter: parent.verticalCenter
+                x: root.wifiEnabled ? parent.width - width - 3 : 3
+                color: root.wifiEnabled ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
+                Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            }
 
-    Process { id: wifiDisconnecter; running: false; onExited: { wifiSavedChecker.running = true; netInfoChecker.running = true; } }
-    Process { id: wifiForgetRunner; running: false; onExited: wifiSavedChecker.running = true }
-    Process { id: wifiTrustRunner; running: false; onExited: wifiSavedChecker.running = true }
-
-    Process {
-        id: wifiStatusChecker
-        command: ["sh", "-c", "nmcli radio wifi"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                if (root.utilMod && root.utilMod.isTogglingWifi) return;
-                wifiMaster.wifiEnabled = (this.text.trim() === "enabled");
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleRadio()
             }
         }
     }
-
-    Process {
-        id: wifiToggler
-        running: false
-        onExited: {
-            wifiStatusChecker.running = true;
-            wifiSavedChecker.running = true;
-            netInfoChecker.running = true;
-        }
-    }
-
-    Process {
-        id: hotspotStatusChecker
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '^802-11-wireless.*:Hotspot|^wifi.*:Hotspot' || true"]
-        stdout: StdioCollector {
-            onStreamFinished: wifiMaster.hotspotActive = (this.text.trim().length > 0)
-        }
-    }
-
-    Process {
-        id: hotspotRunner
-        running: false
-        onExited: {
-            hotspotStatusChecker.running = true;
-            wifiStatusChecker.running = true;
-            wifiSavedChecker.running = true;
-        }
-    }
-
-    function toggleHotspot(enable) {
-        if (enable) {
-            var safeSsid = hotspotSsid.replace(/'/g, "'\\x27'");
-            var safePass = hotspotPass.replace(/'/g, "'\\x27'");
-            var cmd = "nmcli radio wifi on && sleep 0.5 && nmcli device wifi hotspot ssid '" + safeSsid + "' password '" + safePass + "'";
-            hotspotRunner.command = ["sh", "-c", cmd];
-            hotspotRunner.running = true;
-        } else {
-            hotspotRunner.command = ["sh", "-c", "for uuid in $(nmcli -t -f UUID,TYPE,NAME con show --active | grep -iE ':(wifi|802-11-wireless):.*hotspot' | cut -d: -f1); do nmcli con down uuid \"$uuid\" 2>/dev/null; done; nmcli connection down Hotspot 2>/dev/null || true"];
-            hotspotRunner.running = true;
-        }
-    }
-
-    function refreshStatus() {
-        wifiStatusChecker.running = true;
-        wifiSavedChecker.running = true;
-        hotspotStatusChecker.running = true;
-        netInfoChecker.running = true;
-    }
-
-    Timer {
-        interval: 7000; running: (root.activeMode === "wifi" && wifiMaster.visible); repeat: true
-        onTriggered: {
-            if (!wifiMaster.isScanning && !wifiMaster.isAnyWifiExpanded()) wifiSavedChecker.running = true;
-            hotspotStatusChecker.running = true;
-            netInfoChecker.running = true;
-        }
-    }
-
-    onVisibleChanged: {
-        if (visible) refreshStatus();
-    }
-
-    Component.onCompleted: refreshStatus()
 
     // ========================================================
-    // 1. HERO CONNECTIVITY CARD — Material 3 Expressive
+    // 2. MAIN SCROLLABLE CONTENT (Lucid 1:1 Layout)
     // ========================================================
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 64
-        radius: 20
-        color: wifiMaster.colCard
+    Flickable {
+        id: subScroll
+        anchors.top: subHeader.bottom
+        anchors.topMargin: 6
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        contentWidth: width
+        contentHeight: root.wifiEnabled ? col.implicitHeight : disabledCol.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
 
-        Behavior on color { ColorAnimation { duration: 200 } }
+        // Disabled State (Lucid 1:1)
+        Column {
+            id: disabledCol
+            visible: !root.wifiEnabled
+            width: parent.width
+            topPadding: 24
+            spacing: 8
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
+            MaterialSymbol {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "wifi_off"
+                iconSize: 36
+                color: Qt.rgba(255, 255, 255, 0.35)
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Wi-Fi is turned off"
+                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                font.bold: true
+                font.pixelSize: 13
+                color: "#ffffff"
+                renderType: Text.NativeRendering
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Turn on Wi-Fi to see available networks"
+                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                font.pixelSize: 11
+                color: Qt.rgba(255, 255, 255, 0.50)
+                renderType: Text.NativeRendering
+            }
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 92; height: 30; radius: 15
+                color: turnOnMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.88)
+                scale: turnOnMouse.pressed ? 0.95 : 1.0
+                Behavior on scale { NumberAnimation { duration: 80 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "Turn On"
+                    font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: "#121214"
+                    renderType: Text.NativeRendering
+                }
+
+                MouseArea {
+                    id: turnOnMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: root.toggleRadio()
+                }
+            }
+        }
+
+        // Active Content Column (copied 1:1 from Lucid WifiPanel.qml `Column { id: col }`)
+        Column {
+            id: col
+            visible: root.wifiEnabled
+            width: subScroll.width
             spacing: 10
 
-            // Tactile Back to Utility Button
-            IrisIconButton {
-                width: 28
-                height: 28
-                buttonSize: 28
-                buttonRadius: 14
-                flat: true
-                icon: "arrow_back"
-                iconSize: 15
-                iconColor: wifiMaster.colText
-                onClicked: root.switchMode("utility", true)
-            }
-
-            // Expressive squircle icon badge
-            Rectangle {
-                width: 38; height: 38; radius: 14
-                color: wifiMaster.colChipBg
-                border.width: 0
-                Behavior on color { ColorAnimation { duration: 200 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    iconSize: 20
-                    fill: wifiMaster.isConnected ? 1 : 0
-                    text: (typeof dashMod !== "undefined" && dashMod.activeNetType === "eth") ? "lan" :
-                          (wifiMaster.isConnected ? "wifi" : "wifi_off")
-                    color: wifiMaster.isConnected ? wifiMaster.colAccent : wifiMaster.colMuted
-                }
-            }
-
-            // Connection Name & Subtitle (Speed + IP)
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
-
-                Text {
-                    Layout.fillWidth: true
-                    text: {
-                        if (typeof dashMod === "undefined") return "Network status";
-                        if (dashMod.activeNetName === "") return dashMod.activeNetType === "eth" ? "Ethernet disconnected" : "Wi-Fi disconnected";
-                        if (dashMod.activeNetType === "eth" && (dashMod.activeNetName === "Wired connection 1" || dashMod.activeNetName === "")) return "Ethernet";
-                        return dashMod.activeNetName;
-                    }
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: wifiMaster.colText
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: {
-                        if (typeof dashMod === "undefined" || dashMod.activeNetName === "") return "No network connection";
-                        var typeStr = dashMod.activeNetType === "eth" ? "Wired Ethernet" : "Wi-Fi";
-                        var speedStr = wifiMaster.netSpeed !== "" ? (" • " + wifiMaster.netSpeed) : "";
-                        var ipStr = wifiMaster.netIp !== "" ? (" • " + wifiMaster.netIp) : "";
-                        return typeStr + speedStr + ipStr;
-                    }
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Normal
-                    color: wifiMaster.colSubtext
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            // Status Badge Pill
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: statusRow.implicitWidth + 14
-                radius: 12
-                color: wifiMaster.colChipBg
-
-                RowLayout {
-                    id: statusRow
-                    anchors.centerIn: parent
-                    spacing: 5
-
-                    Rectangle {
-                        width: 6; height: 6; radius: 3
-                        color: wifiMaster.isConnected ? wifiMaster.colAccent : wifiMaster.colMuted
-
-                        SequentialAnimation on opacity {
-                            running: wifiMaster.isConnected
-                            loops: Animation.Infinite
-                            NumberAnimation { from: 0.6; to: 1.0; duration: 1000; easing.type: Easing.InOutSine }
-                            NumberAnimation { from: 1.0; to: 0.6; duration: 1000; easing.type: Easing.InOutSine }
-                        }
-                    }
-
-                    Text {
-                        text: wifiMaster.isConnected ? "Connected" : "Disconnected"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        color: wifiMaster.isConnected ? wifiMaster.colAccent : wifiMaster.colMuted
-                        renderType: Text.NativeRendering
-                    }
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 2. SEGMENTED BUTTONS — Material 3 Expressive
-    // ========================================================
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 44
-        radius: 22
-        color: wifiMaster.colCard
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 4
-            spacing: 4
-
-            // Wi-Fi Segment
-            Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: 18
-                color: wifiMaster.activeTab === "wifi" ? Qt.alpha(wifiMaster.colAccent, 0.18) : (wifiSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
-                border.width: 0
-                Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                RowLayout {
-                    anchors.centerIn: parent; spacing: 6
-                    MaterialSymbol {
-                        iconSize: 17
-                        fill: wifiMaster.activeTab === "wifi" ? 1 : 0
-                        text: "wifi"
-                        color: wifiMaster.activeTab === "wifi" ? wifiMaster.colAccent : wifiMaster.colMuted
-                    }
-                    Text {
-                        text: "Wi-Fi Networks"
-                        font.family: "Noto Sans"
-                        font.weight: wifiMaster.activeTab === "wifi" ? Font.DemiBold : Font.Medium
-                        font.pixelSize: 12
-                        color: wifiMaster.activeTab === "wifi" ? wifiMaster.colText : wifiMaster.colSubtext
-                        renderType: Text.NativeRendering
-                    }
-                }
-                MouseArea {
-                    id: wifiSegmentMouse
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.activeTab = "wifi"
-                }
-            }
-
-            // Hotspot Segment
-            Rectangle {
-                Layout.fillWidth: true; Layout.fillHeight: true; radius: 18
-                color: wifiMaster.activeTab === "hotspot" ? Qt.alpha(wifiMaster.colAccent, 0.18) : (hotspotSegmentMouse.containsMouse ? wifiMaster.colCardHover : "transparent")
-                border.width: 0
-                Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                RowLayout {
-                    anchors.centerIn: parent; spacing: 6
-                    MaterialSymbol {
-                        iconSize: 17
-                        fill: wifiMaster.activeTab === "hotspot" ? 1 : 0
-                        text: "wifi_tethering"
-                        color: wifiMaster.activeTab === "hotspot" ? wifiMaster.colAccent : wifiMaster.colMuted
-                    }
-                    Text {
-                        text: wifiMaster.hotspotActive ? "Hotspot (Active)" : "Personal Hotspot"
-                        font.family: "Noto Sans"
-                        font.weight: wifiMaster.activeTab === "hotspot" ? Font.DemiBold : Font.Medium
-                        font.pixelSize: 12
-                        color: wifiMaster.activeTab === "hotspot" ? wifiMaster.colText : wifiMaster.colSubtext
-                        renderType: Text.NativeRendering
-                    }
-                }
-                MouseArea {
-                    id: hotspotSegmentMouse
-                    anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.activeTab = "hotspot"
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 3. WI-FI TAB VIEW
-    // ========================================================
-    ColumnLayout {
-        Layout.fillWidth: true; Layout.fillHeight: true
-        visible: wifiMaster.activeTab === "wifi"
-        spacing: 6
-
-        // Subheader: Switch + Title + Network count + Rescan
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                spacing: 8
-
-                MaterialSwitch {
-                    checked: wifiMaster.wifiEnabled
-                    onToggled: {
-                        var target = wifiMaster.wifiEnabled ? "off" : "on";
-                        wifiMaster.wifiEnabled = !wifiMaster.wifiEnabled;
-                        wifiToggler.command = ["sh", "-c", "nmcli radio wifi " + target];
-                        wifiToggler.running = true;
-                    }
-                }
-
-                Text {
-                    text: "Available Networks"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    color: wifiMaster.colText
-                    renderType: Text.NativeRendering
-                }
-
-                // Count Pill
-                Rectangle {
-                    visible: wifiMaster.wifiEnabled && wifiModel.count > 0
-                    Layout.preferredHeight: 22
-                    Layout.preferredWidth: countText.implicitWidth + 12
-                    radius: 11
-                    color: wifiMaster.colChipBg
-
-                    Text {
-                        id: countText
-                        anchors.centerIn: parent
-                        text: wifiModel.count + (wifiModel.count === 1 ? " network" : " networks")
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        font.weight: Font.Medium
-                        color: wifiMaster.colSubtext
-                        renderType: Text.NativeRendering
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Refresh Scan Icon Button
-                IrisIconButton {
-                    visible: wifiMaster.wifiEnabled
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
-                    buttonSize: 32
-                    buttonRadius: 16
-                    flat: true
-                    icon: "refresh"
-                    iconSize: 17
-                    spinning: wifiMaster.isScanning
-                    iconColor: wifiMaster.isScanning ? wifiMaster.colAccent : wifiMaster.colSubtext
-                    onClicked: if (!wifiMaster.isScanning) wifiMaster.triggerScan()
-                }
-            }
-
-            // Scanning Progress Bar
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 3
-                radius: 1.5
-                color: "transparent"
-                visible: wifiMaster.isScanning
-                clip: true
-
-                Rectangle {
-                    id: scanBeam
-                    width: parent.width * 0.35
-                    height: parent.height
-                    radius: 1.5
-                    color: wifiMaster.colAccent
-
-                    SequentialAnimation on x {
-                        running: wifiMaster.isScanning
-                        loops: Animation.Infinite
-                        NumberAnimation { from: -scanBeam.width; to: wifiMaster.width; duration: 1100; easing.type: Easing.InOutQuad }
-                    }
-                }
-            }
-        }
-
-        // Wi-Fi Networks ListView
-        ListView {
-            id: wifiListView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            spacing: 8
-            model: wifiMaster.model
-            boundsBehavior: Flickable.DragAndOvershootBounds
-            maximumFlickVelocity: 2500
-            flickDeceleration: 1500
-
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                width: 3
-                contentItem: Rectangle {
-                    radius: 1.5
-                    color: wifiMaster.colChipBg
-                }
-            }
-
-            WheelHandler {
-                target: wifiListView
-                onWheel: (event) => {
-                    if (event.angleDelta.y !== 0) {
-                        var step = event.angleDelta.y > 0 ? -90 : 90;
-                        wifiListView.contentY = Math.max(
-                            0,
-                            Math.min(wifiListView.contentHeight - wifiListView.height, wifiListView.contentY + step)
-                        );
-                        event.accepted = true;
-                    }
-                }
-            }
-
-            // Wi-Fi Disabled State
+            // ────────────────────────────────────────────────────
+            // ITEM 1: ETHERNET ROW (Lucid 1:1)
+            // ────────────────────────────────────────────────────
             Item {
-                anchors.centerIn: parent
+                visible: root.ethernetData !== null
                 width: parent.width
-                visible: !wifiMaster.wifiEnabled
-                height: 100
+                height: 40
 
-                ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 6
+                EthernetGlyph {
+                    id: ethIcon
+                    width: 16
+                    height: 16
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    glyphColor: (root.ethernetData && root.ethernetData.connected) ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.45)
+                }
 
-                    MaterialSymbol {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "wifi_off"
-                        iconSize: 30
-                        color: wifiMaster.colMuted
-                    }
+                Column {
+                    anchors.left: ethIcon.right
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
                     Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: "Wi-Fi is turned off"
-                        font.family: "Noto Sans"
-                        font.weight: Font.Medium
-                        font.pixelSize: 13
-                        color: wifiMaster.colSubtext
+                        text: "Ethernet"
+                        color: "#ffffff"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 12
                         renderType: Text.NativeRendering
+                    }
+
+                    Text {
+                        text: {
+                            if (!root.ethernetData) return "No cable connected";
+                            if (root.ethernetData.connected) {
+                                var parts = ["Connected"];
+                                if (root.ethernetData.speed) parts.push(root.ethernetData.speed + " Mbps");
+                                if (root.ethernetData.ip) parts.push(root.ethernetData.ip);
+                                return parts.join(" · ");
+                            }
+                            return "Cable connected · not configured";
+                        }
+                        color: (root.ethernetData && root.ethernetData.connected) ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.45)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 10
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                Rectangle {
+                    visible: !!(root.ethernetData && root.ethernetData.connected)
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 78
+                    height: 26
+                    radius: 999
+                    color: ethDisconnectArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
+                    border.width: 1
+                    border.color: Qt.rgba(255, 255, 255, 0.20)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Disconnect"
+                        color: "#ffffff"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 10
+                        renderType: Text.NativeRendering
+                    }
+
+                    MouseArea {
+                        id: ethDisconnectArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.disconnectEthernet()
                     }
                 }
             }
 
-            // Network Card Delegate — Material 3 Expressive
-            delegate: Rectangle {
-                id: wifiCard
-                width: ListView.view.width
-                implicitHeight: networkCol.implicitHeight + 22
-                radius: inUse ? 20 : 16
-                color: inUse 
-                    ? (rowPressArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colCardActive)
-                    : (rowPressArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colCard)
-                border.width: 0
+            // ────────────────────────────────────────────────────
+            // ITEM 2: SCAN BUTTON CAPSULE (Lucid 1:1)
+            // ────────────────────────────────────────────────────
+            Item {
+                id: scanButton
+                width: parent.width
+                height: 44
 
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Behavior on radius { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                Behavior on implicitHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Rectangle {
+                    anchors.fill: parent
+                    radius: height / 2
+                    color: root.isScanning ? Qt.rgba(255, 255, 255, 0.10) : (scanArea.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : Qt.rgba(255, 255, 255, 0.04))
+                    Behavior on color { ColorAnimation { duration: 150 } }
 
-                property bool isCurrentlyConnecting: (wifiMaster.connectingSsid === ssid)
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 10
 
-                ColumnLayout {
-                    id: networkCol
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                    anchors.margins: 13
-                    spacing: 10
-
-                    RowLayout {
-                        id: networkRow
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        // Signal badge
-                        Rectangle {
-                            width: 38; height: 38; radius: 14
-                            color: wifiMaster.colChipBg
-                            border.width: 0
-                            Behavior on radius { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+                        Item {
+                            width: 24
+                            height: 24
+                            anchors.verticalCenter: parent.verticalCenter
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
-                                iconSize: 19
-                                fill: inUse ? 1 : 0
-                                text: inUse ? "wifi" : (signal > 75 ? "signal_wifi_4_bar" : signal > 50 ? "network_wifi_3_bar" : signal > 25 ? "network_wifi_2_bar" : "network_wifi_1_bar")
-                                color: inUse ? wifiMaster.colAccent : (signal > 50 ? wifiMaster.colText : wifiMaster.colSubtext)
+                                visible: !root.isScanning
+                                text: "wifi_find"
+                                iconSize: 20
+                                color: Qt.rgba(255, 255, 255, 0.55)
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: root.isScanning
+                                text: "refresh"
+                                iconSize: 18
+                                color: (typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7"
+                                RotationAnimation on rotation {
+                                    from: 0; to: 360; duration: 900; loops: Animation.Infinite
+                                    running: root.isScanning
+                                }
                             }
                         }
 
-                        // SSID + chips — capped so it can never crush the action controls
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 60
-                            spacing: 3
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.isScanning ? "Looking for networks" : "Search for networks"
+                            font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                            font.pixelSize: 12
+                            color: root.isScanning ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : "#ffffff"
+                            renderType: Text.NativeRendering
+                        }
+                    }
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: root.isScanning
+                        text: "Stop"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 11
+                        color: Qt.rgba(255, 255, 255, 0.70)
+                        renderType: Text.NativeRendering
+                    }
+
+                    MouseArea {
+                        id: scanArea
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            if (root.isScanning) {
+                                wifiScanProc.running = false;
+                            } else {
+                                root.scan(true);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ────────────────────────────────────────────────────
+            // ITEM 3: LIST COLUMN (Lucid 1:1 `Column { id: listCol }`)
+            // ────────────────────────────────────────────────────
+            Column {
+                id: listCol
+                width: parent.width
+                spacing: 14
+
+                // SECTION 1: CONNECTED
+                Column {
+                    width: parent.width
+                    spacing: 3
+                    visible: root.connectedNetworks.length > 0
+
+                    Text {
+                        text: "Connected"
+                        color: (typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 12
+                        leftPadding: 4
+                        bottomPadding: 3
+                        renderType: Text.NativeRendering
+                    }
+
+                    Repeater {
+                        model: root.connectedNetworks
+                        NetRow { }
+                    }
+                }
+
+                // SECTION 2: SAVED
+                Column {
+                    width: parent.width
+                    spacing: 3
+                    visible: root.savedNetworks.length > 0
+
+                    Text {
+                        text: "Saved"
+                        color: (typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 12
+                        leftPadding: 4
+                        bottomPadding: 3
+                        renderType: Text.NativeRendering
+                    }
+
+                    Repeater {
+                        model: root.savedNetworks
+                        NetRow { }
+                    }
+                }
+
+                // SECTION 3: NEARBY
+                Column {
+                    width: parent.width
+                    spacing: 3
+                    visible: root.nearbyNetworks.length > 0
+
+                    Text {
+                        text: "Nearby"
+                        color: (typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 12
+                        leftPadding: 4
+                        bottomPadding: 3
+                        renderType: Text.NativeRendering
+                    }
+
+                    Repeater {
+                        model: root.nearbyNetworks
+                        NetRow { }
+                    }
+                }
+
+                // SECTION 4: EMPTY STATE
+                Column {
+                    width: parent.width
+                    visible: root.totalCount === 0 && !root.isScanning
+                    topPadding: 18
+                    bottomPadding: 6
+                    spacing: 4
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "No networks found"
+                        color: Qt.rgba(255, 255, 255, 0.45)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 12
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                // SECTION 5: HIDDEN NETWORK (Lucid 1:1)
+                Column {
+                    width: parent.width
+                    spacing: 8
+                    topPadding: 2
+
+                    Text {
+                        visible: !root.hiddenFormOpen
+                        text: "Connect to hidden network"
+                        color: Qt.rgba(255, 255, 255, 0.55)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 11
+                        font.underline: hiddenToggleArea.containsMouse
+                        leftPadding: 4
+                        renderType: Text.NativeRendering
+
+                        MouseArea {
+                            id: hiddenToggleArea
+                            anchors.fill: parent
+                            anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onClicked: root.hiddenFormOpen = true
+                        }
+                    }
+
+                    Column {
+                        width: parent.width
+                        visible: root.hiddenFormOpen
+                        spacing: 6
+                        leftPadding: 4
+                        rightPadding: 4
+
+                        Rectangle {
+                            width: parent.width - 8
+                            height: 30
+                            radius: 8
+                            color: Qt.rgba(0, 0, 0, 0.35)
+                            border.width: 1
+                            border.color: hiddenSsidInput.activeFocus ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.12)
 
                             Text {
-                                Layout.fillWidth: true
-                                text: ssid
-                                elide: Text.ElideRight
-                                font.family: "Noto Sans"
-                                font.pixelSize: 14
-                                font.weight: inUse ? Font.Bold : Font.Medium
-                                color: wifiMaster.colText
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Network name (SSID)"
+                                color: Qt.rgba(255, 255, 255, 0.35)
+                                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                font.pixelSize: 11
+                                visible: !hiddenSsidInput.text && !hiddenSsidInput.activeFocus
                                 renderType: Text.NativeRendering
                             }
 
-                            RowLayout {
-                                spacing: 5
-
-                                Rectangle {
-                                    visible: typeof band !== "undefined" && band !== ""
-                                    Layout.preferredHeight: 19
-                                    Layout.preferredWidth: bandLabel.implicitWidth + 10
-                                    radius: 6
-                                    color: wifiMaster.colChipBg
-
-                                    Text {
-                                        id: bandLabel
-                                        anchors.centerIn: parent
-                                        text: typeof band !== "undefined" ? band : ""
-                                        font.family: "Noto Sans"
-                                        font.pixelSize: 10
-                                        font.weight: Font.Medium
-                                        color: inUse ? wifiMaster.colAccent : wifiMaster.colMuted
-                                        renderType: Text.NativeRendering
-                                    }
-                                }
-
-                                Rectangle {
-                                    visible: typeof rate !== "undefined" && rate !== ""
-                                    Layout.preferredHeight: 19
-                                    Layout.preferredWidth: rateLabel.implicitWidth + 10
-                                    radius: 6
-                                    color: wifiMaster.colChipBg
-
-                                    Text {
-                                        id: rateLabel
-                                        anchors.centerIn: parent
-                                        text: typeof rate !== "undefined" ? rate : ""
-                                        font.family: "Noto Sans"
-                                        font.pixelSize: 10
-                                        font.weight: Font.Normal
-                                        color: wifiMaster.colSubtext
-                                        renderType: Text.NativeRendering
-                                    }
-                                }
-
-                                Rectangle {
-                                    visible: security !== "" && security !== "--"
-                                    Layout.preferredHeight: 19
-                                    Layout.preferredWidth: secLabel.implicitWidth + 10
-                                    radius: 6
-                                    color: wifiMaster.colChipBg
-
-                                    Text {
-                                        id: secLabel
-                                        anchors.centerIn: parent
-                                        text: security
-                                        font.family: "Noto Sans"
-                                        font.pixelSize: 10
-                                        font.weight: Font.Normal
-                                        color: wifiMaster.colMuted
-                                        renderType: Text.NativeRendering
-                                    }
-                                }
-
-                                // Text {
-                                //     visible: inUse || isSaved
-                                //     text: inUse ? "• Connected" : "• Saved"
-                                //     font.family: "Noto Sans"
-                                //     font.pixelSize: 10
-                                //     color: inUse ? wifiMaster.colGreen : wifiMaster.colMuted
-                                //     renderType: Text.NativeRendering
-                                // }
-                            }
-                        }
-
-                        // Signal % pill — hidden on the connected row to make room
-                        // for the Disconnect button (previously always visible,
-                        // which is what was squeezing Disconnect out of view).
-                        Rectangle {
-                            visible: !inUse
-                            Layout.preferredHeight: 26
-                            Layout.preferredWidth: sigRow.implicitWidth + 14
-                            radius: 13
-                            color: wifiMaster.colChipBg
-
-                            RowLayout {
-                                id: sigRow
-                                anchors.centerIn: parent
-                                spacing: 4
-
-                                Text {
-                                    text: signal + "%"
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 11
-                                    font.weight: Font.Bold
-                                    color: wifiMaster.colSubtext
-                                    renderType: Text.NativeRendering
-                                }
-
-                                MaterialSymbol {
-                                    visible: security !== "" && security !== "--"
-                                    text: "lock"
-                                    iconSize: 12
-                                    color: wifiMaster.colMuted
-                                }
-                            }
-                        }
-
-                        // Connecting status label
-                        Text {
-                            visible: isCurrentlyConnecting
-                            text: "Connecting…"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            color: wifiMaster.colAccent
-                            renderType: Text.NativeRendering
-                        }
-
-                        // Disconnect button
-                        Rectangle {
-                            id: disconnectBtn
-                            visible: inUse
-                            Layout.preferredHeight: 30
-                            Layout.preferredWidth: disconnectRow.implicitWidth + 18
-                            Layout.minimumWidth: disconnectRow.implicitWidth + 18
-                            radius: 15
-                            color: disconnectArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)
-                            border.width: 0
-                            Behavior on color { ColorAnimation { duration: 140 } }
-
-                            RowLayout {
-                                id: disconnectRow
-                                anchors.centerIn: parent
-                                spacing: 5
-
-                                MaterialSymbol {
-                                    iconSize: 13
-                                    text: "close"
-                                    color: wifiMaster.colRed
-                                }
-                                Text {
-                                    text: "Disconnect"
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: wifiMaster.colRed
-                                    renderType: Text.NativeRendering
-                                }
-                            }
-
-                            MouseArea {
-                                id: disconnectArea
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                                onClicked: {
-                                    wifiDisconnecter.command = ["sh", "-c", "nmcli connection down id '" + ssid + "' || nmcli dev disconnect wlan0"];
-                                    wifiDisconnecter.running = true;
-                                }
-                            }
-                        }
-
-                        // Expand/collapse chevron
-                        MaterialSymbol {
-                            visible: !inUse && !isCurrentlyConnecting
-                            text: "expand_more"
-                            iconSize: 19
-                            color: wifiMaster.colMuted
-                            rotation: isExpanded ? 180 : 0
-                            Behavior on rotation { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                        }
-                    }
-
-                    // Drawer Actions (Connect, Forget, Auto-connect)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: (!inUse && isExpanded && !showPassword) ? implicitHeight : 0
-                        visible: Layout.preferredHeight > 0
-                        clip: true
-                        spacing: 8
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-
-                        // Connect Button
-                        Rectangle {
-                            Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 14
-                            color: isCurrentlyConnecting ? Qt.alpha(wifiMaster.colAccent, 0.12) : (connectArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
-                            border.width: 0
-                            Behavior on color { ColorAnimation { duration: 140 } }
-
-                            Text { 
-                                anchors.centerIn: parent
-                                text: isCurrentlyConnecting ? "Connecting…" : "Connect"
-                                color: isCurrentlyConnecting ? wifiMaster.colSubtext : wifiMaster.colAccent
-                                font.family: "Noto Sans"
-                                font.bold: true
+                            TextInput {
+                                id: hiddenSsidInput
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                verticalAlignment: Text.AlignVCenter
+                                color: "#ffffff"
+                                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
                                 font.pixelSize: 12
-                                renderType: Text.NativeRendering
-                            }
-                            MouseArea {
-                                id: connectArea
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; enabled: !isCurrentlyConnecting; hoverEnabled: true
-                                onClicked: {
-                                    var isOpen = (security === "" || security === "--");
-                                    if (isSaved || isOpen) {
-                                        wifiMaster.initiateConnection(ssid, "", index);
-                                    } else {
-                                        wifiModel.setProperty(index, "showPassword", true);
-                                        Qt.callLater(() => passField.forceActiveFocus());
-                                    }
-                                }
-                            }
-                        }
-
-                        // Forget Button (if saved)
-                        Rectangle {
-                            visible: isSaved
-                            Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 14
-                            color: forgetArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : wifiMaster.colChipBg
-                            Behavior on color { ColorAnimation { duration: 140 } }
-
-                            Text { 
-                                anchors.centerIn: parent
-                                text: "Forget"
-                                color: forgetArea.containsMouse ? wifiMaster.colRed : wifiMaster.colSubtext
-                                font.family: "Noto Sans"
-                                font.weight: Font.Medium
-                                font.pixelSize: 12
-                                renderType: Text.NativeRendering
-                            }
-                            MouseArea {
-                                id: forgetArea
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                                onClicked: {
-                                    wifiForgetRunner.command = ["sh", "-c", "nmcli connection delete id '" + ssid + "' || true"];
-                                    wifiForgetRunner.running = true;
-                                    wifiModel.setProperty(index, "isSaved", false);
-                                    wifiModel.setProperty(index, "isExpanded", false);
-                                }
-                            }
-                        }
-
-                        // Auto-connect Button
-                        Rectangle {
-                            Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 14
-                            color: trustArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg
-                            Behavior on color { ColorAnimation { duration: 140 } }
-
-                            Text { 
-                                anchors.centerIn: parent
-                                text: "Auto-connect"
-                                color: wifiMaster.colSubtext
-                                font.family: "Noto Sans"
-                                font.weight: Font.Medium
-                                font.pixelSize: 12
-                                renderType: Text.NativeRendering
-                            }
-                            MouseArea {
-                                id: trustArea
-                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                                onClicked: {
-                                    wifiTrustRunner.command = ["sh", "-c", "nmcli connection modify id '" + ssid + "' connection.autoconnect yes || true"];
-                                    wifiTrustRunner.running = true;
-                                    wifiModel.setProperty(index, "isExpanded", false);
-                                }
-                            }
-                        }
-                    }
-
-                    // Password input field
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: (!inUse && isExpanded && showPassword) ? implicitHeight : 0
-                        visible: Layout.preferredHeight > 0
-                        clip: true
-                        spacing: 6
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: 8
-
-                            TextField {
-                                id: passField
-                                Layout.fillWidth: true; Layout.preferredHeight: 38
-                                placeholderText: "Enter Wi-Fi password…"
-                                placeholderTextColor: wifiMaster.colMuted
-                                echoMode: TextInput.Password
-                                color: wifiMaster.colText
-                                font.family: "Noto Sans"
-                                font.pixelSize: 12
-                                verticalAlignment: TextInput.AlignVCenter
                                 selectByMouse: true
-                                enabled: !isCurrentlyConnecting
-                                background: Rectangle {
-                                    color: wifiMaster.colChipBg
-                                    radius: 12
-                                }
-                                Keys.onReturnPressed: joinBtn.submit()
-                                Keys.onEnterPressed: joinBtn.submit()
-                                Keys.onEscapePressed: (event) => {
-                                    row.isExpanded = false;
-                                    event.accepted = true;
-                                }
+                                onTextChanged: root.hiddenSsid = text
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width - 8
+                            height: 30
+                            radius: 8
+                            color: Qt.rgba(0, 0, 0, 0.35)
+                            border.width: 1
+                            border.color: hiddenPskInput.activeFocus ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.12)
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Password"
+                                color: Qt.rgba(255, 255, 255, 0.35)
+                                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                font.pixelSize: 11
+                                visible: !hiddenPskInput.text && !hiddenPskInput.activeFocus
+                                renderType: Text.NativeRendering
                             }
 
+                            TextInput {
+                                id: hiddenPskInput
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                verticalAlignment: Text.AlignVCenter
+                                echoMode: TextInput.Password
+                                passwordCharacter: "•"
+                                color: "#ffffff"
+                                font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                font.pixelSize: 12
+                                selectByMouse: true
+                                onTextChanged: root.hiddenPass = text
+                                onAccepted: hiddenConnectBtn.clickedAction()
+                            }
+                        }
+
+                        Row {
+                            spacing: 8
+                            height: 28
+
                             Rectangle {
-                                id: joinBtn
-                                Layout.preferredWidth: isCurrentlyConnecting ? 84 : 58
-                                Layout.preferredHeight: 38
-                                radius: 12
-                                color: isCurrentlyConnecting ? wifiMaster.colCardHover : (joinArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
-                                border.width: 0
-                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                                Behavior on color { ColorAnimation { duration: 140 } }
-                                function submit() { if (!isCurrentlyConnecting) wifiMaster.initiateConnection(ssid, passField.text, index); }
-                                
-                                Text { 
+                                id: hiddenConnectBtn
+                                width: 90
+                                height: parent.height
+                                radius: 999
+                                color: hiddenConnectArea.containsMouse ? "#ffffff" : ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7")
+
+                                function clickedAction() {
+                                    if (root.hiddenSsid.trim().length > 0) {
+                                        root.connectNetwork(root.hiddenSsid.trim(), root.hiddenPass.trim());
+                                        root.hiddenFormOpen = false;
+                                        hiddenSsidInput.text = "";
+                                        hiddenPskInput.text = "";
+                                    }
+                                }
+
+                                Text {
                                     anchors.centerIn: parent
-                                    text: isCurrentlyConnecting ? "Joining…" : "Join"
-                                    color: isCurrentlyConnecting ? wifiMaster.colSubtext : wifiMaster.colAccent
-                                    font.family: "Noto Sans"
+                                    text: "Connect"
+                                    color: "#121214"
+                                    font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
                                     font.bold: true
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     renderType: Text.NativeRendering
                                 }
-                                MouseArea { id: joinArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; enabled: !isCurrentlyConnecting; hoverEnabled: true; onClicked: joinBtn.submit() }
+
+                                MouseArea {
+                                    id: hiddenConnectArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: hiddenConnectBtn.clickedAction()
+                                }
                             }
 
                             Rectangle {
-                                Layout.preferredWidth: 38; Layout.preferredHeight: 38; radius: 12
-                                color: cancelArea.containsMouse ? wifiMaster.colCardHover : "transparent"
-                                enabled: !isCurrentlyConnecting
-                                MaterialSymbol { 
+                                width: 70
+                                height: parent.height
+                                radius: 999
+                                color: "transparent"
+                                border.width: 1
+                                border.color: Qt.rgba(255, 255, 255, 0.20)
+
+                                Text {
                                     anchors.centerIn: parent
-                                    text: "close"
-                                    color: wifiMaster.colMuted
-                                    iconSize: 16
+                                    text: "Cancel"
+                                    color: "#ffffff"
+                                    font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                    font.bold: true
+                                    font.pixelSize: 11
+                                    renderType: Text.NativeRendering
                                 }
+
                                 MouseArea {
-                                    id: cancelArea
-                                    anchors.fill: parent; hoverEnabled: true
+                                    anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        wifiModel.setProperty(index, "showPassword", false);
-                                        wifiModel.setProperty(index, "isExpanded", false);
-                                        wifiModel.setProperty(index, "hasError", false);
-                                        wifiModel.setProperty(index, "errorMsg", "");
+                                        root.hiddenFormOpen = false;
+                                        hiddenSsidInput.text = "";
+                                        hiddenPskInput.text = "";
                                     }
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // ========================================================
+    // 3. LUCID NETROW (Copied 1:1 from Lucid WifiPanel.qml `component NetRow: Column`)
+    // ========================================================
+    component NetRow: Rectangle {
+        id: netItem
+
+        required property var modelData
+        readonly property bool isExpanded: root.expandedSsid === modelData.ssid
+        readonly property bool isConnected: !!modelData.active || (root.connectedSsid === modelData.ssid && modelData.ssid !== "")
+        readonly property bool isSecured: modelData.security !== "Open" && modelData.security !== "--" && modelData.security !== ""
+        readonly property bool isTrusted: !!modelData.saved
+        readonly property bool connectFailed: !!root.failedSsidMap[modelData.ssid]
+        readonly property string failReason: root.failedSsidMap[modelData.ssid] || ""
+        readonly property bool isConnecting: (root.pendingSsid === modelData.ssid && modelData.ssid !== "")
+        readonly property bool canShare: netItem.isTrusted
+        property bool sharing: false
+
+        width: parent.width
+        radius: netItem.isExpanded ? 18 : 14
+        color: netItem.isExpanded ? Qt.rgba(255, 255, 255, 0.08) : (rowArea.containsMouse ? Qt.rgba(255, 255, 255, 0.065) : Qt.rgba(255, 255, 255, 0.04))
+        border.width: netItem.isExpanded ? 1 : 0
+        border.color: netItem.isExpanded ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
+        clip: true
+
+        Behavior on radius { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on border.color { ColorAnimation { duration: 150 } }
+        Behavior on height { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+
+        height: 54 + (netItem.isExpanded ? (expandContent.implicitHeight + 8) : 0)
+
+        onIsExpandedChanged: {
+            if (!isExpanded) {
+                netItem.sharing = false;
+            } else if (netItem.isTrusted) {
+                root.fetchSecret(modelData.ssid);
+            }
+        }
+
+        Column {
+            id: netCardCol
+            width: parent.width
+
+            Item {
+                width: parent.width
+                height: 54
+
+                Row {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                spacing: 14
+
+                Item {
+                    width: 20
+                    height: 20
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    WifiStrengthGlyph {
+                        anchors.centerIn: parent
+                        strength: modelData.signal || 0
+                        color: netItem.isConnected ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.65)
+                    }
+
+                    Rectangle {
+                        id: netDot
+                        visible: netItem.isConnected
+                        width: 6; height: 6; radius: 3
+                        color: "#30d158"
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: -1
+
+                        SequentialAnimation on opacity {
+                            running: netDot.visible
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutQuad }
+                            NumberAnimation { to: 1.0;  duration: 700; easing.type: Easing.InOutQuad }
+                        }
+                    }
+                }
+
+                Column {
+                    width: parent.width - 20 - 18 - 28
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
+                    Text {
+                        width: parent.width
+                        text: modelData.ssid
+                        color: "#ffffff"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 13
+                        elide: Text.ElideRight
+                        renderType: Text.NativeRendering
+                    }
+
+                    Text {
+                        text: {
+                            if (netItem.isConnected) {
+                                var parts = ["Connected"];
+                                if (modelData.band) parts.push(modelData.band);
+                                if (modelData.signal > 0) parts.push(root.getStrengthLabel(modelData.signal));
+                                if (root.activeIp) parts.push(root.activeIp);
+                                return parts.join(" · ");
+                            }
+                            if (netItem.isTrusted) {
+                                return "Saved · " + root.getStrengthLabel(modelData.signal);
+                            }
+                            return root.getStrengthLabel(modelData.signal) + (netItem.isSecured ? "" : " · Open");
+                        }
+                        color: netItem.isConnected ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.50)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 11
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                MaterialSymbol {
+                    text: "expand_more"
+                    iconSize: 20
+                    color: Qt.rgba(255, 255, 255, 0.55)
+                    anchors.verticalCenter: parent.verticalCenter
+                    rotation: netItem.isExpanded ? 180 : 0
+                    Behavior on rotation {
+                        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    }
+                }
+            }
+
+            MouseArea {
+                id: rowArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.expandedSsid = (root.expandedSsid === modelData.ssid) ? "" : modelData.ssid
+                }
+            }
+
+            Item {
+                id: expandArea
+                width: parent.width
+                height: netItem.isExpanded ? (expandContent.implicitHeight + 8) : 0
+                clip: true
+
+                Column {
+                    id: expandContent
+                    width: parent.width
+                    leftPadding: 14
+                    rightPadding: 14
+                    topPadding: 2
+                    bottomPadding: 14
+                    spacing: 10
+                    opacity: netItem.isExpanded ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 180 } }
+
+                    Rectangle {
+                        id: passwordBox
+                        visible: !netItem.isConnected && (!netItem.isTrusted || netItem.connectFailed)
+                        width: parent.width - 28
+                        height: 32
+                    radius: 8
+                    color: Qt.rgba(0, 0, 0, 0.35)
+                    border.width: 1
+                    border.color: netItem.connectFailed ? "#f87171" : (passwordInput.activeFocus ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.12))
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Enter password..."
+                        color: Qt.rgba(255, 255, 255, 0.35)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 11
+                        visible: !passwordInput.text && !passwordInput.activeFocus
+                        renderType: Text.NativeRendering
+                    }
+
+                    TextInput {
+                        id: passwordInput
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        verticalAlignment: Text.AlignVCenter
+                        echoMode: TextInput.Password
+                        passwordCharacter: "•"
+                        color: "#ffffff"
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.pixelSize: 12
+                        selectByMouse: true
+                        onAccepted: connectBtn.clickedAction()
+                    }
+                }
+
+                Row {
+                    width: parent.width - 28
+                    height: 30
+                    spacing: 8
+
+                    Rectangle {
+                        id: connectBtn
+                        width: netItem.canShare ? (parent.width - shareBtn.width - 16) / 2 : parent.width
+                        height: parent.height
+                        radius: 999
+                        color: netItem.isConnecting ? Qt.rgba(255, 255, 255, 0.15)
+                             : (netItem.isConnected ? Qt.rgba(248, 113, 113, 0.18)
+                             : (connectArea.containsMouse ? "#ffffff" : ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7")))
+                        scale: connectArea.pressed ? 0.96 : 1
+
+                        function clickedAction() {
+                            if (netItem.isConnected) {
+                                root.disconnectNetwork(modelData.ssid);
+                            } else {
+                                var pass = passwordInput.text.trim();
+                                root.connectNetwork(modelData.ssid, pass);
+                            }
+                        }
 
                         Text {
-                            visible: hasError
-                            text: "⚠ " + errorMsg
-                            color: wifiMaster.colRed
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                            renderType: Text.NativeRendering
-                        }
-                    }
-                }
-
-                // Row press/expand handling
-                MouseArea {
-                    id: rowPressArea
-                    anchors.fill: parent
-                    enabled: !inUse && !isCurrentlyConnecting && !showPassword
-                    cursorShape: Qt.PointingHandCursor
-                    hoverEnabled: true
-                    z: -1
-                    onClicked: {
-                        var next = !isExpanded;
-                        for (var k = 0; k < wifiModel.count; k++) {
-                            if (k !== index) {
-                                wifiModel.setProperty(k, "isExpanded", false);
-                                wifiModel.setProperty(k, "showPassword", false);
-                            }
-                        }
-                        wifiModel.setProperty(index, "isExpanded", next);
-                        wifiModel.setProperty(index, "showPassword", false);
-                        wifiModel.setProperty(index, "hasError", false);
-                    }
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 4. HOTSPOT TAB VIEW — Material 3 Expressive
-    // ========================================================
-    ColumnLayout {
-        Layout.fillWidth: true; Layout.fillHeight: true
-        visible: wifiMaster.activeTab === "hotspot"
-        spacing: 12
-
-        Rectangle {
-            Layout.fillWidth: true; Layout.fillHeight: true; radius: 24
-            color: wifiMaster.colCard
-            clip: true
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 10
-
-                RowLayout {
-                    Layout.fillWidth: true; spacing: 12
-                    Rectangle {
-                        width: 36; height: 36; radius: 13
-                        color: wifiMaster.colChipBg
-                        border.width: 0
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        MaterialSymbol { 
                             anchors.centerIn: parent
-                            text: "wifi_tethering"
-                            iconSize: 18
-                            fill: wifiMaster.hotspotActive ? 1 : 0
-                            color: wifiMaster.hotspotActive ? wifiMaster.colAccent : wifiMaster.colSubtext
-                        }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true; spacing: 1
-                        Text { 
-                            text: "Personal Hotspot"
-                            font.family: "Noto Sans"
-                            font.weight: Font.DemiBold
-                            font.pixelSize: 13
-                            color: wifiMaster.colText
-                            renderType: Text.NativeRendering
-                        }
-                        Text { 
-                            text: wifiMaster.hotspotActive ? "Broadcasting live" : "Inactive"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 10
-                            color: wifiMaster.hotspotActive ? wifiMaster.colAccent : wifiMaster.colMuted
-                            renderType: Text.NativeRendering
-                        }
-                    }
-                    MaterialSwitch {
-                        checked: wifiMaster.hotspotActive
-                        onToggled: wifiMaster.toggleHotspot(!wifiMaster.hotspotActive)
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true; spacing: 3
-                    Text { 
-                        text: "Hotspot Name (SSID)"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        font.weight: Font.Medium
-                        color: wifiMaster.colSubtext
-                        renderType: Text.NativeRendering
-                    }
-                    TextField {
-                        id: hotspotSsidField
-                        Layout.fillWidth: true; Layout.preferredHeight: 34
-                        text: wifiMaster.hotspotSsid
-                        color: wifiMaster.colText
-                        font.family: "Noto Sans"
-                        font.pixelSize: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                        selectByMouse: true
-                        onTextChanged: wifiMaster.hotspotSsid = text
-                        background: Rectangle { 
-                            color: wifiMaster.colChipBg
-                            radius: 10
-                        }
-                    }
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true; spacing: 3
-                    Text { 
-                        text: "Password (min. 8 characters)"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        font.weight: Font.Medium
-                        color: wifiMaster.colSubtext
-                        renderType: Text.NativeRendering
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true; spacing: 8
-                        TextField {
-                            id: hotspotPassField
-                            Layout.fillWidth: true; Layout.preferredHeight: 34
-                            text: wifiMaster.hotspotPass
-                            echoMode: wifiMaster.hotspotShowPassword ? TextInput.Normal : TextInput.Password
-                            color: wifiMaster.colText
-                            font.family: "Noto Sans"
+                            text: netItem.isConnecting ? "Connecting..." : (netItem.isConnected ? "Disconnect" : "Connect")
+                            color: netItem.isConnecting ? Qt.rgba(255, 255, 255, 0.6) : (netItem.isConnected ? "#f87171" : "#121214")
+                            font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                            font.bold: true
                             font.pixelSize: 12
-                            verticalAlignment: TextInput.AlignVCenter
-                            selectByMouse: true
-                            onTextChanged: wifiMaster.hotspotPass = text
-                            background: Rectangle { 
-                                color: wifiMaster.colChipBg
-                                radius: 10
-                            }
+                            renderType: Text.NativeRendering
                         }
-                        Rectangle {
-                            Layout.preferredWidth: 34; Layout.preferredHeight: 34; radius: 10
-                            color: eyeArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg
-                            MaterialSymbol { 
-                                anchors.centerIn: parent
-                                text: wifiMaster.hotspotShowPassword ? "visibility" : "visibility_off"
-                                iconSize: 17
-                                color: wifiMaster.colSubtext
-                            }
-                            MouseArea { id: eyeArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.hotspotShowPassword = !wifiMaster.hotspotShowPassword }
+
+                        MouseArea {
+                            id: connectArea
+                            anchors.fill: parent
+                            enabled: !netItem.isConnecting
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: connectBtn.clickedAction()
                         }
                     }
-                }
 
-                Item { Layout.fillHeight: true }
+                    Rectangle {
+                        id: forgetBtn
+                        visible: netItem.canShare
+                        width: (parent.width - shareBtn.width - 16) / 2
+                        height: parent.height
+                        radius: 999
+                        color: forgetArea.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(255, 255, 255, 0.20)
+                        scale: forgetArea.pressed ? 0.96 : 1
 
-                Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 38; radius: 12
-                    Layout.bottomMargin: 2
-                    color: wifiMaster.hotspotActive ? (startArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)) : (startArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
-                    border.width: 0
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Forget Network"
+                            color: "#ffffff"
+                            font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                            font.bold: true
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                        }
 
-                    RowLayout {
-                        anchors.centerIn: parent; spacing: 8
-                        MaterialSymbol { 
-                            text: wifiMaster.hotspotActive ? "power_settings_new" : "wifi_tethering"
+                        MouseArea {
+                            id: forgetArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.forgetNetwork(modelData.ssid)
+                        }
+                    }
+
+                    Rectangle {
+                        id: shareBtn
+                        visible: netItem.canShare
+                        width: 30
+                        height: 30
+                        radius: 999
+                        color: netItem.sharing ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : (shareArea.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
+                        border.width: netItem.sharing ? 0 : 1
+                        border.color: Qt.rgba(255, 255, 255, 0.20)
+                        scale: shareArea.pressed ? 0.94 : 1
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "qr_code"
                             iconSize: 16
-                            color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
+                            fill: netItem.sharing ? 1 : 0
+                            color: netItem.sharing ? "#121214" : "#ffffff"
                         }
-                        Text { 
-                            text: wifiMaster.hotspotActive ? "Stop Hotspot" : "Start Hotspot"
-                            font.family: "Noto Sans"
-                            font.weight: Font.DemiBold
-                            font.pixelSize: 12
-                            color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
-                            renderType: Text.NativeRendering
+
+                        MouseArea {
+                            id: shareArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: netItem.sharing = !netItem.sharing
                         }
                     }
-                    MouseArea { id: startArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.toggleHotspot(!wifiMaster.hotspotActive) }
+                }
+
+                // WifiShare View (Copied 1:1 from Lucid WifiShare.qml)
+                Loader {
+                    width: parent.width - 28
+                    active: netItem.sharing && netItem.isExpanded
+                    visible: active
+
+                    sourceComponent: Component {
+                        Item {
+                            id: shareComp
+                            property bool revealed: false
+                            property bool copied: false
+                            readonly property var info: root.shareDataMap[modelData.ssid] || ({})
+                            readonly property var rows: info.qr_rows || []
+                            implicitHeight: shareGrid.implicitHeight
+
+                            Timer {
+                                id: copiedTimer
+                                interval: 1600
+                                onTriggered: shareComp.copied = false
+                            }
+
+                            Column {
+                                id: shareGrid
+                                width: parent.width
+                                spacing: 10
+
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 148; height: 148
+                                    radius: 13
+                                    color: "#ffffff"
+
+                                    Canvas {
+                                        id: qrCanvas
+                                        anchors.fill: parent
+                                        anchors.margins: 12
+                                        visible: shareComp.rows.length > 0
+
+                                        onPaint: {
+                                            var ctx = getContext("2d");
+                                            ctx.reset();
+                                            var n = shareComp.rows.length;
+                                            if (n === 0) return;
+                                            var m = Math.max(1, Math.floor(Math.min(width, height) / n));
+                                            var ox = Math.floor((width - m * n) / 2);
+                                            var oy = Math.floor((height - m * n) / 2);
+                                            ctx.fillStyle = "#121214";
+                                            for (var y = 0; y < n; y++) {
+                                                var row = shareComp.rows[y];
+                                                for (var x = 0; x < row.length; x++) {
+                                                    if (row.charAt(x) === "1") {
+                                                        ctx.fillRect(ox + x * m, oy + y * m, m, m);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: shareComp
+                                            function onRowsChanged() { qrCanvas.requestPaint(); }
+                                        }
+                                        Component.onCompleted: qrCanvas.requestPaint()
+                                    }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: shareComp.rows.length === 0
+                                        text: "Loading QR…"
+                                        color: Qt.rgba(0, 0, 0, 0.6)
+                                        font.pixelSize: 11
+                                        renderType: Text.NativeRendering
+                                    }
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                    text: "Point a phone's camera at the code to join " + modelData.ssid + ", or type the password in."
+                                    color: Qt.rgba(255, 255, 255, 0.65)
+                                    font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                    font.pixelSize: 11
+                                    lineHeight: 1.15
+                                    renderType: Text.NativeRendering
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 38
+                                    radius: 8
+                                    color: Qt.rgba(255, 255, 255, 0.06)
+
+                                    Text {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.right: eyeBtn.left
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: shareComp.revealed ? (shareComp.info.psk || "No password") : "••••••••••"
+                                        color: "#ffffff"
+                                        font.family: shareComp.revealed ? ((typeof Theme !== "undefined" && Theme.fontFamilyNerd) ? Theme.fontFamilyNerd : "JetBrainsMono Nerd Font") : ((typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans")
+                                        font.pixelSize: shareComp.revealed ? 11 : 13
+                                        font.letterSpacing: shareComp.revealed ? 0.5 : 2
+                                        elide: Text.ElideRight
+                                        renderType: Text.NativeRendering
+                                    }
+
+                                    MaterialSymbol {
+                                        id: eyeBtn
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: shareComp.revealed ? "visibility_off" : "visibility"
+                                        iconSize: 18
+                                        color: Qt.rgba(255, 255, 255, 0.60)
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: shareComp.revealed = !shareComp.revealed
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 30
+                                    radius: 999
+                                    color: copyBtnMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
+                                    border.width: 1
+                                    border.color: Qt.rgba(255, 255, 255, 0.20)
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: shareComp.copied ? "Copied" : "Copy password"
+                                        color: "#ffffff"
+                                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                                        font.bold: true
+                                        font.pixelSize: 11
+                                        renderType: Text.NativeRendering
+                                    }
+
+                                    MouseArea {
+                                        id: copyBtnMouse
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var pass = shareComp.info.psk || "";
+                                            if (pass) {
+                                                Quickshell.execDetached(["wl-copy", pass]);
+                                                shareComp.copied = true;
+                                                copiedTimer.restart();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    id: errorText
+                    visible: netItem.connectFailed && !netItem.isConnected && !netItem.isConnecting
+                    width: parent.width - 28
+                    text: netItem.failReason || "Connection failed."
+                    color: "#f87171"
+                    font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                    font.pixelSize: 10
+                    wrapMode: Text.WordWrap
+                    renderType: Text.NativeRendering
+                }
+
+                Row {
+                    visible: netItem.isTrusted
+                    spacing: 8
+
+                    Rectangle {
+                        id: autoBox
+                        readonly property bool checked: !!modelData.autoconnect
+                        width: 15; height: 15; radius: 4
+                        color: checked ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : "transparent"
+                        border.width: 1.5
+                        border.color: checked ? ((typeof Theme !== "undefined" && Theme.accent) ? Theme.accent : "#7aa2f7") : Qt.rgba(255, 255, 255, 0.35)
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            visible: autoBox.checked
+                            text: "check"
+                            iconSize: 11
+                            color: "#121214"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleAutoConnect(modelData.ssid, !autoBox.checked)
+                        }
+                    }
+
+                    Text {
+                        text: "Connect automatically"
+                        color: Qt.rgba(255, 255, 255, 0.65)
+                        font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
+                        font.bold: true
+                        font.pixelSize: 11
+                        anchors.verticalCenter: parent.verticalCenter
+                        renderType: Text.NativeRendering
+                    }
                 }
             }
         }
     }
-
-    // ========================================================
-    // 5. MATERIAL SWITCH COMPONENT — Expressive Motion
-    // ========================================================
-    component MaterialSwitch: Item {
-        id: switchRoot
-        implicitWidth: 40
-        implicitHeight: 24
-
-        property bool checked: false
-        signal toggled()
-
-        Rectangle {
-            id: track
-            anchors.fill: parent
-            radius: height / 2
-            color: switchRoot.checked ? wifiMaster.colAccent : wifiMaster.colChipBg
-            Behavior on color { ColorAnimation { duration: 200; easing.type: Easing.OutCubic } }
-
-            Rectangle {
-                id: thumb
-                height: switchRoot.checked ? parent.height - 4 : parent.height - 8
-                width: height
-                radius: height / 2
-                color: switchRoot.checked ? wifiMaster.colSurface : wifiMaster.colText
-                anchors.verticalCenter: parent.verticalCenter
-                x: switchRoot.checked ? parent.width - width - 2 : 4
-
-                Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1] } }
-                Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            }
-        }
-
-        MouseArea {
-            id: switchMouse
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: switchRoot.toggled()
-        }
-    }
+}
 }

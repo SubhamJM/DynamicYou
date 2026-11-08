@@ -5,10 +5,21 @@ import Quickshell
 import Quickshell.Io
 import "../"
 
-Item {
+FocusScope {
     id: cheatsheetRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
+    focus: true
+
+    Keys.forwardTo: isAddingMode ? [keyField] : [searchField]
+    Keys.onEscapePressed: (event) => {
+        if (cheatsheetRoot.isAddingMode) {
+            cheatsheetRoot.isAddingMode = false;
+        } else {
+            root.collapseToIdle();
+        }
+        event.accepted = true;
+    }
 
     property string currentCategory: "All"
     property string searchQuery: ""
@@ -287,20 +298,21 @@ Item {
             Layout.preferredHeight: 32
             spacing: 8
 
+            // 34px Minimal Luxury Header
             // Back Button
             Rectangle {
-                width: 26; height: 26; radius: 13
-                color: backMouse.containsMouse ? cheatsheetRoot.hoverColor : "transparent"
-                border.width: 1
-                border.color: Theme.colors.border ?? "transparent"
+                width: 32; height: 32; radius: 16
+                color: backMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {
                     anchors.centerIn: parent
                     text: "󰁍"
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
-                    color: Theme.colors.text_primary ?? "#c0caf5"
+                    font.pixelSize: 14
+                    color: "#ffffff"
+                    renderType: Text.NativeRendering
                 }
 
                 MouseArea {
@@ -323,33 +335,26 @@ Item {
                 spacing: 6
                 Layout.alignment: Qt.AlignVCenter
                 Text {
-                    text: "󰌌"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 16
-                    color: cheatsheetRoot.accentColor
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Text {
-                    text: "Hyprland Keybindings"
-                    font.family: "Inter"
-                    font.pixelSize: 14
+                    text: "KEYBINDINGS"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    color: Theme.colors.text_primary ?? "#c0caf5"
+                    font.letterSpacing: 1.2
+                    color: Qt.rgba(255, 255, 255, 0.60)
                     anchors.verticalCenter: parent.verticalCenter
+                    renderType: Text.NativeRendering
                 }
             }
 
-            // Search Bar
+            // Search Bar Capsule
             Rectangle {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 120
                 Layout.preferredWidth: 260
                 Layout.preferredHeight: 32
                 radius: 16
-                color: cheatsheetRoot.cardColor
-                border.width: 1
-                border.color: searchField.activeFocus ? cheatsheetRoot.accentColor : Qt.rgba(1, 1, 1, 0.08)
-                Behavior on border.color { ColorAnimation { duration: 150 } }
+                color: Qt.rgba(255, 255, 255, 0.05)
+                border.width: 0
 
                 RowLayout {
                     anchors.fill: parent
@@ -361,19 +366,21 @@ Item {
                         text: "⌕"
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 14
-                        color: searchField.activeFocus ? cheatsheetRoot.accentColor : (Theme.colors.text_secondary ?? "#565f89")
+                        color: searchField.activeFocus ? "#ffffff" : Qt.rgba(255, 255, 255, 0.40)
+                        renderType: Text.NativeRendering
                     }
 
                     TextField {
                         id: searchField
                         Layout.fillWidth: true
                         Layout.minimumWidth: 80
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 12
-                        color: Theme.colors.text_primary ?? "#c0caf5"
-                        placeholderText: "Search binds (e.g. super + shift, screenshot, terminal)..."
-                        placeholderTextColor: Theme.colors.text_secondary ?? "#565f89"
+                        color: "#ffffff"
+                        placeholderText: "Search binds (e.g. super + shift, terminal)..."
+                        placeholderTextColor: Qt.rgba(255, 255, 255, 0.35)
                         background: Item {}
+                        renderType: Text.NativeRendering
 
                         onTextChanged: {
                             cheatsheetRoot.searchQuery = text;
@@ -388,13 +395,14 @@ Item {
                         Layout.preferredHeight: 18
                         radius: 9
                         visible: searchField.text.length > 0
-                        color: clearMouse.containsMouse ? cheatsheetRoot.hoverColor : "transparent"
+                        color: clearMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent"
 
                         Text {
                             anchors.centerIn: parent
                             text: "✕"
                             font.pixelSize: 10
-                            color: Theme.colors.text_secondary ?? "#565f89"
+                            color: Qt.rgba(255, 255, 255, 0.60)
+                            renderType: Text.NativeRendering
                         }
 
                         MouseArea {
@@ -413,19 +421,20 @@ Item {
 
             // Bind count badge
             Rectangle {
-                Layout.preferredHeight: 26
+                Layout.preferredHeight: 24
                 Layout.preferredWidth: countText.implicitWidth + 14
-                radius: 13
-                color: Qt.rgba(cheatsheetRoot.accentColor.r, cheatsheetRoot.accentColor.g, cheatsheetRoot.accentColor.b, 0.14)
+                radius: 12
+                color: Qt.rgba(255, 255, 255, 0.08)
 
                 Text {
                     id: countText
                     anchors.centerIn: parent
                     text: cheatsheetRoot.filteredBinds.length + " binds"
-                    font.family: "Inter"
-                    font.pixelSize: 11
-                    font.weight: Font.Medium
-                    color: cheatsheetRoot.accentColor
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    color: Qt.rgba(255, 255, 255, 0.75)
+                    renderType: Text.NativeRendering
                 }
             }
 
@@ -435,8 +444,10 @@ Item {
                 Layout.preferredWidth: addBtnRow.implicitWidth + 18
                 radius: 14
                 color: cheatsheetRoot.isAddingMode
-                    ? cheatsheetRoot.accentColor 
-                    : (addBtnMouse.containsMouse ? Qt.rgba(cheatsheetRoot.accentColor.r, cheatsheetRoot.accentColor.g, cheatsheetRoot.accentColor.b, 0.22) : Qt.rgba(cheatsheetRoot.accentColor.r, cheatsheetRoot.accentColor.g, cheatsheetRoot.accentColor.b, 0.12))
+                    ? "#ffffff" 
+                    : (addBtnMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05))
+                border.width: 0
+                Behavior on color { ColorAnimation { duration: 120 } }
                 border.width: 1
                 border.color: cheatsheetRoot.accentColor
                 Behavior on color { ColorAnimation { duration: 120 } }
@@ -457,7 +468,7 @@ Item {
 
                     Text {
                         text: cheatsheetRoot.isAddingMode ? "Close" : "Add Bind"
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
                         color: cheatsheetRoot.isAddingMode ? "#12141c" : cheatsheetRoot.accentColor
@@ -502,7 +513,7 @@ Item {
 
                 Text {
                     text: cheatsheetRoot.toastMessage
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 11
                     font.weight: Font.Medium
                     color: cheatsheetRoot.toastIsError ? "#f7768e" : "#73daca"
@@ -550,7 +561,7 @@ Item {
 
                     Text {
                         text: "󰐕 Create New Hyprland Keybind"
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 12
                         font.weight: Font.Bold
                         color: cheatsheetRoot.accentColor
@@ -588,7 +599,7 @@ Item {
                     Text {
                         visible: cheatsheetRoot.formError !== ""
                         text: cheatsheetRoot.formError
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 11
                         font.weight: Font.Medium
                         color: "#f7768e"
@@ -606,7 +617,7 @@ Item {
 
                         Text {
                             text: "Keys:"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             color: Theme.colors.text_secondary ?? "#565f89"
                         }
@@ -668,7 +679,7 @@ Item {
                                 anchors.fill: parent
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 color: Theme.colors.text_primary ?? "#ffffff"
                                 placeholderText: "Key (e.g. K, Return)"
@@ -689,7 +700,7 @@ Item {
 
                         Text {
                             text: "Category:"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             color: Theme.colors.text_secondary ?? "#565f89"
                         }
@@ -713,7 +724,7 @@ Item {
                                     id: catSelectText
                                     anchors.centerIn: parent
                                     text: modelData
-                                    font.family: "Inter"
+                                    font.family: "Noto Sans"
                                     font.pixelSize: 10
                                     font.weight: catSelectChip.isSelected ? Font.DemiBold : Font.Normal
                                     color: catSelectChip.isSelected ? cheatsheetRoot.getCatColor(modelData) : (Theme.colors.text_secondary ?? "#565f89")
@@ -774,7 +785,7 @@ Item {
                             anchors.fill: parent
                             anchors.leftMargin: 8
                             anchors.rightMargin: 8
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             color: Theme.colors.text_primary ?? "#ffffff"
                             placeholderText: "Description (e.g. Open Audio Mixer)..."
@@ -794,7 +805,7 @@ Item {
 
                     Text {
                         text: "Presets:"
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 10
                         color: Theme.colors.text_secondary ?? "#565f89"
                     }
@@ -854,7 +865,7 @@ Item {
                         Text {
                             anchors.centerIn: parent
                             text: "Cancel"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             color: Theme.colors.text_secondary ?? "#565f89"
                         }
@@ -884,7 +895,7 @@ Item {
                             id: saveBtnText
                             anchors.centerIn: parent
                             text: "󰐕 Save Keybind"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.weight: Font.Bold
                             color: "#12141c"
@@ -914,23 +925,22 @@ Item {
                 Rectangle {
                     id: catPill
                     Layout.preferredHeight: 24
-                    Layout.preferredWidth: catRow.implicitWidth + 12
+                    Layout.preferredWidth: catRow.implicitWidth + 14
                     radius: 12
                     property bool isCurrent: cheatsheetRoot.currentCategory === modelData
                     color: isCurrent 
-                        ? Qt.rgba(cheatsheetRoot.accentColor.r, cheatsheetRoot.accentColor.g, cheatsheetRoot.accentColor.b, 0.22)
-                        : (catMouse.containsMouse ? cheatsheetRoot.hoverColor : cheatsheetRoot.cardColor)
-                    border.width: 1
-                    border.color: isCurrent ? cheatsheetRoot.accentColor : Qt.rgba(1, 1, 1, 0.06)
+                        ? "#ffffff"
+                        : (catMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
+                    border.width: 0
                     Behavior on color { ColorAnimation { duration: 120 } }
 
                     Row {
                         id: catRow
                         anchors.centerIn: parent
-                        spacing: 4
+                        spacing: 5
 
                         Rectangle {
-                            width: 5; height: 5; radius: 2.5
+                            width: 6; height: 6; radius: 3
                             color: cheatsheetRoot.getCatColor(modelData)
                             anchors.verticalCenter: parent.verticalCenter
                             visible: modelData !== "All"
@@ -938,16 +948,24 @@ Item {
 
                         Text {
                             text: modelData
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 10
                             font.weight: catPill.isCurrent ? Font.DemiBold : Font.Normal
-                            color: catPill.isCurrent ? "white" : (Theme.colors.text_secondary ?? "#565f89")
+                            color: catPill.isCurrent ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
                             anchors.verticalCenter: parent.verticalCenter
+                            renderType: Text.NativeRendering
                         }
 
                         Text {
                             text: "(" + cheatsheetRoot.getCatCount(modelData) + ")"
-                            font.family: "Inter"
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 9
+                            color: catPill.isCurrent ? "#121214" : Qt.rgba(255, 255, 255, 0.40)
+                            anchors.verticalCenter: parent.verticalCenter
+                            renderType: Text.NativeRendering
+                        }
+                    }
+                            font.family: "Noto Sans"
                             font.pixelSize: 9
                             color: catPill.isCurrent ? cheatsheetRoot.accentColor : (Theme.colors.text_secondary ?? "#565f89")
                             opacity: 0.8
@@ -972,7 +990,7 @@ Item {
 
             Text {
                 text: "💡 Click to copy • 󰆴 to delete"
-                font.family: "Inter"
+                font.family: "Noto Sans"
                 font.pixelSize: 10
                 color: Theme.colors.text_secondary ?? "#565f89"
             }
@@ -1080,7 +1098,7 @@ Item {
                                 id: catTagText
                                 anchors.centerIn: parent
                                 text: bindCard.bindItem.cat
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 9
                                 font.weight: Font.Medium
                                 color: cheatsheetRoot.getCatColor(bindCard.bindItem.cat)
@@ -1096,7 +1114,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: bindCard.bindItem.desc
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 12
                                 font.weight: Font.Medium
                                 color: Theme.colors.text_primary ?? "#c0caf5"
@@ -1183,7 +1201,7 @@ Item {
 
                                 Text {
                                     text: "Delete?"
-                                    font.family: "Inter"
+                                    font.family: "Noto Sans"
                                     font.pixelSize: 10
                                     font.weight: Font.Bold
                                     color: "#f7768e"
@@ -1276,7 +1294,7 @@ Item {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "No keybindings found matching \"" + cheatsheetRoot.searchQuery + "\""
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 13
                     font.weight: Font.Medium
                     color: Theme.colors.text_primary ?? "#c0caf5"
@@ -1284,7 +1302,7 @@ Item {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Try searching with different keywords like 'super', 'shift', 'window', or click '+ Add Bind' to create one."
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 11
                     color: Theme.colors.text_secondary ?? "#565f89"
                 }

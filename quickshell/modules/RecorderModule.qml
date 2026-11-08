@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -7,851 +8,929 @@ import "../"
 
 ColumnLayout {
     id: recModule
-    spacing: 8
+    spacing: 12
     Layout.fillWidth: true
     focus: true
+
     Keys.onEscapePressed: (event) => {
-        if (recModule.isMicDropdownOpen) {
-            recModule.isMicDropdownOpen = false;
-        } else {
-            root.collapseToIdle();
-        }
+        root.collapseToIdle();
         event.accepted = true;
     }
 
-    // Sleek Dark OLED Palette with Theme Accent Hints
-    readonly property color colSurface: "#000000"
-    readonly property color colCard: "#0e0e12"
-    readonly property color colCardHover: "#18181c"
-    readonly property color colCardActive: "#141418"
-    readonly property color colChipBg: "#16161a"
-    readonly property color colText: "#f8fafc"
-    readonly property color colSubtext: "#94a3b8"
-    readonly property color colMuted: "#64748b"
+    // Modern M3 / Goat Palette
+    readonly property color colSurface: Theme.colors.bg ?? "#0e0e12"
+    readonly property color colCard: Qt.rgba(255, 255, 255, 0.06)
+    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.12)
+    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.18)
+    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.08)
+    readonly property color colText: Theme.colors.text_primary ?? "#ffffff"
+    readonly property color colSubtext: Theme.colors.text_secondary ?? "#8e8e93"
     readonly property color colAccent: Theme.accent ?? "#7aa2f7"
-    readonly property color colGreen: Theme.accent ?? "#30d158"
     readonly property color colRed: "#f43f5e"
+    readonly property color colAmber: "#f59e0b"
 
     property string saveDirectory: (typeof root !== "undefined" && root.recSaveDirectory) ? root.recSaveDirectory : "~/Videos"
-    onSaveDirectoryChanged: if (typeof root !== "undefined") root.recSaveDirectory = saveDirectory
-
     property bool recordAudio: (typeof root !== "undefined" && root.recAudioEnabled !== undefined) ? root.recAudioEnabled : false
-    onRecordAudioChanged: if (typeof root !== "undefined") root.recAudioEnabled = recordAudio
+    property bool recordSound: (typeof root !== "undefined" && root.recSoundEnabled !== undefined) ? root.recSoundEnabled : true
+    property bool isDndActive: false
 
-    property string selectedSourceId: (typeof root !== "undefined" && root.recAudioSourceId) ? root.recAudioSourceId : ""
-    onSelectedSourceIdChanged: if (typeof root !== "undefined") root.recAudioSourceId = selectedSourceId
+    readonly property bool isRecording: (typeof root !== "undefined" && root.isScreenRecording) ? root.isScreenRecording : false
+    readonly property bool isPaused: (typeof root !== "undefined" && root.isScreenRecordingPaused) ? root.isScreenRecordingPaused : false
+    readonly property int elapsedSeconds: (typeof root !== "undefined" && root.screenRecordSeconds !== undefined) ? root.screenRecordSeconds : 0
 
-    property string selectedSourceName: (typeof root !== "undefined" && root.recAudioSourceName) ? root.recAudioSourceName : "Default Microphone"
-    onSelectedSourceNameChanged: if (typeof root !== "undefined") root.recAudioSourceName = selectedSourceName
+    property string freeDiskSpace: "114 GB Free"
+    property var lastRecording: null
 
-    property bool isMicDropdownOpen: false
-    property bool isRecording: (typeof root !== "undefined" && root.isScreenRecording !== undefined) ? root.isScreenRecording : false
-    property int recordSeconds: (typeof root !== "undefined" && root.screenRecordSeconds !== undefined) ? root.screenRecordSeconds : 0
-    property string freeDiskSpace: "114G Free"
+    readonly property int calculatedHeight: {
+        var base = isRecording ? 162 : 174;
+        var cardH = lastRecording ? 68 : 38;
+        return base + cardH + 28;
+    }
 
-    ListModel { id: micSourcesModel }
+    function formatTime(totalSec) {
+        var s = Math.max(0, Math.floor(totalSec));
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        var sec = s % 60;
+        var pad = function(val) { return (val < 10 ? "0" : "") + val; };
+        return h > 0 ? (h + ":" + pad(m) + ":" + pad(sec)) : (pad(m) + ":" + pad(sec));
+    }
 
-    // Query available audio input sources
+    function humanSize(bytes) {
+        if (!(bytes > 0)) return "";
+        var units = ["B", "KB", "MB", "GB"];
+        var val = bytes;
+        var unit = 0;
+        while (val >= 1024 && unit < units.length - 1) {
+            val /= 1024;
+            unit++;
+        }
+        return val.toFixed(unit >= 2 ? 1 : 0) + " " + units[unit];
+    }
+
+    function refreshLastRecording() {
+        lastRecProcess.running = false;
+        lastRecProcess.running = true;
+    }
+
+    function openLastVideo() {
+        if (!recModule.lastRecording || !recModule.lastRecording.path) return;
+        Qt.openUrlExternally("file://" + recModule.lastRecording.path);
+        root.collapseToIdle();
+    }
+
+    function showLastVideoInFolder() {
+        if (!recModule.lastRecording || !recModule.lastRecording.path) return;
+        Quickshell.execDetached(["xdg-open", recModule.saveDirectory.replace(/^~/, Quickshell.env("HOME"))]);
+        root.collapseToIdle();
+    }
+
+    function deleteLastVideo() {
+        if (!recModule.lastRecording || !recModule.lastRecording.path) return;
+        Quickshell.execDetached(["rm", "-f", recModule.lastRecording.path]);
+        recModule.lastRecording = null;
+        delTimer.restart();
+    }
+
+    Timer {
+        id: delTimer
+        interval: 300
+        onTriggered: recModule.refreshLastRecording()
+    }
+
+    // Refresh last recording metadata on load
+    Component.onCompleted: {
+        recModule.refreshLastRecording();
+        diskChecker.running = true;
+    }
+
+    onIsRecordingChanged: {
+        if (!isRecording) {
+            recModule.refreshLastRecording();
+        }
+    }
+
+    // Query last recording metadata from record.sh
     Process {
-        id: micScanner
-        running: root.activeMode === "recorder"
-        command: ["sh", "-c", `
-            python3 -c "
-import subprocess
-
-try:
-    output = subprocess.check_output(['pactl', 'list', 'sources'], text=True)
-    sources = []
-    current_name = None
-    current_desc = None
-
-    for line in output.splitlines():
-        line = line.strip()
-        if line.startswith('Name:'):
-            current_name = line.split('Name:', 1)[1].strip()
-        elif line.startswith('Description:'):
-            current_desc = line.split('Description:', 1)[1].strip()
-        
-        if current_name and current_desc:
-            if not current_name.endswith('.monitor'):
-                sources.append(f'{current_name}|||{current_desc}')
-            current_name = None
-            current_desc = None
-
-    print('\n'.join(sources))
-except Exception:
-    pass
-"
-        `]
+        id: lastRecProcess
+        command: [Quickshell.env("HOME") + "/dynamic-you/quickshell/scripts/record.sh", "--last"]
         stdout: StdioCollector {
             onStreamFinished: {
-                micSourcesModel.clear();
-                micSourcesModel.append({
-                    "sourceId": "@DEFAULT_SOURCE@",
-                    "sourceName": "Default System Mic"
-                });
-
-                var lines = this.text.trim().split("\n");
-                var defaultChosen = (recModule.selectedSourceId !== "");
-
-                for (var i = 0; i < lines.length; i++) {
-                    var parts = lines[i].split("|||");
-                    if (parts.length >= 2) {
-                        micSourcesModel.append({
-                            "sourceId": parts[0].trim(),
-                            "sourceName": parts[1].trim()
-                        });
-                        if (!defaultChosen && i === 0) {
-                            recModule.selectedSourceId = parts[0].trim();
-                            recModule.selectedSourceName = parts[1].trim();
-                        }
-                    }
-                }
-
-                if (recModule.selectedSourceId === "") {
-                    recModule.selectedSourceId = "@DEFAULT_SOURCE@";
-                    recModule.selectedSourceName = "Default System Mic";
+                try {
+                    var parsed = JSON.parse(this.text.trim());
+                    recModule.lastRecording = (parsed && parsed.path) ? parsed : null;
+                } catch(e) {
+                    recModule.lastRecording = null;
                 }
             }
         }
     }
 
-    // Disk free space check
+    // Disk space checker
     Process {
         id: diskChecker
-        running: root.activeMode === "recorder"
         command: ["sh", "-c", "df -h ~/Videos 2>/dev/null | awk 'NR==2{print $4}' || df -h ~ | awk 'NR==2{print $4}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var val = this.text.trim();
-                if (val) recModule.freeDiskSpace = val + " Free";
-            }
-        }
-    }
-
-    // Check background recording status
-    Process {
-        id: statusChecker
-        running: root.activeMode === "recorder"
-        command: ["sh", "-c", "pgrep -x wf-recorder > /dev/null && echo 'running' || echo 'stopped'"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var running = (this.text.trim() === "running");
-                root.isScreenRecording = running;
-            }
-        }
-    }
-
-    Timer {
-        interval: 1800
-        running: true
-        repeat: true
-        onTriggered: {
-            if (!statusChecker.running) statusChecker.running = true;
-            if (root.activeMode === "recorder" && !diskChecker.running) diskChecker.running = true;
-        }
-    }
-
-    function formatTime(totalSec) {
-        var mins = Math.floor(totalSec / 60);
-        var secs = totalSec % 60;
-        return (mins < 10 ? "0" : "") + mins + ":" + (secs < 10 ? "0" : "") + secs;
-    }
-
-    function startRecording(regionMode) {
-        recModule.isMicDropdownOpen = false;
-        root.startRecording(regionMode);
-    }
-
-    function stopRecording() {
-        root.stopRecording();
-    }
-
-    // ========================================================
-    // 1. HERO RECORDER CARD (Material UI Solid Surface, Zero Borders)
-    // ========================================================
-    Rectangle {
-        Layout.fillWidth: true
-        height: 94
-        radius: 14
-        color: recModule.colCard
-        border.width: 0
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 11
-            spacing: 8
-
-            // Top Status Row
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-
-                // Tactile Back to Utility Button
-                Rectangle {
-                    width: 28; height: 28; radius: 8
-                    color: recBackMouse.containsMouse ? recModule.colCardHover : "transparent"
-                    border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.08)
-                    scale: recBackMouse.pressed ? 0.90 : 1.0
-                    Behavior on scale { NumberAnimation { duration: 90 } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰁍"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: recModule.colText
-                    }
-
-                    MouseArea {
-                        id: recBackMouse
-                        anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: root.switchMode("utility", true)
-                    }
-                }
-
-                // Squircle Icon Badge
-                Rectangle {
-                    width: 38
-                    height: 38
-                    radius: 11
-                    color: recModule.isRecording ? Qt.alpha(recModule.colRed, 0.22) : recModule.colChipBg
-                    border.width: 0
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: recModule.isRecording ? "󰐥" : "󰕧"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 18
-                        color: recModule.isRecording ? recModule.colRed : recModule.colAccent
-                    }
-                }
-
-                // Title + Subtitle
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: recModule.isRecording ? "Recording in Progress" : "Screen Recorder"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 13
-                        font.bold: true
-                        color: recModule.colText
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: recModule.isRecording 
-                            ? ("Elapsed: " + recModule.formatTime(recModule.recordSeconds) + " • 60 FPS")
-                            : "H.264 MP4 • Hardware Accelerated"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        color: recModule.colSubtext
-                        elide: Text.ElideRight
-                    }
-                }
-
-                // Solid Status Pill
-                Rectangle {
-                    radius: 10
-                    color: recModule.colChipBg
-                    border.width: 0
-                    implicitWidth: statusRow.implicitWidth + 14
-                    implicitHeight: 22
-
-                    Row {
-                        id: statusRow
-                        anchors.centerIn: parent
-                        spacing: 5
-
-                        Rectangle {
-                            width: 6
-                            height: 6
-                            radius: 3
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: recModule.isRecording ? recModule.colRed : recModule.colAccent
-
-                            SequentialAnimation on opacity {
-                                running: recModule.isRecording
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.25; duration: 600; easing.type: Easing.InOutQuad }
-                                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
-                            }
-                        }
-
-                        Text {
-                            text: recModule.isRecording ? "RECORDING" : "STANDBY"
-                            font.family: "Rubik"
-                            font.pixelSize: 10
-                            font.bold: true
-                            color: recModule.isRecording ? recModule.colRed : recModule.colAccent
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                }
-            }
-
-            // Bottom Tonal Metadata Chips Row
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-
-                // Chip 1: Save Directory
-                Rectangle {
-                    height: 22
-                    radius: 6
-                    color: recModule.colChipBg
-                    border.width: 0
-                    implicitWidth: chipDirRow.implicitWidth + 12
-
-                    Row {
-                        id: chipDirRow
-                        anchors.centerIn: parent
-                        spacing: 4
-                        Text {
-                            text: "󰉋"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: recModule.colMuted
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: recModule.saveDirectory
-                            font.family: "Rubik"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: recModule.colSubtext
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                }
-
-                // Chip 2: Audio Mode
-                Rectangle {
-                    height: 22
-                    radius: 6
-                    color: recModule.colChipBg
-                    border.width: 0
-                    implicitWidth: chipAudioRow.implicitWidth + 12
-
-                    Row {
-                        id: chipAudioRow
-                        anchors.centerIn: parent
-                        spacing: 4
-                        Text {
-                            text: recModule.recordAudio ? "󰍬" : "󰝟"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: recModule.recordAudio ? recModule.colAccent : recModule.colMuted
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: recModule.recordAudio ? recModule.selectedSourceName : "No Audio"
-                            font.family: "Rubik"
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: recModule.recordAudio ? recModule.colText : recModule.colSubtext
-                            elide: Text.ElideRight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                }
-
-                // Chip 3: Free Disk Space
-                Rectangle {
-                    height: 22
-                    radius: 6
-                    color: recModule.colChipBg
-                    border.width: 0
-                    implicitWidth: chipSpaceRow.implicitWidth + 12
-
-                    Row {
-                        id: chipSpaceRow
-                        anchors.centerIn: parent
-                        spacing: 4
-                        Text {
-                            text: "󰋊"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: recModule.colMuted
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: recModule.freeDiskSpace
-                            font.family: "Rubik"
-                            font.pixelSize: 10
-                            font.bold: true
-                            font.features: ({ "tnum": 1 })
-                            color: recModule.colSubtext
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
+                if (val) recModule.freeDiskSpace = val + "B Free";
             }
         }
     }
 
     // ========================================================
-    // 2. AUDIO & MICROPHONE SELECTION (Solid M3 Controls, Zero Borders)
+    // 1. MINIMAL HEADER BAR (With live status timer)
     // ========================================================
-    Rectangle {
-        Layout.fillWidth: true
-        visible: !recModule.isRecording
-        radius: 12
-        color: recModule.colCard
-        border.width: 0
-        implicitHeight: recModule.isMicDropdownOpen ? (46 + Math.min(3, micSourcesModel.count) * 32 + 8) : 46
-        clip: true
-
-        Behavior on implicitHeight {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-        }
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-            spacing: 6
-
-            // Top Audio Row
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                spacing: 8
-
-                // Mic Icon badge
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 8
-                    color: recModule.colChipBg
-                    border.width: 0
-                    Text {
-                        anchors.centerIn: parent
-                        text: recModule.recordAudio ? "󰍬" : "󰝟"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: recModule.recordAudio ? recModule.colAccent : recModule.colMuted
-                    }
-                }
-
-                Text {
-                    text: "Microphone Audio"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: recModule.colText
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Selected Device Pill Dropdown Trigger
-                Rectangle {
-                    visible: recModule.recordAudio
-                    height: 26
-                    radius: 8
-                    color: micSelectMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-                    border.width: 0
-                    implicitWidth: Math.min(170, micSelectRow.implicitWidth + 16)
-
-                    RowLayout {
-                        id: micSelectRow
-                        anchors.fill: parent
-                        anchors.leftMargin: 8; anchors.rightMargin: 8
-                        spacing: 5
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: recModule.selectedSourceName
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: recModule.colText
-                            elide: Text.ElideRight
-                        }
-
-                        Text {
-                            text: recModule.isMicDropdownOpen ? "󰅃" : "󰅀"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            color: recModule.colSubtext
-                        }
-                    }
-
-                    MouseArea {
-                        id: micSelectMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: recModule.isMicDropdownOpen = !recModule.isMicDropdownOpen
-                    }
-                }
-
-                // Material You Solid Switch
-                Item {
-                    implicitWidth: 40
-                    implicitHeight: 22
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        color: recModule.recordAudio ? recModule.colAccent : recModule.colChipBg
-                        border.width: 0
-                        Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                        Rectangle {
-                            width: 16
-                            height: 16
-                            radius: 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: recModule.recordAudio ? parent.width - width - 3 : 3
-                            color: recModule.recordAudio ? recModule.colSurface : recModule.colSubtext
-                            Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            recModule.recordAudio = !recModule.recordAudio;
-                            if (!recModule.recordAudio) recModule.isMicDropdownOpen = false;
-                        }
-                    }
-                }
-            }
-
-            // Expanded Mic Devices List
-            ListView {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(3, micSourcesModel.count) * 32
-                visible: recModule.recordAudio && recModule.isMicDropdownOpen
-                clip: true
-                spacing: 3
-                model: micSourcesModel
-
-                delegate: Rectangle {
-                    width: ListView.view.width
-                    height: 29
-                    radius: 7
-                    property bool isSelected: (model.sourceId === recModule.selectedSourceId)
-                    color: isSelected ? Qt.alpha(recModule.colAccent, 0.12) : (micItemMouse.containsMouse ? recModule.colCardHover : "transparent")
-                    border.width: isSelected ? 1 : 0
-                    border.color: Qt.alpha(recModule.colAccent, 0.35)
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8; anchors.rightMargin: 8
-                        spacing: 8
-
-                        Text {
-                            text: isSelected ? "󰄲" : "󰄱"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 13
-                            color: isSelected ? recModule.colAccent : recModule.colMuted
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: model.sourceName
-                            color: isSelected ? recModule.colText : recModule.colSubtext
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.bold: isSelected
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    MouseArea {
-                        id: micItemMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            recModule.selectedSourceId = model.sourceId;
-                            recModule.selectedSourceName = model.sourceName;
-                            recModule.isMicDropdownOpen = false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 3. ACTION CONTROLS (Solid Cards, Zero Borders)
-    // ========================================================
-    // When NOT recording: Full Screen + Area Capture Cards
     RowLayout {
         Layout.fillWidth: true
+        Layout.preferredHeight: 32
         spacing: 8
-        visible: !recModule.isRecording
 
-        // Full Screen Record Button
+        // Back to Utility Button
         Rectangle {
-            Layout.fillWidth: true
-            height: 44
-            radius: 12
-            color: fullMouse.containsMouse ? recModule.colCardHover : recModule.colCard
-            border.width: 1
-            border.color: fullMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.06)
-
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: 8
-
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 8
-                    color: fullMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-                    border.width: 0
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰍹"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: recModule.colAccent
-                    }
-                }
-
-                ColumnLayout {
-                    spacing: 1
-                    Text {
-                        text: "Full Screen"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 12
-                        font.bold: true
-                        color: recModule.colText
-                    }
-                    Text {
-                        text: "Entire Display"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        color: recModule.colSubtext
-                    }
-                }
-            }
-
-            MouseArea {
-                id: fullMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: recModule.startRecording(false)
-            }
-        }
-
-        // Select Area Record Button
-        Rectangle {
-            Layout.fillWidth: true
-            height: 44
-            radius: 12
-            color: areaMouse.containsMouse ? recModule.colCardHover : recModule.colCard
-            border.width: 1
-            border.color: areaMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.40) : Qt.rgba(1, 1, 1, 0.06)
-
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: 8
-
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 8
-                    color: areaMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-                    border.width: 0
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰒉"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-                        color: recModule.colAccent
-                    }
-                }
-
-                ColumnLayout {
-                    spacing: 1
-                    Text {
-                        text: "Select Area"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 12
-                        font.bold: true
-                        color: recModule.colText
-                    }
-                    Text {
-                        text: "Crop with Slurp"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        color: recModule.colSubtext
-                    }
-                }
-            }
-
-            MouseArea {
-                id: areaMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: recModule.startRecording(true)
-            }
-        }
-    }
-
-    // Utility Quick Action Chips (Screenshot & Open Videos Folder)
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        visible: !recModule.isRecording
-
-        // Quick Screenshot Button
-        Rectangle {
-            Layout.fillWidth: true
+            width: 28
             height: 28
             radius: 8
-            color: snapMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-            border.width: 1
-            border.color: snapMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.35) : Qt.rgba(1, 1, 1, 0.06)
+            color: backMouse.containsMouse ? recModule.colCardHover : "transparent"
+            Behavior on color { ColorAnimation { duration: 120 } }
 
-            Row {
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_back"
+                iconSize: 17
+                color: recModule.colText
+            }
+
+            MouseArea {
+                id: backMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: root.switchMode("utility", true)
+            }
+        }
+
+        Text {
+            text: "Screen Recorder"
+            font.family: "Noto Sans"
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+            color: recModule.colText
+            renderType: Text.NativeRendering
+        }
+
+        // Live Recording Status Badge
+        Rectangle {
+            visible: recModule.isRecording
+            Layout.preferredHeight: 22
+            Layout.preferredWidth: recElapsedRow.implicitWidth + 14
+            radius: 11
+            color: recModule.isPaused ? Qt.alpha(recModule.colAmber, 0.18) : Qt.alpha(recModule.colRed, 0.18)
+
+            RowLayout {
+                id: recElapsedRow
                 anchors.centerIn: parent
                 spacing: 5
-                Text {
-                    text: "󰹑"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    color: recModule.colAccent
-                    anchors.verticalCenter: parent.verticalCenter
+
+                Rectangle {
+                    width: 7
+                    height: 7
+                    radius: 3.5
+                    color: recModule.isPaused ? recModule.colAmber : recModule.colRed
+                    SequentialAnimation on opacity {
+                        running: recModule.isRecording && !recModule.isPaused
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.25; duration: 600 }
+                        NumberAnimation { to: 1.0; duration: 600 }
+                    }
                 }
+
                 Text {
-                    text: "Screenshot Region"
+                    text: recModule.isPaused ? "Paused" : "Recording"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    font.weight: Font.Bold
+                    color: recModule.isPaused ? recModule.colAmber : recModule.colRed
+                    renderType: Text.NativeRendering
+                }
+
+                Text {
+                    text: recModule.formatTime(recModule.elapsedSeconds)
                     font.family: "Noto Sans"
                     font.pixelSize: 11
-                    font.bold: true
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                    color: recModule.isPaused ? recModule.colAmber : recModule.colRed
+                    renderType: Text.NativeRendering
+                }
+            }
+        }
+
+        Item { Layout.fillWidth: true }
+
+        // Free disk space pill
+        Rectangle {
+            Layout.preferredHeight: 22
+            Layout.preferredWidth: diskText.implicitWidth + 12
+            radius: 11
+            color: recModule.colChipBg
+
+            Text {
+                id: diskText
+                anchors.centerIn: parent
+                text: recModule.freeDiskSpace
+                font.family: "Noto Sans"
+                font.pixelSize: 10
+                font.weight: Font.Medium
+                color: recModule.colSubtext
+                renderType: Text.NativeRendering
+            }
+        }
+    }
+
+    // ========================================================
+    // 2. PRIMARY ACTION CONTROLS (The Goat Big Action Buttons)
+    // ========================================================
+
+    // ── Mode A: IDLE (4 Major Capture Options) ───────────────
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+        visible: !recModule.isRecording
+
+        // 1. Screenshot Region
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 64
+            radius: 14
+            color: snipRegMouse.pressed ? recModule.colCardActive : (snipRegMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            scale: snipRegMouse.pressed ? 0.96 : 1.0
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on scale { NumberAnimation { duration: 100 } }
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 3
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "screenshot_region"
+                    iconSize: 22
                     color: recModule.colText
-                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Region Snip"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.colText
+                    renderType: Text.NativeRendering
                 }
             }
 
             MouseArea {
-                id: snapMouse
+                id: snipRegMouse
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: {
                     root.collapseToIdle();
-                    var hubScript = Quickshell.env("HOME") + "/.config/quickshell/scripts/screenshot_hub.sh";
-                    Quickshell.execDetached(["bash", hubScript]);
+                    var script = Quickshell.env("HOME") + "/dynamic-you/quickshell/scripts/record.sh";
+                    Quickshell.execDetached([script, "--screenshot-region"]);
                 }
             }
         }
 
-        // Open Videos Folder Button
+        // 2. Full Screenshot
         Rectangle {
             Layout.fillWidth: true
-            height: 28
-            radius: 8
-            color: folderMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
-            border.width: 1
-            border.color: folderMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.06)
+            Layout.preferredHeight: 64
+            radius: 14
+            color: snipFullMouse.pressed ? recModule.colCardActive : (snipFullMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            scale: snipFullMouse.pressed ? 0.96 : 1.0
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on scale { NumberAnimation { duration: 100 } }
 
-            Row {
+            ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 5
-                Text {
-                    text: "󰉋"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    color: recModule.colSubtext
-                    anchors.verticalCenter: parent.verticalCenter
+                spacing: 3
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "photo_camera"
+                    iconSize: 22
+                    color: recModule.colText
                 }
                 Text {
-                    text: "Open Videos"
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Screen Snip"
                     font.family: "Noto Sans"
                     font.pixelSize: 11
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     color: recModule.colText
-                    anchors.verticalCenter: parent.verticalCenter
+                    renderType: Text.NativeRendering
                 }
             }
 
             MouseArea {
-                id: folderMouse
+                id: snipFullMouse
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: {
-                    Quickshell.execDetached(["xdg-open", recModule.saveDirectory.replace(/^~/, Quickshell.env("HOME"))]);
+                    root.collapseToIdle();
+                    var script = Quickshell.env("HOME") + "/dynamic-you/quickshell/scripts/record.sh";
+                    Quickshell.execDetached([script, "--screenshot-full"]);
+                }
+            }
+        }
+
+        // 3. Record Region
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 64
+            radius: 14
+            color: recRegMouse.pressed ? recModule.colCardActive : (recRegMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            scale: recRegMouse.pressed ? 0.96 : 1.0
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on scale { NumberAnimation { duration: 100 } }
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 3
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "screen_record"
+                    iconSize: 22
+                    color: recModule.colAccent
+                }
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Record Area"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.colText
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: recRegMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    root.startRecording(true);
+                }
+            }
+        }
+
+        // 4. Record Full Screen
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 64
+            radius: 14
+            color: recFullMouse.pressed ? Qt.alpha(recModule.colAccent, 0.28) : (recFullMouse.containsMouse ? Qt.alpha(recModule.colAccent, 0.20) : Qt.alpha(recModule.colAccent, 0.14))
+            scale: recFullMouse.pressed ? 0.96 : 1.0
+            border.width: 1
+            border.color: Qt.alpha(recModule.colAccent, 0.35)
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on scale { NumberAnimation { duration: 100 } }
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 3
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "videocam"
+                    iconSize: 22
+                    color: recModule.colAccent
+                }
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "Record Screen"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.Bold
+                    color: recModule.colAccent
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: recFullMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    root.startRecording(false);
                 }
             }
         }
     }
 
-    // When RECORDING: Prominent Solid Stop Recording Button
-    Rectangle {
+    // ── Mode B: RECORDING (Pause / Resume & Stop Actions) ────
+    RowLayout {
         Layout.fillWidth: true
-        height: 46
-        radius: 12
+        spacing: 8
         visible: recModule.isRecording
-        color: stopMouse.containsMouse ? Qt.darker(recModule.colRed, 1.15) : recModule.colRed
-        border.width: 0
 
-        RowLayout {
-            anchors.centerIn: parent
-            spacing: 8
+        // Pause / Resume Button
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            radius: 14
+            color: pauseMouse.pressed ? Qt.rgba(245, 158, 11, 0.35) : (pauseMouse.containsMouse ? Qt.rgba(245, 158, 11, 0.25) : Qt.rgba(245, 158, 11, 0.16))
+            scale: pauseMouse.pressed ? 0.97 : 1.0
+            border.width: 1
+            border.color: Qt.rgba(245, 158, 11, 0.40)
+            Behavior on color { ColorAnimation { duration: 120 } }
 
-            Text {
-                text: "󰐥"
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 16
-                color: "white"
-            }
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 8
 
-            Text {
-                text: "Stop Recording"
-                font.family: "Noto Sans"
-                font.pixelSize: 13
-                font.bold: true
-                color: "white"
-            }
-
-            Rectangle {
-                width: timePillText.implicitWidth + 12
-                height: 22
-                radius: 11
-                color: Qt.rgba(0, 0, 0, 0.28)
-                border.width: 0
+                MaterialSymbol {
+                    text: recModule.isPaused ? "play_arrow" : "pause"
+                    iconSize: 22
+                    color: recModule.colAmber
+                }
 
                 Text {
-                    id: timePillText
-                    anchors.centerIn: parent
-                    text: recModule.formatTime(recModule.recordSeconds)
-                    font.family: "Rubik"
-                    font.pixelSize: 11
-                    font.bold: true
-                    font.features: ({ "tnum": 1 })
-                    color: "white"
+                    text: recModule.isPaused ? "Resume Recording" : "Pause Recording"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 13
+                    font.weight: Font.Bold
+                    color: recModule.colAmber
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: pauseMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    var script = Quickshell.env("HOME") + "/dynamic-you/quickshell/scripts/record.sh";
+                    Quickshell.execDetached([script, "--pause"]);
                 }
             }
         }
 
-        MouseArea {
-            id: stopMouse
+        // Stop Recording Button
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 52
+            radius: 14
+            color: stopMouse.pressed ? Qt.darker(recModule.colRed, 1.2) : (stopMouse.containsMouse ? Qt.lighter(recModule.colRed, 1.1) : recModule.colRed)
+            scale: stopMouse.pressed ? 0.97 : 1.0
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 8
+
+                MaterialSymbol {
+                    text: "stop"
+                    iconSize: 22
+                    color: "#ffffff"
+                }
+
+                Text {
+                    text: "Stop & Save"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 13
+                    font.weight: Font.Bold
+                    color: "#ffffff"
+                    renderType: Text.NativeRendering
+                }
+
+                // Time Badge
+                Rectangle {
+                    width: timeBadgeText.implicitWidth + 10
+                    height: 20
+                    radius: 10
+                    color: Qt.rgba(0, 0, 0, 0.35)
+
+                    Text {
+                        id: timeBadgeText
+                        anchors.centerIn: parent
+                        text: recModule.formatTime(recModule.elapsedSeconds)
+                        font.family: "Noto Sans"
+                        font.pixelSize: 11
+                        font.weight: Font.Bold
+                        font.features: ({ "tnum": 1 })
+                        color: "#ffffff"
+                        renderType: Text.NativeRendering
+                    }
+                }
+            }
+
+            MouseArea {
+                id: stopMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    root.stopRecording();
+                    recModule.refreshLastRecording();
+                }
+            }
+        }
+    }
+
+    // ========================================================
+    // 3. QUICK SETTINGS CHIPS (The Goat Feature Deck)
+    // ========================================================
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 6
+
+        // 1. Microphone Toggle
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            radius: 10
+            color: recModule.recordAudio ? Qt.alpha(recModule.colAccent, 0.20) : (micMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            border.width: recModule.recordAudio ? 1 : 0
+            border.color: Qt.alpha(recModule.colAccent, 0.35)
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    text: recModule.recordAudio ? "mic" : "mic_off"
+                    iconSize: 16
+                    color: recModule.recordAudio ? recModule.colAccent : recModule.colSubtext
+                }
+                Text {
+                    text: "Mic"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.recordAudio ? recModule.colAccent : recModule.colText
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: micMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    recModule.recordAudio = !recModule.recordAudio;
+                    if (typeof root !== "undefined") root.recAudioEnabled = recModule.recordAudio;
+                }
+            }
+        }
+
+        // 2. Desktop Audio Toggle
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            radius: 10
+            color: recModule.recordSound ? Qt.alpha(recModule.colAccent, 0.20) : (sndMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            border.width: recModule.recordSound ? 1 : 0
+            border.color: Qt.alpha(recModule.colAccent, 0.35)
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    text: recModule.recordSound ? "volume_up" : "volume_off"
+                    iconSize: 16
+                    color: recModule.recordSound ? recModule.colAccent : recModule.colSubtext
+                }
+                Text {
+                    text: "Sound"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.recordSound ? recModule.colAccent : recModule.colText
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: sndMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    recModule.recordSound = !recModule.recordSound;
+                    if (typeof root !== "undefined") root.recSoundEnabled = recModule.recordSound;
+                }
+            }
+        }
+
+        // 3. Silent Mode (DND)
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            radius: 10
+            color: recModule.isDndActive ? Qt.alpha(recModule.colAccent, 0.20) : (dndMouse.containsMouse ? recModule.colCardHover : recModule.colCard)
+            border.width: recModule.isDndActive ? 1 : 0
+            border.color: Qt.alpha(recModule.colAccent, 0.35)
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    text: recModule.isDndActive ? "notifications_off" : "notifications"
+                    iconSize: 16
+                    color: recModule.isDndActive ? recModule.colAccent : recModule.colSubtext
+                }
+                Text {
+                    text: "Silent"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.isDndActive ? recModule.colAccent : recModule.colText
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: dndMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    recModule.isDndActive = !recModule.isDndActive;
+                    if (typeof root !== "undefined" && root.toggleDnd) root.toggleDnd();
+                }
+            }
+        }
+
+        // 4. Open Videos Folder
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 34
+            radius: 10
+            color: folMouse.containsMouse ? recModule.colCardHover : recModule.colCard
+            Behavior on color { ColorAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    text: "folder_open"
+                    iconSize: 16
+                    color: recModule.colSubtext
+                }
+                Text {
+                    text: "Videos"
+                    font.family: "Noto Sans"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: recModule.colText
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: folMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    Quickshell.execDetached(["xdg-open", recModule.saveDirectory.replace(/^~/, Quickshell.env("HOME"))]);
+                    root.collapseToIdle();
+                }
+            }
+        }
+    }
+
+    // ========================================================
+    // 4. RECENT RECORDING PREVIEW CARD (The Goat 1:1 Feature)
+    // ========================================================
+    Rectangle {
+        Layout.fillWidth: true
+        Layout.preferredHeight: recModule.lastRecording ? 68 : 38
+        radius: 14
+        color: recModule.colCard
+        clip: true
+        Behavior on Layout.preferredHeight { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+        // A. If a recent video exists:
+        RowLayout {
             anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            hoverEnabled: true
-            onClicked: recModule.stopRecording()
+            anchors.margins: 8
+            spacing: 10
+            visible: recModule.lastRecording !== null
+
+            // Video Thumbnail / Cover
+            Rectangle {
+                Layout.preferredWidth: 84
+                Layout.preferredHeight: 52
+                radius: 8
+                color: Qt.rgba(0, 0, 0, 0.4)
+                clip: true
+
+                Image {
+                    id: lastThumbImg
+                    anchors.fill: parent
+                    source: (recModule.lastRecording && recModule.lastRecording.thumb) ? ("file://" + recModule.lastRecording.thumb) : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    visible: lastThumbImg.status !== Image.Ready
+                    text: "movie"
+                    iconSize: 22
+                    color: recModule.colSubtext
+                }
+
+                // Duration Pill badge in corner
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 3
+                    width: durText.implicitWidth + 6
+                    height: 14
+                    radius: 4
+                    color: Qt.rgba(0, 0, 0, 0.70)
+                    visible: (recModule.lastRecording && recModule.lastRecording.duration > 0)
+
+                    Text {
+                        id: durText
+                        anchors.centerIn: parent
+                        text: recModule.formatTime(recModule.lastRecording ? recModule.lastRecording.duration : 0)
+                        font.family: "Noto Sans"
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        color: "#ffffff"
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: recModule.openLastVideo()
+                }
+            }
+
+            // File Info
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "LAST RECORDING"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        color: recModule.colSubtext
+                        renderType: Text.NativeRendering
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        text: recModule.lastRecording ? Qt.formatDateTime(new Date(recModule.lastRecording.mtime * 1000), "dd MMM · hh:mm") : ""
+                        font.family: "Noto Sans"
+                        font.pixelSize: 9
+                        color: recModule.colSubtext
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: recModule.lastRecording ? recModule.lastRecording.name : ""
+                    font.family: "Noto Sans"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    color: recModule.colText
+                    elide: Text.ElideMiddle
+                    renderType: Text.NativeRendering
+                }
+
+                Text {
+                    text: recModule.lastRecording ? recModule.humanSize(recModule.lastRecording.size) : ""
+                    font.family: "Noto Sans"
+                    font.pixelSize: 10
+                    color: recModule.colSubtext
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            // Quick Actions: Play, Reveal, Delete
+            RowLayout {
+                spacing: 4
+
+                // Play
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 14
+                    color: playMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
+                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "play_arrow"
+                        iconSize: 16
+                        color: recModule.colAccent
+                    }
+
+                    MouseArea {
+                        id: playMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: recModule.openLastVideo()
+                    }
+                }
+
+                // Show in Folder
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 14
+                    color: revMouse.containsMouse ? recModule.colCardHover : recModule.colChipBg
+                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "folder"
+                        iconSize: 15
+                        color: recModule.colText
+                    }
+
+                    MouseArea {
+                        id: revMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: recModule.showLastVideoInFolder()
+                    }
+                }
+
+                // Delete
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 14
+                    color: delMouse.containsMouse ? Qt.alpha(recModule.colRed, 0.25) : recModule.colChipBg
+                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "delete"
+                        iconSize: 15
+                        color: delMouse.containsMouse ? recModule.colRed : recModule.colSubtext
+                    }
+
+                    MouseArea {
+                        id: delMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: recModule.deleteLastVideo()
+                    }
+                }
+            }
+        }
+
+        // B. If NO recent recording exists:
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 6
+            visible: recModule.lastRecording === null
+
+            MaterialSymbol {
+                text: "video_library"
+                iconSize: 16
+                color: recModule.colSubtext
+            }
+
+            Text {
+                text: "No recordings yet · Videos will show here"
+                font.family: "Noto Sans"
+                font.pixelSize: 11
+                color: recModule.colSubtext
+                renderType: Text.NativeRendering
+            }
         }
     }
 }

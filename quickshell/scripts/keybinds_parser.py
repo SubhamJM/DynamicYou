@@ -88,7 +88,7 @@ def parse_hypr_lua(path):
             "keys": ["SUPER", "1..0"],
             "desc": "Switch to Workspace 1 - 10",
             "cat": "Workspaces",
-            "cmd": "hl.dsp.focus({ workspace = 1..10 })",
+            "cmd": "hyprctl dispatch workspace 1..10",
             "canDelete": False,
             "isCustom": False
         })
@@ -99,7 +99,7 @@ def parse_hypr_lua(path):
             "keys": ["SUPER", "SHIFT", "1..0"],
             "desc": "Move Window to Workspace 1 - 10",
             "cat": "Workspaces",
-            "cmd": "hl.dsp.window.move({ workspace = 1..10 })",
+            "cmd": "hyprctl dispatch movetoworkspace 1..10",
             "canDelete": False,
             "isCustom": False
         })

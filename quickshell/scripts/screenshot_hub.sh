@@ -6,6 +6,9 @@
 mkdir -p "$HOME/Pictures/Screenshots"
 FILE="$HOME/Pictures/Screenshots/Screenshot_$(date +%Y%m%d_%H%M%S).png"
 
+# Give any launching UI or menu a moment to dismiss before selection
+sleep 0.2
+
 # Slurp area selection (redirect stdin from /dev/null to avoid blocking pipe)
 GEOM=$(slurp < /dev/null 2>/dev/null)
 if [ -z "$GEOM" ]; then

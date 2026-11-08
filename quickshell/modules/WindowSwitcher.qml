@@ -59,7 +59,7 @@ ColumnLayout {
             var rawAddr = item.address.trim();
             var formattedAddr = rawAddr.startsWith("0x") ? rawAddr : ("0x" + rawAddr);
 
-            var cmd = `hl.dsp.focus({ window = 'address:${formattedAddr}' })`;
+            var cmd = `focuswindow address:${formattedAddr}`;
             if (typeof Hyprland !== "undefined") {
                 Hyprland.dispatch(cmd);
             }
@@ -74,7 +74,7 @@ ColumnLayout {
         repeat: false
         property string targetAddress: ""
         onTriggered: {
-            var cmd = `hl.dsp.focus({ window = 'address:${targetAddress}' })`;
+            var cmd = `focuswindow address:${targetAddress}`;
             if (typeof Hyprland !== "undefined") {
                 Hyprland.dispatch(cmd);
             }
@@ -98,7 +98,7 @@ ColumnLayout {
 
             root.collapseToIdle();
 
-            var cmd = `hl.dsp.focus({ window = 'address:${formattedAddr}' })`;
+            var cmd = `focuswindow address:${formattedAddr}`;
             if (typeof Hyprland !== "undefined") {
                 Hyprland.dispatch(cmd);
             }
@@ -198,39 +198,52 @@ ColumnLayout {
         onTriggered: windowCarousel.highlightMoveDuration = 180
     }
 
-    // Header
+    // 34px Minimal Luxury Header
     RowLayout {
         Layout.fillWidth: true
-        Layout.preferredHeight: 24
-        spacing: 6
-        Layout.leftMargin: 8
-        Layout.rightMargin: 8
+        Layout.preferredHeight: 34
+        spacing: 8
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
 
         Text {
-            text: "Active Windows"
-            font.family: "Inter"
-            font.pixelSize: 15
-            font.bold: true
-            color: Theme.colors.text_primary ?? "white"
+            text: "ACTIVE WINDOWS"
+            font.family: "Noto Sans"
+            font.pixelSize: 11
+            font.weight: Font.DemiBold
+            font.letterSpacing: 1.2
+            color: Qt.rgba(255, 255, 255, 0.60)
+            renderType: Text.NativeRendering
         }
 
-        Text {
+        Rectangle {
             visible: clientsModel.count > 0
-            text: "(" + (windowCarousel.currentIndex + 1) + " / " + clientsModel.count + ")"
-            font.pixelSize: 12
-            font.bold: true
-            color: Theme.colors.text_secondary ?? "#565f89"
-            Layout.alignment: Qt.AlignVCenter
+            implicitHeight: 20
+            implicitWidth: countText.implicitWidth + 12
+            radius: 10
+            color: Qt.rgba(255, 255, 255, 0.08)
+
+            Text {
+                id: countText
+                anchors.centerIn: parent
+                text: (windowCarousel.currentIndex + 1) + " / " + clientsModel.count
+                font.family: "JetBrainsMono Nerd Font"
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
+                color: Qt.rgba(255, 255, 255, 0.75)
+                renderType: Text.NativeRendering
+            }
         }
 
         Item { Layout.fillWidth: true }
         
         Text {
             text: "Alt + Tab to cycle • Release to focus"
-            font.family: "Inter"
+            font.family: "Noto Sans"
             font.pixelSize: 11
-            font.bold: true
-            color: Theme.colors.accent ?? "#7aa2f7"
+            font.weight: Font.Medium
+            color: Qt.rgba(255, 255, 255, 0.40)
+            renderType: Text.NativeRendering
         }
     }
 
@@ -255,19 +268,19 @@ ColumnLayout {
 
             Rectangle {
                 id: leftArrow
-                Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                Layout.preferredWidth: 32; Layout.preferredHeight: 32
                 Layout.alignment: Qt.AlignVCenter
-                radius: 8
-                color: leftArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: leftArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
-                Behavior on color { ColorAnimation { duration: 80 } }
+                radius: 16
+                color: leftArrowMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+                border.width: 0
+                Behavior on color { ColorAnimation { duration: 120 } }
 
                 Text {
                     anchors.centerIn: parent
                     text: "󰅁"
-                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 14
-                    color: leftArrowMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
+                    color: leftArrowMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.65)
+                    renderType: Text.NativeRendering
                 }
                 MouseArea {
                     id: leftArrowMouse
@@ -381,16 +394,15 @@ ColumnLayout {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 12
-                        color: Theme.colors.card_bg ?? "#1f2335"
-                        border.width: PathView.isCurrentItem ? 2 : 1
-                        border.color: PathView.isCurrentItem ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "transparent")
+                        radius: 16
+                        color: PathView.isCurrentItem ? Qt.rgba(255, 255, 255, 0.08) : Qt.rgba(255, 255, 255, 0.04)
+                        border.width: 0
                         clip: true
 
                         // Live Native Wayland Buffer Preview
                         Rectangle {
                             anchors.fill: parent
-                            color: Theme.colors.bg ?? "#000000"
+                            color: "#141416"
                             
                             ScreencopyView {
                                 anchors.centerIn: parent
@@ -411,7 +423,7 @@ ColumnLayout {
                                     icon: iconName
                                     iconSize: 64
                                     fallbackSymbol: IconResolver.resolve(iconName, className).fallbackSymbol || "window"
-                                    color: Theme.colors.accent ?? "#7aa2f7"
+                                    color: Theme.accent
                                 }
                             }
                         }
@@ -423,7 +435,7 @@ ColumnLayout {
                             height: 64
                             gradient: Gradient {
                                 GradientStop { position: 0.0; color: "transparent" }
-                                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.85) }
+                                GradientStop { position: 1.0; color: Qt.rgba(14, 14, 16, 0.92) }
                             }
                             
                             ColumnLayout {
@@ -437,15 +449,16 @@ ColumnLayout {
                                     spacing: 6
                                     
                                     Rectangle {
-                                        width: 16; height: 16; radius: 4
-                                        color: Theme.colors.hover_bg ?? "#24283b"
+                                        width: 18; height: 18; radius: 9
+                                        color: Qt.rgba(255, 255, 255, 0.10)
                                         Text {
                                             anchors.centerIn: parent
                                             text: workspace
-                                            font.family: "Inter"
-                                            font.pixelSize: 9
-                                            font.bold: true
-                                            color: Theme.colors.text_secondary ?? "#565f89"
+                                            font.family: "Noto Sans"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            color: Qt.rgba(255, 255, 255, 0.85)
+                                            renderType: Text.NativeRendering
                                         }
                                     }
 
@@ -456,25 +469,29 @@ ColumnLayout {
                                         icon: iconName
                                         iconSize: 16
                                         fallbackSymbol: IconResolver.resolve(iconName, className).fallbackSymbol || "window"
-                                        color: Theme.colors.accent ?? "#7aa2f7"
+                                        color: Theme.accent
                                     }
 
                                     Text {
                                         text: className
-                                        color: Theme.colors.accent ?? "#7aa2f7"
+                                        color: "#ffffff"
+                                        font.family: "Noto Sans"
                                         font.pixelSize: 13
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
                                         elide: Text.ElideRight
                                         Layout.fillWidth: true
+                                        renderType: Text.NativeRendering
                                     }
                                 }
 
                                 Text {
                                     text: title
-                                    color: "white"
+                                    color: Qt.rgba(255, 255, 255, 0.65)
+                                    font.family: "Noto Sans"
                                     font.pixelSize: 11
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
+                                    renderType: Text.NativeRendering
                                 }
                             }
                         }
@@ -497,13 +514,26 @@ ColumnLayout {
 
             Rectangle {
                 id: rightArrow
-                Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                Layout.preferredWidth: 32; Layout.preferredHeight: 32
                 Layout.alignment: Qt.AlignVCenter
-                radius: 8
-                color: rightArrowMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                border.width: rightArrowMouse.containsMouse ? 1 : 0
-                border.color: Theme.colors.border_hover ?? "#7aa2f7"
-                Behavior on color { ColorAnimation { duration: 80 } }
+                radius: 16
+                color: rightArrowMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+                border.width: 0
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰅂"
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
+                    color: rightArrowMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.65)
+                    renderType: Text.NativeRendering
+                }
+                MouseArea {
+                    id: rightArrowMouse
+                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                    onClicked: windowCarousel.incrementCurrentIndex()
+                }
+            }
 
                 Text {
                     anchors.centerIn: parent

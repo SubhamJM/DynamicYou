@@ -17,73 +17,91 @@ ColumnLayout {
 
     readonly property int calculatedCount: globalNotifModel.count
 
-    // Header: Title, Count Badge, Clear All
+    // ========================================================
+    // 1. UNIFIED MINIMAL HEADER BAR (Modern Desktop Standard)
+    // ========================================================
     RowLayout {
         Layout.fillWidth: true
-        Layout.preferredHeight: 28
+        Layout.preferredHeight: 34
         spacing: 8
 
-        RowLayout {
-            spacing: 6
-            Text {
-                text: "󰂚"
-                font.family: "JetBrainsMono Nerd Font"
-                font.pixelSize: 15
-                color: Theme.colors.accent ?? "#7aa2f7"
+        // Back to Utility / Quick Settings Button
+        IrisIconButton {
+            width: 28
+            height: 28
+            buttonSize: 28
+            buttonRadius: 14
+            flat: true
+            icon: "arrow_back"
+            iconSize: 16
+            iconColor: Theme.colors.text_primary ?? "#ffffff"
+            onClicked: {
+                var target = (root.previousExpandedMode && root.previousExpandedMode !== "notifications") ? root.previousExpandedMode : "utility";
+                root.switchMode(target, true);
             }
-            Text {
-                text: "Notifications"
-                font.family: "Inter"
-                font.pixelSize: 14
-                font.bold: true
-                color: Theme.colors.text_primary ?? "white"
-            }
-            Rectangle {
-                visible: globalNotifModel.count > 0
-                width: countText.implicitWidth + 10
-                height: 18
-                radius: 9
-                color: Qt.rgba((Theme.colors.accent ?? "#7aa2f7").r, (Theme.colors.accent ?? "#7aa2f7").g, (Theme.colors.accent ?? "#7aa2f7").b, 0.2)
+        }
 
-                Text {
-                    id: countText
-                    anchors.centerIn: parent
-                    text: globalNotifModel.count
-                    font.family: "Inter"
-                    font.pixelSize: 10
-                    font.bold: true
-                    color: Theme.colors.accent ?? "#7aa2f7"
-                }
+        Text {
+            text: "Notifications"
+            font.family: "Noto Sans"
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+            color: Theme.colors.text_primary ?? "#ffffff"
+            renderType: Text.NativeRendering
+        }
+
+        // Count Pill
+        Rectangle {
+            visible: globalNotifModel.count > 0
+            Layout.preferredHeight: 20
+            Layout.preferredWidth: countText.implicitWidth + 12
+            radius: 10
+            color: Qt.rgba(255, 255, 255, 0.08)
+
+            Text {
+                id: countText
+                anchors.centerIn: parent
+                text: globalNotifModel.count
+                font.family: "Noto Sans"
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
+                color: Qt.rgba(255, 255, 255, 0.70)
+                renderType: Text.NativeRendering
             }
         }
 
         Item { Layout.fillWidth: true }
 
+        // DND Toggle Pill (Solid M3 pill, zero borders)
         Rectangle {
-            Layout.preferredHeight: 24
-            Layout.preferredWidth: dndRow.implicitWidth + 16
-            radius: 6
-            color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : (dndMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : (Theme.colors.card_bg ?? "#1f2335"))
-            border.width: 1
-            border.color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.border ?? "transparent")
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Layout.preferredHeight: 26
+            Layout.preferredWidth: dndRow.implicitWidth + 18
+            radius: 13
+            color: root.dndEnabled
+                ? Qt.alpha(Theme.colors.accent ?? "#7aa2f7", 0.22)
+                : (dndMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06))
+            border.width: 0
+
+            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
             RowLayout {
                 id: dndRow
                 anchors.centerIn: parent
-                spacing: 4
-                Text {
-                    text: root.dndEnabled ? "󰂛" : "󰂚"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 11
-                    color: root.dndEnabled ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_secondary ?? "#565f89")
+                spacing: 5
+
+                MaterialSymbol {
+                    text: root.dndEnabled ? "notifications_off" : "notifications"
+                    iconSize: 13
+                    color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba(255, 255, 255, 0.70)
                 }
+
                 Text {
                     text: root.dndEnabled ? "DND On" : "DND"
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 11
-                    font.bold: true
-                    color: root.dndEnabled ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_secondary ?? "#565f89")
+                    font.weight: Font.Medium
+                    color: root.dndEnabled ? (Theme.colors.accent ?? "#7aa2f7") : Qt.rgba(255, 255, 255, 0.70)
+                    renderType: Text.NativeRendering
                 }
             }
 
@@ -96,23 +114,27 @@ ColumnLayout {
             }
         }
 
+        // Clear All Pill (Solid pill, zero borders)
         Rectangle {
             visible: globalNotifModel.count > 0
+            Layout.preferredHeight: 26
             Layout.preferredWidth: 68
-            Layout.preferredHeight: 24
-            radius: 6
-            color: clearMouse.containsMouse ? (Theme.colors.error ?? "#f44336") : (Theme.colors.card_bg ?? "#1f2335")
-            border.width: 1
-            border.color: Theme.colors.border ?? "transparent"
-            Behavior on color { ColorAnimation { duration: 150 } }
+            radius: 13
+            color: clearMouse.containsMouse
+                ? Qt.alpha(Theme.colors.error ?? "#f87171", 0.20)
+                : Qt.rgba(255, 255, 255, 0.06)
+            border.width: 0
+
+            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
             Text {
                 anchors.centerIn: parent
                 text: "Clear All"
-                font.family: "Inter"
+                font.family: "Noto Sans"
                 font.pixelSize: 11
-                font.bold: true
-                color: clearMouse.containsMouse ? "white" : (Theme.colors.text_secondary ?? "#565f89")
+                font.weight: Font.Medium
+                color: clearMouse.containsMouse ? (Theme.colors.error ?? "#f87171") : Qt.rgba(255, 255, 255, 0.60)
+                renderType: Text.NativeRendering
             }
 
             MouseArea {
@@ -131,7 +153,9 @@ ColumnLayout {
         }
     }
 
-    // Notification Cards List
+    // ========================================================
+    // 2. NOTIFICATIONS LIST VIEW (Solid Cards, Zero Borders)
+    // ========================================================
     ListView {
         id: notifList
         Layout.fillWidth: true
@@ -149,46 +173,54 @@ ColumnLayout {
             width: 4
             contentItem: Rectangle {
                 radius: 2
-                color: Theme.colors.text_secondary ?? "#565f89"
-                opacity: 0.4
+                color: Qt.rgba(255, 255, 255, 0.30)
             }
         }
 
+        // Empty State Placeholder
         Item {
             anchors.fill: parent
             visible: globalNotifModel.count === 0
 
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 8
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "notifications_none"
+                    iconSize: 32
+                    color: Qt.rgba(255, 255, 255, 0.25)
+                }
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "󰂜"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 32
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                    opacity: 0.5
-                }
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
                     text: "No notifications"
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 12
                     font.weight: Font.Medium
-                    color: Theme.colors.text_secondary ?? "#565f89"
+                    color: Qt.rgba(255, 255, 255, 0.40)
+                    renderType: Text.NativeRendering
                 }
             }
         }
 
         delegate: Rectangle {
+            id: notifCard
             width: ListView.view.width
-            implicitHeight: cardContent.implicitHeight + 16
-            radius: 10
-            color: Theme.colors.card_bg ?? "#1f2335"
-            border.width: 1
-            border.color: Theme.colors.border ?? "transparent"
+            implicitHeight: cardContent.implicitHeight + 18
+            radius: 12
+            color: cardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : Qt.rgba(255, 255, 255, 0.055)
+            border.width: 0
             clip: true
+
+            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+            MouseArea {
+                id: cardMouse
+                anchors.fill: parent
+                hoverEnabled: true
+            }
 
             ColumnLayout {
                 id: cardContent
@@ -196,7 +228,7 @@ ColumnLayout {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: 10
-                spacing: 6
+                spacing: 5
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -214,12 +246,13 @@ ColumnLayout {
 
                     Text {
                         text: appName ? appName : "System"
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 11
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: Theme.colors.accent ?? "#7aa2f7"
                         elide: Text.ElideRight
                         Layout.fillWidth: true
+                        renderType: Text.NativeRendering
                     }
 
                     IrisIconButton {
@@ -230,8 +263,8 @@ ColumnLayout {
                         flat: true
                         icon: "close"
                         iconSize: 12
-                        iconColor: Theme.colors.text_secondary ?? "#565f89"
-                        hoverIconColor: Theme.colors.error ?? "#f44336"
+                        iconColor: Qt.rgba(255, 255, 255, 0.40)
+                        hoverIconColor: Theme.colors.error ?? "#f87171"
                         onClicked: {
                             if (notifObj) notifObj.dismiss();
                             globalNotifModel.remove(index);
@@ -241,25 +274,27 @@ ColumnLayout {
 
                 Text {
                     text: summary
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 13
-                    font.bold: true
-                    color: Theme.colors.text_primary ?? "white"
+                    font.weight: Font.DemiBold
+                    color: "#ffffff"
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     visible: summary !== ""
+                    renderType: Text.NativeRendering
                 }
 
                 Text {
                     text: body
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 11
-                    color: Theme.colors.text_secondary ?? "#565f89"
+                    color: Qt.rgba(255, 255, 255, 0.60)
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     maximumLineCount: 3
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     visible: body !== ""
+                    renderType: Text.NativeRendering
                 }
             }
         }

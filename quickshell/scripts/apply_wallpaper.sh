@@ -40,7 +40,7 @@ elif [ -f "$TARGET" ]; then
 fi
 
 ensure_awww() {
-    if ! pgrep -x awww-daemon >/dev/null 2>&1; then
+    if ! pgrep -f awww-daemon >/dev/null 2>&1; then
         awww-daemon &
         for i in {1..30}; do
             awww query >/dev/null 2>&1 && break
@@ -98,6 +98,10 @@ if [ "$is_we" = true ]; then
     else
         echo "linux-wallpaperengine exited; high-resolution poster preserved on screen." >> /tmp/wallpaper-engine.log
     fi
+    # 4. Extract Dynamic Colors from Wallpaper & Hot-Reload Shell & Terminals
+    if [ -n "$HQ_POSTER" ] && [ -f "$HQ_POSTER" ]; then
+        python3 "$HOME/dynamic-you/scripts/theme-manager.py" apply-wallpaper "$HQ_POSTER" "$TRANSITION" &
+    fi
 else
     killall -9 linux-wallpaperengine 2>/dev/null || true
     rm -f "$STATE_FILE" 2>/dev/null || true
@@ -112,4 +116,7 @@ else
         --transition-fps 144 \
         --transition-step 240 \
         --transition-bezier 0.25,0.1,0.25,1.0
+
+    # Extract Dynamic Colors from Wallpaper & Hot-Reload Shell & Terminals
+    python3 "$HOME/dynamic-you/scripts/theme-manager.py" apply-wallpaper "$TARGET" "$TRANSITION" &
 fi

@@ -48,14 +48,14 @@ Item {
     property bool isDraggingMic: false
     property bool isDraggingBrightness: false
 
-    readonly property color colBg: "#000000"
-    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
-    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.12)
+    readonly property color colBg: (Theme.colors && Theme.colors.bg) ? Theme.colors.bg : "#0b0a10"
+    readonly property color colCard: (Theme.colors && Theme.colors.card_bg) ? Theme.colors.card_bg : Qt.rgba(255, 255, 255, 0.055)
+    readonly property color colCardHover: (Theme.colors && Theme.colors.hover_bg) ? Theme.colors.hover_bg : Qt.rgba(255, 255, 255, 0.12)
     readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.18)
     readonly property color colAccent: Theme.accent
-    readonly property color colText: "#f5f5f7"
-    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.60)
-    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)
+    readonly property color colText: (Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#f5f5f7"
+    readonly property color colSubtext: (Theme.colors && Theme.colors.text_secondary) ? Theme.colors.text_secondary : Qt.rgba(255, 255, 255, 0.60)
+    readonly property color colMuted: (Theme.colors && Theme.colors.text_muted) ? Theme.colors.text_muted : Qt.rgba(255, 255, 255, 0.38)
     readonly property color colBorder: "transparent"
     readonly property color colBorderHover: "transparent"
 
@@ -538,7 +538,7 @@ Item {
     // IRIS 1:1 REUSABLE DESIGN COMPONENTS (ZERO BORDERS, MATERIAL YOU)
     // ========================================================
 
-    // 1. Iris 1:1 Wide Action Plate (2x1) - Neutral Dark Glass with Accent Disc
+    // 1. Iris 1:1 Wide Action Plate (2x1) - Neutral Dark Glass with Accent Disc & Morphing Radius
     component IrisActionPlate: Rectangle {
         id: iplate
         property string glyph: ""
@@ -669,6 +669,8 @@ Item {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
+        Layout.preferredHeight: 44
+        implicitHeight: 44
         radius: 14
 
         // Solid accent when active, clean glass container when off
@@ -677,7 +679,7 @@ Item {
             : (tileMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.065))
         border.width: 0
 
-        scale: tileMouse.pressed ? 0.92 : (tileMouse.containsMouse ? 1.03 : 1.0)
+        scale: tileMouse.pressed ? 0.93 : (tileMouse.containsMouse ? 1.02 : 1.0)
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -685,7 +687,7 @@ Item {
             anchors.centerIn: parent
             text: gtile.glyph
             fill: gtile.lit ? 1 : 0
-            iconSize: 18
+            iconSize: 18.5
             color: gtile.lit ? (Theme.colors.bg ?? "#000000") : (tileMouse.containsMouse ? "#ffffff" : "#f5f5f7")
             Behavior on color { ColorAnimation { duration: 100 } }
         }
@@ -699,7 +701,7 @@ Item {
         }
     }
 
-    // 3. Iris 1:1 Vertical Capsule Slider
+    // 3. Iris 1:1 Vertical Capsule Slider (Visible Bold Fill + Tactile Handle Bar)
     component IrisVerticalCapsuleSlider: Item {
         id: vslider
         property real value: 0.5
@@ -1404,6 +1406,7 @@ Item {
                 id: upperSection
                 Layout.fillWidth: true
                 Layout.preferredHeight: 206
+                Layout.fillHeight: false
                 spacing: 10
 
                 // LEFT STACK: Ethernet, Bluetooth, Hotspot & Caffeine, Night Light & DND

@@ -1,0 +1,25 @@
+module qs.lucidui
+Badge 1.0 Badge.qml
+BatteryPill 1.0 BatteryPill.qml
+ButtonGroup 1.0 ButtonGroup.qml
+Button 1.0 Button.qml
+Chip 1.0 Chip.qml
+CircularProgress 1.0 CircularProgress.qml
+Divider 1.0 Divider.qml
+IconButton 1.0 IconButton.qml
+Icon 1.0 Icon.qml
+LauncherGrid 1.0 LauncherGrid.qml
+LinearProgress 1.0 LinearProgress.qml
+ListItem 1.0 ListItem.qml
+LoadingIndicator 1.0 LoadingIndicator.qml
+LText 1.0 LText.qml
+Marquee 1.0 Marquee.qml
+MaterialShape 1.0 MaterialShape.qml
+MonthView 1.0 MonthView.qml
+PasswordEcho 1.0 PasswordEcho.qml
+ShapedImage 1.0 ShapedImage.qml
+Slider 1.0 Slider.qml
+StateLayer 1.0 StateLayer.qml
+Switch 1.0 Switch.qml
+Tabs 1.0 Tabs.qml
+TextField 1.0 TextField.qml

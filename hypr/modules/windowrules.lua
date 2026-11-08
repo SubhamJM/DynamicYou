@@ -3,6 +3,12 @@
 -- ==================================================
 
 hl.window_rule({
+    name = "terminal-transparency",
+    match = { class = "^(foot|footclient|kitty|Alacritty|alacritty|ghostty)$" },
+    opacity = "0.90 0.85"
+})
+
+hl.window_rule({
     name = "spotify-transparency",
     match = { class = "spotify" },
     opacity = "0.90 0.80"
@@ -27,15 +33,22 @@ hl.layer_rule({
 })
 
 hl.layer_rule({
+    name = "quickshell-blur",
+    match = { namespace = "^(quickshell)$" },
+    blur = true,
+    ignore_alpha = 0.12
+})
+
+hl.layer_rule({
     name = "quickshell-noanim",
-    match = { namespace = "quickshell" },
-    noanim = true
+    match = { namespace = "^(quickshell)$" },
+    no_anim = true
 })
 
 hl.layer_rule({
     name = "notch-reserve-noanim",
     match = { namespace = "notch-reserve" },
-    noanim = true
+    no_anim = true
 })
 
 
@@ -47,7 +60,15 @@ hl.layer_rule({
 hl.window_rule({
     match = { title = "^(Open File|Select a File|Open Folder|Save As|Library|File Upload|Add Folder to Workspace|Authentication [rR]equired)(.*)$" },
     float = true,
-    center = true
+    center = true,
+    size = {"(monitor_w*0.60)", "(monitor_h*0.70)"}
+})
+
+hl.window_rule({
+    match = { class = "^(xdg-desktop-portal-.*|org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde)$" },
+    float = true,
+    center = true,
+    size = {"(monitor_w*0.60)", "(monitor_h*0.70)"}
 })
 
 hl.window_rule({

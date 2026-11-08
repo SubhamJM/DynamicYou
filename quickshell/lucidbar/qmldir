@@ -1,0 +1,10 @@
+module qs.lucidbar
+System 1.0 System.qml
+BluetoothPanel 1.0 BluetoothPanel.qml
+WifiPanel 1.0 WifiPanel.qml
+NightLightPanel 1.0 NightLightPanel.qml
+PowerPanel 1.0 PowerPanel.qml
+SessionMenu 1.0 SessionMenu.qml
+BarPill 1.0 BarPill.qml
+BarFlare 1.0 BarFlare.qml
+ClockCalendar 1.0 ClockCalendar.qml

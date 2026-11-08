@@ -5,11 +5,12 @@ import Quickshell
 import Quickshell.Io
 import "../"
 
-Item {
+FocusScope {
     id: notesRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
     focus: true
+    Keys.forwardTo: (activeTab === 0) ? [notepadArea] : [newTodoInput]
 
     Keys.onEscapePressed: (event) => {
         if (notesRoot.isSaveDrawerOpen) {
@@ -309,32 +310,34 @@ Item {
         id: mainContainer
         anchors.fill: parent
 
-        // ================= 1. MATERIAL YOU TOP HEADER =================
+        // ================= 1. LUXURY MINIMAL 34PX HEADER =================
         Item {
             id: headerBar
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 38
+            height: 34
 
             RowLayout {
                 anchors.fill: parent
                 spacing: 8
 
-                // Material Circular Back Button (Pixel style)
+                // Minimal Circular Back Button
                 Rectangle {
                     Layout.preferredWidth: 32
                     Layout.preferredHeight: 32
                     radius: 16
-                    color: backMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer
-                    Behavior on color { ColorAnimation { duration: 140 } }
+                    color: backMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05)
+                    border.width: 0
+                    Behavior on color { ColorAnimation { duration: 120 } }
 
                     Text {
                         anchors.centerIn: parent
                         text: "󰁍"
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 14
-                        color: notesRoot.m3TextPrimary
+                        color: "#ffffff"
+                        renderType: Text.NativeRendering
                     }
 
                     MouseArea {
@@ -346,25 +349,26 @@ Item {
                     }
                 }
 
-                // ================= PIXEL MATERIAL 3 SEGMENTED SWITCH =================
+                // ================= LUXURY MINIMAL SEGMENTED SWITCH =================
                 Rectangle {
-                    Layout.preferredHeight: 34
-                    Layout.preferredWidth: 236
-                    radius: 17
-                    color: notesRoot.m3SurfaceContainer
+                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 230
+                    radius: 16
+                    color: Qt.rgba(255, 255, 255, 0.05)
+                    border.width: 0
                     clip: true
 
                     // Sliding Pill Indicator
                     Rectangle {
-                        x: notesRoot.activeTab === 0 ? 3 : (parent.width / 2) + 1
-                        y: 3
-                        width: (parent.width / 2) - 4
-                        height: parent.height - 6
+                        x: notesRoot.activeTab === 0 ? 2 : (parent.width / 2) + 1
+                        y: 2
+                        width: (parent.width / 2) - 3
+                        height: parent.height - 4
                         radius: 14
-                        color: notesRoot.m3Primary
+                        color: "#ffffff"
                         Behavior on x {
                             NumberAnimation {
-                                duration: 200
+                                duration: 180
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: notesRoot.motionCurve
                             }
@@ -387,18 +391,20 @@ Item {
                                     text: "󰠮"
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 13
-                                    color: notesRoot.activeTab === 0 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    color: notesRoot.activeTab === 0 ? "#121214" : Qt.rgba(255, 255, 255, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    renderType: Text.NativeRendering
+                                    Behavior on color { ColorAnimation { duration: 120 } }
                                 }
                                 Text {
                                     text: "Notepad"
-                                    font.family: "Inter"
-                                    font.pixelSize: 12
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 11
                                     font.weight: notesRoot.activeTab === 0 ? Font.DemiBold : Font.Normal
-                                    color: notesRoot.activeTab === 0 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    color: notesRoot.activeTab === 0 ? "#121214" : Qt.rgba(255, 255, 255, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    renderType: Text.NativeRendering
+                                    Behavior on color { ColorAnimation { duration: 120 } }
                                 }
                             }
 
@@ -425,18 +431,20 @@ Item {
                                     text: "󰄲"
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 13
-                                    color: notesRoot.activeTab === 1 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    color: notesRoot.activeTab === 1 ? "#121214" : Qt.rgba(255, 255, 255, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    renderType: Text.NativeRendering
+                                    Behavior on color { ColorAnimation { duration: 120 } }
                                 }
                                 Text {
                                     text: "Tasks (" + todoModel.count + ")"
-                                    font.family: "Inter"
-                                    font.pixelSize: 12
+                                    font.family: "Noto Sans"
+                                    font.pixelSize: 11
                                     font.weight: notesRoot.activeTab === 1 ? Font.DemiBold : Font.Normal
-                                    color: notesRoot.activeTab === 1 ? notesRoot.m3OnPrimary : notesRoot.m3TextSecondary
+                                    color: notesRoot.activeTab === 1 ? "#121214" : Qt.rgba(255, 255, 255, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    renderType: Text.NativeRendering
+                                    Behavior on color { ColorAnimation { duration: 120 } }
                                 }
                             }
 
@@ -476,7 +484,7 @@ Item {
                         }
                         Text {
                             text: notesRoot.justCopied ? "Copied" : "Copy"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.weight: Font.Medium
                             color: notesRoot.justCopied ? notesRoot.m3Success : notesRoot.m3TextPrimary
@@ -513,7 +521,7 @@ Item {
                         }
                         Text {
                             text: notesRoot.justExported ? "Saved" : "Export"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.weight: Font.Medium
                             color: notesRoot.justExported ? notesRoot.m3Success : (notesRoot.isSaveDrawerOpen ? notesRoot.m3Primary : notesRoot.m3TextPrimary)
@@ -552,7 +560,7 @@ Item {
                         }
                         Text {
                             text: notesRoot.activeTab === 0 ? "Clear" : "Clear Done"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 11
                             font.weight: Font.Medium
                             color: clearMouse.containsMouse ? notesRoot.m3Error : notesRoot.m3TextSecondary
@@ -659,7 +667,7 @@ Item {
                         Text { text: "📁"; font.pixelSize: 10 }
                         Text {
                             text: "Browse"
-                            font.family: "Inter"
+                            font.family: "Noto Sans"
                             font.pixelSize: 10
                             font.weight: Font.Medium
                             color: notesRoot.m3TextPrimary
@@ -687,7 +695,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: "Save"
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
                         color: saveConfirmMouse.containsMouse ? notesRoot.m3OnPrimary : notesRoot.m3Primary
@@ -748,7 +756,7 @@ Item {
                         var lines = notepadArea.text === "" ? 0 : notepadArea.text.split("\n").length;
                         return words + " words · " + chars + " characters · " + lines + " lines";
                     }
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: notesRoot.m3TextMuted
                 }
@@ -770,7 +778,7 @@ Item {
                             if (notesRoot.isSaving) return "Saving...";
                             return "Auto-saved";
                         }
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 10
                         color: notesRoot.isSaving ? notesRoot.m3Primary : notesRoot.m3Success
                     }
@@ -785,7 +793,7 @@ Item {
 
                 Text {
                     text: notesRoot.completedTodoCount + " of " + todoModel.count + " completed (" + (todoModel.count > 0 ? Math.round((notesRoot.completedTodoCount / todoModel.count) * 100) : 0) + "%)"
-                    font.family: "Inter"
+                    font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: notesRoot.m3TextMuted
                 }
@@ -911,7 +919,7 @@ Item {
                             TextField {
                                 id: newTodoInput
                                 Layout.fillWidth: true
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 12
                                 color: notesRoot.m3TextPrimary
                                 placeholderText: "Add a task (Press Enter to add)..."
@@ -1028,7 +1036,7 @@ Item {
                                     Text {
                                         Layout.fillWidth: true
                                         text: model.text
-                                        font.family: "Inter"
+                                        font.family: "Noto Sans"
                                         font.pixelSize: 12
                                         font.weight: done ? Font.Normal : Font.Medium
                                         font.strikeout: done
@@ -1101,7 +1109,7 @@ Item {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "All caught up!"
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 13
                                 font.weight: Font.DemiBold
                                 color: notesRoot.m3TextPrimary
@@ -1109,7 +1117,7 @@ Item {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "Add a task above to plan your day."
-                                font.family: "Inter"
+                                font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 color: notesRoot.m3TextMuted
                             }

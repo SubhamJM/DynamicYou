@@ -2,73 +2,63 @@
 import sys
 import json
 import subprocess
+import re
 
 def get_audio_info():
     try:
-        sinks_out = subprocess.check_output(['pactl', 'list', 'sinks'], text=True, stderr=subprocess.DEVNULL)
-        default_sink = subprocess.check_output(['pactl', 'get-default-sink'], text=True, stderr=subprocess.DEVNULL).strip()
+        out = subprocess.check_output(['wpctl', 'status'], text=True, stderr=subprocess.DEVNULL)
     except Exception:
-        sinks_out = ""
-        default_sink = ""
+        out = ""
 
     sinks = []
-    curr = {}
-    for line in sinks_out.splitlines():
-        line = line.strip()
-        if line.startswith('Sink #'):
-            if curr: sinks.append(curr)
-            curr = {'id': line.split('#')[1]}
-        elif line.startswith('Name:'):
-            curr['name'] = line.split(':', 1)[1].strip()
-            curr['isDefault'] = (curr['name'] == default_sink)
-        elif line.startswith('Description:'):
-            curr['desc'] = line.split(':', 1)[1].strip()
-    if curr: sinks.append(curr)
-
-    try:
-        sources_out = subprocess.check_output(['pactl', 'list', 'sources'], text=True, stderr=subprocess.DEVNULL)
-        default_source = subprocess.check_output(['pactl', 'get-default-source'], text=True, stderr=subprocess.DEVNULL).strip()
-    except Exception:
-        sources_out = ""
-        default_source = ""
-
     sources = []
-    curr = {}
-    for line in sources_out.splitlines():
-        line = line.strip()
-        if line.startswith('Source #'):
-            if curr and '.monitor' not in curr.get('name', ''): sources.append(curr)
-            curr = {'id': line.split('#')[1]}
-        elif line.startswith('Name:'):
-            curr['name'] = line.split(':', 1)[1].strip()
-            curr['isDefault'] = (curr['name'] == default_source)
-        elif line.startswith('Description:'):
-            curr['desc'] = line.split(':', 1)[1].strip()
-    if curr and '.monitor' not in curr.get('name', ''): sources.append(curr)
+    section = None
+
+    for line in out.splitlines():
+        clean = line.strip().replace('│', '').strip()
+        if 'Sinks:' in line:
+            section = 'sinks'
+            continue
+        elif 'Sources:' in line:
+            section = 'sources'
+            continue
+        elif 'Filters:' in line or 'Streams:' in line or 'Devices:' in line or 'Settings' in line:
+            section = None
+            continue
+
+        if section in ('sinks', 'sources') and clean:
+            m = re.match(r'^(\*?)\s*(\d+)\.\s+(.*?)(?:\s+\[vol:.*\])?$', clean)
+            if m:
+                is_default = (m.group(1) == '*')
+                dev_id = m.group(2)
+                desc = m.group(3).strip()
+                item = {
+                    'id': dev_id,
+                    'name': dev_id,
+                    'desc': desc,
+                    'isDefault': is_default
+                }
+                if section == 'sinks':
+                    sinks.append(item)
+                else:
+                    sources.append(item)
 
     return {"sinks": sinks, "sources": sources}
 
-def set_sink(sink_name):
+def set_sink(sink_id):
     try:
-        subprocess.run(['pactl', 'set-default-sink', sink_name], check=True, stderr=subprocess.DEVNULL)
-        out = subprocess.check_output(['pactl', 'list', 'short', 'sink-inputs'], text=True, stderr=subprocess.DEVNULL)
-        for line in out.splitlines():
-            parts = line.strip().split()
-            if parts:
-                input_id = parts[0]
-                subprocess.run(['pactl', 'move-sink-input', input_id, sink_name], stderr=subprocess.DEVNULL)
+        # Strip any non-digit prefix if needed
+        m = re.search(r'\d+', str(sink_id))
+        sid = m.group(0) if m else str(sink_id)
+        subprocess.run(['wpctl', 'set-default', sid], check=True, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
-def set_source(source_name):
+def set_source(source_id):
     try:
-        subprocess.run(['pactl', 'set-default-source', source_name], check=True, stderr=subprocess.DEVNULL)
-        out = subprocess.check_output(['pactl', 'list', 'short', 'source-outputs'], text=True, stderr=subprocess.DEVNULL)
-        for line in out.splitlines():
-            parts = line.strip().split()
-            if parts:
-                output_id = parts[0]
-                subprocess.run(['pactl', 'move-source-output', output_id, source_name], stderr=subprocess.DEVNULL)
+        m = re.search(r'\d+', str(source_id))
+        sid = m.group(0) if m else str(source_id)
+        subprocess.run(['wpctl', 'set-default', sid], check=True, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 

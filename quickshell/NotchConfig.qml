@@ -34,7 +34,10 @@ QtObject {
     readonly property int timerNetPopup: 1500       // Duration for Network handoff island popup
     readonly property int timerIslandText: 3500     // Duration for Island textual info labels
     readonly property int timerFullscreenHideGrace: 250 // Duration before auto-hiding when leaving top hover in fullscreen
-    readonly property string scriptsDir: (Quickshell.env("HOME") || "") + "/.config/quickshell/scripts"
+    readonly property string scriptsDir: {
+        var localPath = Qt.resolvedUrl("scripts").toString().replace(/^file:\/\//, "");
+        return (localPath && localPath.length > 0) ? localPath : ((Quickshell.env("HOME") || "") + "/.config/quickshell/scripts");
+    }
 
     // ==========================================
     // 4. STATIC NOTCH BASE DIMENSIONS
@@ -44,34 +47,34 @@ QtObject {
 
     readonly property var modeDimensions: ({
         "idle":          { width: 184, height: 32,  radius: 16 },
-		"hover":         { width: 480, height: 44,  radius: 22 },
-		"switcher":      { width: 800, height: 420, radius: 14 },
-        "launcher":      { width: 560, height: 246, radius: 22 },
-        "theme":         { width: 660, height: 200, radius: 14 },
-        "wallpaper":     { width: 760, height: 320, radius: 12 },
-        "engine":        { width: 840, height: 480, radius: 14 },
-        "transition":    { width: 440, height: 320, radius: 12 },
+		"hover":         { width: 440, height: 44,  radius: 22 },
+		"switcher":      { width: 800, height: 420, radius: 22 },
+        "launcher":      { width: 640, height: 215, radius: 22 },
+        "theme":         { width: 880, height: 360, radius: 24 },
+        "wallpaper":     { width: 880, height: 360, radius: 24 },
+        "engine":        { width: 840, height: 480, radius: 22 },
+        "transition":    { width: 440, height: 320, radius: 22 },
         "osd":           { width: 280, height: 40,  radius: 16 },
-        "wifi":          { width: 420, height: 380, radius: 26 }, 
-        "bluetooth":     { width: 420, height: 285, radius: 26 },
-        "recorder":      { width: 420, height: 275, radius: 26 },
-        "battery":       { width: 460, height: 348, radius: 26 },
-        "powermenu":     { width: 460, height: 108, radius: 24 },
-        "calendar":      { width: 320, height: 280, radius: 12 },
-        "clipboard":     { width: 580, height: 500, radius: 26 },
-        "utility":       { width: 424, height: 330, radius: 26 },
-        "music":         { width: 480, height: 265, radius: 26 },
-        "notes":         { width: 680, height: 480, radius: 14 },
-        "cheatsheet":    { width: 800, height: 440, radius: 14 },
-        "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 840, height: 560, radius: 26 }
+        "wifi":          { width: 440, height: 460, radius: 22 }, 
+        "bluetooth":     { width: 440, height: 360, radius: 22 },
+        "recorder":      { width: 440, height: 270, radius: 22 },
+        "battery":       { width: 440, height: 348, radius: 22 },
+        "powermenu":     { width: 440, height: 104, radius: 22 },
+        "calendar":      { width: 686, height: 440, radius: 22 },
+        "clipboard":     { width: 440, height: 440, radius: 22 },
+        "utility":       { width: 440, height: 390, radius: 24 },
+        "music":         { width: 560, height: 285, radius: 22 },
+        "notes":         { width: 680, height: 480, radius: 22 },
+        "cheatsheet":    { width: 800, height: 440, radius: 22 },
+        "notifications": { width: 440, height: 380, radius: 22 },
+        "taskmanager":   { width: 880, height: 620, radius: 22 }
     })
 
     function calculateUtilityHeight(activeSection) {
-        if (activeSection === "audio") return 384;
-        if (activeSection === "vpn") return 264;
-        if (activeSection === "pomo") return 360;
-        return 330;
+        if (activeSection === "audio") return 390;
+        if (activeSection === "vpn") return 280;
+        if (activeSection === "pomo") return 370;
+        return 390;
     }
 
     // ==========================================
@@ -92,22 +95,21 @@ QtObject {
     }
 
     function calculateLauncherHeight(count, allAppsLength, browsing = false) {
-        if (browsing) return 246;
-        if (count <= 0) return 128;
-        if (count === 1) return 156;
-        if (count === 2) return 224;
-        if (count === 3) return 266;
-        if (count === 4) return 308;
-        if (count === 5) return 350;
-        if (count === 6) return 392;
+        if (browsing) return 215;
+        if (count <= 0) return 140;
+        if (count === 1) return 170;
+        if (count === 2) return 236;
+        if (count === 3) return 286;
+        if (count === 4) return 336;
+        if (count === 5) return 386;
+        if (count === 6) return 416;
         return 436;
     }
 
-    function calculateRecorderHeight(recordAudio, isDropdownOpen, isRecording) {
-        if (isRecording) return 210;
-        if (recordAudio && isDropdownOpen) return 360;
-        if (recordAudio) return 310;
-        return 270;
+    function calculateRecorderHeight(hasLastRecording, isRecording) {
+        var base = isRecording ? 162 : 174;
+        var cardH = hasLastRecording ? 68 : 38;
+        return base + cardH + 28;
     }
 
     function calculateBluetoothHeight(devices, stateMap) {
@@ -124,22 +126,18 @@ QtObject {
         return Math.min(480, Math.max(285, 160 + listItemsHeight + 12));
     }
 
-    function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight) {
-        if (activeTab === "hotspot") return 390;
+    function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight, hasEthernet) {
+        if (activeTab === "hotspot") return 380;
         if (!wifiEnabled) return 240;
-        if (modelCount === 0) return 260;
-        var base = 192;
-        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 76);
-        var dynamicListHeight = Math.min(300, Math.max(68, effectiveList));
-        return Math.min(495, Math.max(260, base + dynamicListHeight));
+        if (modelCount === 0) return hasEthernet ? 310 : 260;
+        var base = hasEthernet ? 160 : 110;
+        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 56);
+        var dynamicListHeight = Math.min(430, Math.max(120, effectiveList));
+        return Math.min(540, Math.max(hasEthernet ? 340 : 300, base + dynamicListHeight));
     }
 
     function calculateTaskManagerHeight(activeTab, modelCount, listContentHeight) {
-        if (modelCount === 0) return 260;
-        var base = 170;
-        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 59);
-        var dynamicListHeight = Math.min(410, Math.max(70, effectiveList));
-        return Math.min(580, Math.max(260, base + dynamicListHeight));
+        return 620;
     }
 
     // ==========================================

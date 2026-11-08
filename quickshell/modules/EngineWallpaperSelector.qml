@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "../"
 
-Item {
+FocusScope {
     id: engineModule
     focus: true
 
@@ -336,6 +336,30 @@ Item {
                         text: engineModule.searchQuery
                         onTextChanged: engineModule.searchQuery = text
 
+                        Keys.onDownPressed: (event) => {
+                            if (currentItems.length > 0) {
+                                cardGrid.currentIndex = Math.max(0, cardGrid.currentIndex);
+                                cardGrid.forceActiveFocus();
+                                event.accepted = true;
+                            }
+                        }
+                        Keys.onReturnPressed: (event) => {
+                            engineModule.applyCurrent();
+                            event.accepted = true;
+                        }
+                        Keys.onEnterPressed: (event) => {
+                            engineModule.applyCurrent();
+                            event.accepted = true;
+                        }
+                        Keys.onEscapePressed: (event) => {
+                            if (searchInput.text !== "") {
+                                searchInput.text = "";
+                            } else {
+                                if (typeof root !== "undefined") root.collapseToIdle();
+                            }
+                            event.accepted = true;
+                        }
+
                         Text {
                             anchors.fill: parent
                             text: engineModule.activeProvider === 0 ? "Search Wallpaper Engine..." : "Search local wallpapers..."
@@ -478,9 +502,23 @@ Item {
                 id: cardGrid
                 anchors.fill: parent
                 clip: true
+                focus: true
                 cellWidth: Math.floor(width / 4)
                 cellHeight: Math.floor(cellWidth * 0.65)
                 model: currentItems
+
+                Keys.onReturnPressed: (event) => {
+                    engineModule.applyCurrent();
+                    event.accepted = true;
+                }
+                Keys.onEnterPressed: (event) => {
+                    engineModule.applyCurrent();
+                    event.accepted = true;
+                }
+                Keys.onEscapePressed: (event) => {
+                    if (typeof root !== "undefined") root.collapseToIdle();
+                    event.accepted = true;
+                }
 
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded

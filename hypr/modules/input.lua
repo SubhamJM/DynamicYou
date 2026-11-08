@@ -16,6 +16,15 @@ hl.config({
         }
     },
 
+    gestures = {
+        workspace_swipe_distance = 700,
+        workspace_swipe_cancel_ratio = 0.15,
+        workspace_swipe_min_speed_to_force = 5,
+        workspace_swipe_direction_lock = true,
+        workspace_swipe_direction_lock_threshold = 10,
+        workspace_swipe_create_new = true
+    },
+
     misc = {
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
@@ -25,7 +34,7 @@ hl.config({
         animate_manual_resizes = false,
         animate_mouse_windowdragging = false,
         enable_swallow = false,
-        swallow_regex = "(foot|kitty|allacritty|Alacritty)",
+        swallow_regex = "(foot|kitty|alacritty|Alacritty)",
         on_focus_under_fullscreen = 2,
         allow_session_lock_restore = true,
         session_lock_xray = true,
@@ -62,33 +71,31 @@ hl.device({
 })
 
 -- Example per-device config
--- See https://wiki.hypr.land/Configuring/Advanced-and-Cool/Devices/ for more
 hl.device({
     name        = "epic-mouse-v1",
     sensitivity = -0.5,
 })
 
-
--- 3 finger swipe left/right → switch workspaces
+-- Touchpad Gestures
+-- 3 finger swipe vertical -> switch workspaces
 hl.gesture({
     fingers = 3,
     direction = "vertical",
     action = "workspace",
-    scale = 1.8 -- INCREASE THIS if the swipe still feels laggy/heavy
+    scale = 1.8
 })
 
--- 4 finger swipe up → fullscreen
-hl.gesture({
-    fingers = 4,
-    direction = "up",
-    action = "fullscreen",
-    scale = 1.5
-})
-
+-- 3 finger swipe horizontal -> scroll move
 hl.gesture({
     fingers = 3,
     direction = "horizontal",
     action = "scroll_move"
 })
 
-
+-- 4 finger swipe up -> toggle fullscreen
+hl.gesture({
+    fingers = 4,
+    direction = "up",
+    action = "fullscreen",
+    scale = 1.5
+})

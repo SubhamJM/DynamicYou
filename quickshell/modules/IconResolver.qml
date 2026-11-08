@@ -14,6 +14,7 @@ QtObject {
         // Browsers
         "zen": { name: "Zen Browser", icon: "zen-browser", symbol: "language" },
         "zen-bin": { name: "Zen Browser", icon: "zen-browser", symbol: "language" },
+        "zen-beta": { name: "Zen Browser (Beta)", icon: "zen-browser", symbol: "language" },
         "firefox": { name: "Firefox", icon: "firefox", symbol: "language" },
         "chrome": { name: "Google Chrome", icon: "google-chrome", symbol: "language" },
         "google-chrome": { name: "Google Chrome", icon: "google-chrome", symbol: "language" },
@@ -133,23 +134,29 @@ QtObject {
 
     // Resolves an app/process into icon path and fallback symbol
     function resolve(inputName, windowClass) {
-        var rawKey = (inputName || "").toString().toLowerCase().trim();
-        var rawClass = (windowClass || "").toString().toLowerCase().trim();
+        var rawInput = (inputName || "").toString().trim();
+        var rawClass = (windowClass || "").toString().trim();
+        var rawKey = rawInput.toLowerCase();
+        var rawClassKey = rawClass.toLowerCase();
+
+        if (rawKey.endsWith(".desktop")) rawKey = rawKey.substring(0, rawKey.length - 8);
+        if (rawClassKey.endsWith(".desktop")) rawClassKey = rawClassKey.substring(0, rawClassKey.length - 8);
 
         // 1. Direct map lookup
-        var entry = root.iconMap[rawKey] || root.iconMap[rawClass];
+        var entry = root.iconMap[rawKey] || root.iconMap[rawClassKey];
 
         // 1b. Substring / Token lookup if no direct match
         if (!entry) {
             for (var k in root.iconMap) {
-                if (k.length >= 3 && (rawKey.indexOf(k) !== -1 || rawClass.indexOf(k) !== -1)) {
+                if (k.length >= 3 && (rawKey.indexOf(k) !== -1 || rawClassKey.indexOf(k) !== -1)) {
                     entry = root.iconMap[k];
                     break;
                 }
             }
         }
 
-        var candidateIcon = entry ? entry.icon : (rawKey || rawClass);
+        var candidateIcon = entry ? entry.icon : (rawInput || rawClass);
+        if (candidateIcon.endsWith(".desktop")) candidateIcon = candidateIcon.substring(0, candidateIcon.length - 8);
         var fallbackSym = entry ? entry.symbol : "";
         var dispName = entry ? entry.name : "";
 
@@ -157,7 +164,7 @@ QtObject {
         var iconPath = "";
         if (candidateIcon && !candidateIcon.startsWith("/") && !candidateIcon.startsWith("file://") && !candidateIcon.startsWith("image://")) {
             try {
-                var p = Quickshell.iconPath(candidateIcon, true);
+                var p = Quickshell.iconPath(candidateIcon, "application-x-executable") || Quickshell.iconPath(candidateIcon);
                 if (p && p.trim() !== "") {
                     if (p.startsWith("image://") || p.startsWith("file://")) {
                         iconPath = p;

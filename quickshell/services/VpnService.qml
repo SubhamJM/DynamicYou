@@ -1,0 +1,313 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+import qs.modules.common
+import qs.modules.common.functions
+import qs
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+Singleton {
+    id: root
+    property bool available: false
+    property bool active: false
+    property string activeProfile: ""
+    property string activeProvider: ""
+    property string statusText: Translation.tr("Disconnected")
+    property string errorMessage: ""
+    property bool loading: false
+    property bool operationPending: false
+    property bool pendingTargetActive: false
+    readonly property bool displayActive: root.operationPending ? root.pendingTargetActive : root.active
+    property bool enabled: Config.options?.vpn?.enabled ?? true
+    property string recentProvider: Config.options?.vpn?.recentProvider ?? "networkmanager"
+    property bool autoConnect: Config.options?.vpn?.autoConnect ?? false
+    property string defaultProvider: Config.options?.vpn?.defaultProvider ?? Config.options?.vpn?.backend ?? "networkmanager"
+    property string defaultLocation: Config.options?.vpn?.defaultLocation ?? ""
+    property bool blockLan: Config.options?.vpn?.blockLan ?? false
+    property bool diagnosticsEnabled: Config.options?.vpn?.enableDiagnostics ?? true
+    property bool protonSecureCore: Config.options?.vpn?.protonSecureCore ?? false
+    // The kill switch is Proton VPN's own setting: its settings.json is the source of
+    // truth (the Proton app can change it too), and the CLI only accepts changes while
+    // disconnected. 0 off, 1 standard, 2 permanent (only the Proton app sets that one).
+    property int protonKillSwitchState: 0
+    property bool killSwitchPending: false
+    readonly property bool protonConnected: root.active && root.activeProvider === "protonvpn"
+    readonly property bool killSwitchSupported: root.protonvpnAvailable
+    readonly property bool killSwitchEnabled: root.protonKillSwitchState > 0
+    readonly property bool blockLanSupported: false
+    readonly property var safetyCapabilities: ({ killSwitch: { supported: root.killSwitchSupported, configured: root.killSwitchEnabled }, blockLan: { supported: false, configured: root.blockLan } })
+
+    // NetworkManager dispatcher hook that resets the connections a VPN change black-holes
+    // (see the script's header). Installed as a root-owned copy, so compare it with ours.
+    readonly property string staleSocketHookName: "90-ii-vpn-stale-sockets"
+    readonly property string staleSocketHookSource: FileUtils.trimFileProtocol(Quickshell.shellPath(`scripts/vpn/${root.staleSocketHookName}`))
+    readonly property string staleSocketHookTarget: `/etc/NetworkManager/dispatcher.d/${root.staleSocketHookName}`
+    readonly property string staleSocketHookInstallCommand: `sudo install -Dm755 '${root.staleSocketHookSource}' '${root.staleSocketHookTarget}'`
+    readonly property string staleSocketHookRemoveCommand: `sudo rm '${root.staleSocketHookTarget}'`
+    property string staleSocketHookInstalledText: ""
+    property string staleSocketHookSourceText: ""
+    readonly property bool staleSocketHookInstalled: root.staleSocketHookInstalledText.length > 0
+    readonly property bool staleSocketHookOutdated: root.staleSocketHookInstalled && root.staleSocketHookSourceText.length > 0
+        && root.staleSocketHookInstalledText !== root.staleSocketHookSourceText
+    property string staleSocketHookResult: "" // "", "ok", "cancelled", "failed"
+    readonly property bool staleSocketHookInstalling: hookInstallProc.running
+    function installStaleSocketHook(): void { if (hookInstallProc.running) return; root.staleSocketHookResult = ""; hookInstallProc.running = true }
+    property string diagnosticsText: ""
+    property list<var> profiles: []
+    property list<var> activeProfiles: []
+    property list<string> availableProviders: []
+    property var providerCapabilities: ({})
+    property var providerDiagnostics: ({})
+    property string lastErrorOutput: ""
+    property int lastExitCode: -1
+    property string lastExitStatus: ""
+    property bool nordvpnAvailable: false
+    property string nordvpnStatus: Translation.tr("Unavailable")
+    property string nordvpnLocation: ""
+    property bool protonvpnAvailable: false
+    property string protonvpnStatus: Translation.tr("Unavailable")
+    property string protonvpnLocation: ""
+    property string protonServer: "" // From NetworkManager's "ProtonVPN <server>" connection
+    // Proton's CLI loses track of a tunnel whose record it didn't save, and its disconnect then
+    // quietly does nothing. Run after it with the tunnel's name as $1: if NetworkManager still has
+    // the tunnel, remove it and the standard kill switch's blockers, as Proton's disconnect would.
+    readonly property string protonLeftoverCleanup: "nmcli -t -f NAME connection show --active | grep -qxF -- \"$1\" || exit 0; "
+        + "nmcli connection delete id \"$1\" >/dev/null || exit; "
+        + "for ks in pvpn-killswitch pvpn-killswitch-ipv6; do nmcli connection delete id \"$ks\" >/dev/null 2>&1; done; exit 0"
+    signal vpnConnected(string profileName)
+    signal vpnDisconnected()
+    signal errorOccurred(string message)
+    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    property var operationQueue: []
+    property var currentOperation: null
+    property bool refreshQueued: false
+    property bool autoConnectAttempted: false
+    property string importPath: ""
+    property bool componentReady: false
+
+    // perf: VPN status only needs to be live while the user is on a surface that
+    // shows it — the sidebar dashboard (toggle + dialog) or Settings. The bar's
+    // dashboard status dot is a *passive* reader: it reads the last-known `active`
+    // and must not keep the nmcli/provider poll (and its subprocess churn) alive
+    // at idle. Merely instantiating this singleton no longer probes or polls;
+    // opening a real surface (or autoConnect) does.
+    readonly property bool wanted: GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen
+    onWantedChanged: { if (root.wanted && root.enabled && root.componentReady) root.refresh() }
+
+    onEnabledChanged: { if (!root.componentReady) return; if (root.enabled) root.refresh(); else { if (Config.options?.vpn?.disconnectOnDisable && root.active) root.disconnectOnDisableNow(); root.operationQueue = []; root.currentOperation = null; root.refreshQueued = false; root.resetDisabled() } }
+
+    Component.onCompleted: { root.componentReady = true; if (root.autoConnect || root.wanted) root.refresh() }
+    Connections { target: Config; function onReadyChanged() { if (Config.ready) { root.autoConnectAttempted = false; if (root.autoConnect || root.wanted) root.refresh() } } }
+
+    function parseNmcliLine(line: string): list<string> {
+        const fields = []; let field = ""; let escaped = false
+        for (let i = 0; i < line.length; ++i) {
+            const c = line[i]
+            if (escaped) { field += c === "n" ? "\n" : c; escaped = false }
+            else if (c === "\\") escaped = true
+            else if (c === ":") { fields.push(field); field = "" }
+            else field += c
+        }
+        if (escaped) field += "\\"
+        fields.push(field)
+        return fields
+    }
+    function parseNmcli(text: string, fields: int): list<var> {
+        const out = []; for (const line of String(text || "").split(/\r?\n/)) { if (!line.trim()) continue; const row = root.parseNmcliLine(line); if (row.length >= fields) out.push(row) } return out
+    }
+    function enqueue(kind: string, command: list<string>, data: var): void { const q = root.operationQueue.slice(); q.push({ kind: kind, command: command, data: data }); root.operationQueue = q; root.startNext() }
+    function startNext(): void { if (root.currentOperation !== null || root.operationQueue.length === 0) return; const q = root.operationQueue.slice(); root.currentOperation = q.shift(); root.operationQueue = q; commandProc.command = root.currentOperation.command; commandProc.running = true }
+    function finishOperation(): void { root.currentOperation = null; root.startNext() }
+    function setError(message: string): void { root.operationQueue = []; root.refreshQueued = false; root.operationPending = false; root.errorMessage = message; root.loading = false; root.errorOccurred(message) }
+    function resetDisabled(): void { root.available = false; root.active = false; root.activeProfile = ""; root.activeProvider = ""; root.profiles = []; root.activeProfiles = []; root.availableProviders = []; root.nordvpnAvailable = false; root.protonvpnAvailable = false; root.protonServer = ""; root.statusText = Translation.tr("Disabled"); root.loading = false }
+    function refresh(): void { if (!root.enabled) { root.operationQueue = []; root.currentOperation = null; root.refreshQueued = false; root.resetDisabled(); return } if (root.refreshQueued) return; root.refreshQueued = true; root.loading = true; root.errorMessage = ""; root.enqueue("probeNmcli", ["which", "nmcli"], null) }
+    // The 10 s poll must not rebuild the world. refresh() runs the whole
+    // discovery chain (three `which` probes, the profile list, and a status
+    // call to EVERY installed CLI provider) — the 2026-09-08 audit caught
+    // `protonvpn status` (a Python CLI, ~103 MiB PSS peak) being paid for on
+    // every tick even though the configured backend was NetworkManager.
+    // The light poll reads only what can change silently between ticks:
+    // NM's active connections, plus the CLI status of a provider only while
+    // that provider is the one we believe is connected.
+    function pollStatus(): void {
+        if (!root.enabled || root.loading || root.refreshQueued) return
+        root.loading = true
+        if (root.available) root.enqueue("active", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], null)
+        if (root.activeProvider === "nordvpn" && root.nordvpnAvailable) root.enqueue("nordStatus", ["nordvpn", "status"], null)
+        // NetworkManager already tracks Proton's tunnel; only ask the CLI when there is no nmcli.
+        else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable && !root.available) root.enqueue("protonStatus", ["protonvpn", "status"], null)
+        root.enqueue("finishRefresh", ["true"], null)
+    }
+    function toggleVpn(): void {
+        if (!root.enabled) {
+            root.setError(Translation.tr("VPN is disabled in settings"))
+            return
+        }
+        if (root.displayActive || root.active)
+            root.disconnectVpn()
+        else
+            root.connectDefault()
+    }
+    function connectDefault(): void {
+        const provider = String(Config.options?.vpn?.recentProvider || Config.options?.vpn?.defaultProvider || Config.options?.vpn?.backend || "networkmanager").toLowerCase(); const location = String(Config.options?.vpn?.defaultLocation || "")
+        if (provider === "nordvpn" || provider === "protonvpn") { root.connectProvider(provider, location); return }
+        const profile = String(Config.options?.vpn?.defaultProfile || ""); if (profile) { root.connectProfile(profile); return }
+        if (location) for (const item of root.profiles) if (String(item.name).toLowerCase().includes(location.toLowerCase())) { root.connectProfile(item.name); return }
+        if (root.profiles.length) root.connectProfile(root.profiles[0].name); else root.setError(Translation.tr("No VPN profile configured"))
+    }
+    function connectProfile(profileName: string): void { if (!profileName || !root.available) { root.setError(Translation.tr("NetworkManager VPN is unavailable")); return } root.recentProvider = "networkmanager"; if (Config.ready) Config.options.vpn.recentProvider = "networkmanager"; root.operationPending = true; root.pendingTargetActive = true; root.loading = true; root.errorMessage = ""; root.enqueue("connect", ["nmcli", "connection", "up", "id", profileName], { profile: profileName, provider: "networkmanager" }) }
+    function connectProvider(provider: string, location: string): void { const p = provider.toLowerCase(); if (p !== "nordvpn" && p !== "protonvpn") { root.connectDefault(); return } if ((p === "nordvpn" && !root.nordvpnAvailable) || (p === "protonvpn" && !root.protonvpnAvailable)) { root.setError(Translation.tr("VPN provider is unavailable: %1").arg(provider)); return } const executable = p === "nordvpn" ? "nordvpn" : "protonvpn"; const command = [executable, "connect"]; if (location && location.trim()) command.push("--country", location.trim()); if (p === "protonvpn" && root.protonSecureCore) command.push("--securecore"); root.recentProvider = p; if (Config.ready) Config.options.vpn.recentProvider = p; root.operationPending = true; root.pendingTargetActive = true; root.loading = true; root.errorMessage = ""; root.enqueue("connect", command, { profile: location || provider, provider: p }) }
+    function disconnectVpn(): void {
+        if (!root.active && !root.activeProfiles.length) return
+        root.operationPending = true; root.pendingTargetActive = false; root.loading = true; root.errorMessage = ""
+        if (root.activeProvider === "nordvpn" && root.nordvpnAvailable) root.enqueue("disconnect", ["nordvpn", "disconnect"], { provider: "nordvpn", refresh: true })
+        else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable) {
+            root.enqueue("disconnect", ["protonvpn", "disconnect"], { provider: "protonvpn", refresh: !root.protonServer })
+            if (root.protonServer) root.enqueue("disconnect", ["sh", "-c", root.protonLeftoverCleanup, "sh", `ProtonVPN ${root.protonServer}`], { provider: "protonvpn", refresh: true })
+        }
+        else { const names = root.activeProfiles.length ? root.activeProfiles.slice() : (root.activeProfile ? [root.activeProfile] : []); if (!names.length) { root.setError(Translation.tr("No active VPN connection found")); return } for (let i = 0; i < names.length; ++i) root.enqueue("disconnect", ["nmcli", "connection", "down", "id", names[i]], { provider: "networkmanager", refresh: i === names.length - 1 }) }
+    }
+    function setKillSwitch(on: bool): void {
+        if (!root.protonvpnAvailable || root.protonConnected || root.killSwitchPending) return
+        root.killSwitchPending = true; root.errorMessage = ""
+        root.enqueue("killSwitch", ["protonvpn", "config", "set", "kill-switch", on ? "standard" : "off"], null)
+    }
+    // Proton's Python CLI prints deprecation warnings on stderr ahead of the real
+    // failure; keep click's "Error: ..." line when there is one.
+    function cliError(err: string, fallback: string): string {
+        const text = String(err || "").trim()
+        const errors = text.split(/\r?\n/).filter(line => line.trim().startsWith("Error:"))
+        return errors.length ? errors[errors.length - 1].trim() : (text || fallback)
+    }
+    function cleanImportPath(filePath: string): string { let path = String(filePath || "").replace(/^file:\/\//, ""); try { if (path.indexOf("%") >= 0) path = decodeURIComponent(path) } catch (e) {} return path }
+    function disconnectOnDisableNow(): void {
+        if (root.activeProvider === "nordvpn") Quickshell.execDetached(["nordvpn", "disconnect"])
+        else if (root.activeProvider === "protonvpn") Quickshell.execDetached(root.protonServer
+            ? ["sh", "-c", `protonvpn disconnect >/dev/null 2>&1; ${root.protonLeftoverCleanup}`, "sh", `ProtonVPN ${root.protonServer}`]
+            : ["protonvpn", "disconnect"])
+        else if (root.activeProfile) Quickshell.execDetached(["nmcli", "connection", "down", "id", root.activeProfile])
+    }
+    function importProfile(filePath: string): void { if (!filePath || !filePath.trim()) return; root.importPath = root.cleanImportPath(filePath); root.loading = true; root.errorMessage = ""; root.enqueue("readImport", ["cat", "--", root.importPath], null) }
+    property bool filePickerLoading: false
+    function openFilePicker(): void {
+        if (root.filePickerLoading) return
+        root.filePickerLoading = true
+        filePickerProc.running = false
+        filePickerProc.running = true
+    }
+    function detectImportType(content: string, path: string): string { const p = path.toLowerCase(); if (p.endsWith(".ovpn") || p.endsWith(".ovpn3")) return "openvpn"; if (/^\s*\[Interface\]\s*$/im.test(content) && /^\s*\[Peer\]\s*$/im.test(content)) return "wireguard"; if (/^\s*(client|remote|dev\s+tun|proto\s+)/im.test(content)) return "openvpn"; return "" }
+    function deleteProfile(profileName: string): void { if (!profileName || !root.available) return; root.loading = true; root.enqueue("delete", ["nmcli", "connection", "delete", "id", profileName], null) }
+    function runDiagnostics(): void { if (!root.diagnosticsEnabled) { root.setError(Translation.tr("VPN diagnostics are disabled in settings")); return } root.diagnosticsText = JSON.stringify({ available: root.available, active: root.active, provider: root.activeProvider, exitCode: root.lastExitCode, error: root.lastErrorOutput }); root.refresh() }
+    function parseProviderStatus(text: string): var { let connected = false; let location = ""; for (const raw of String(text || "").split(/\r?\n/)) { const line = raw.trim(); const low = line.toLowerCase(); if (low.includes("status") && low.includes("connected") && !low.includes("disconnected")) connected = true; if (low.startsWith("country:") || low.startsWith("city:") || low.startsWith("server:") || low.startsWith("current server:")) { const value = line.substring(line.indexOf(":") + 1).trim(); if (value) location = location ? location + ", " + value : value } } return { connected: connected, status: connected ? (location || Translation.tr("Connected")) : Translation.tr("Disconnected"), location: location } }
+    // Proton's CLI brings its tunnel up as a NetworkManager connection named "ProtonVPN <server>".
+    // It stays Proton's: shown as Proton, and disconnected through its CLI, or Proton's kill switch
+    // treats the drop as unexpected and keeps blocking traffic.
+    function protonServerOf(name: string): string { return root.protonvpnAvailable && String(name).startsWith("ProtonVPN ") ? String(name).substring(10) : "" }
+    // `protonvpn status` says "CH-FR#1 in Paris, via Switzerland"; NetworkManager only has "CH-FR#1".
+    // Use the long form while it still describes the server NetworkManager reports.
+    function protonLabel(): string {
+        const loc = root.protonvpnLocation
+        if (loc && (!root.protonServer || loc === root.protonServer || loc.startsWith(root.protonServer + " "))) return loc
+        return root.protonServer || root.protonvpnLocation || Translation.tr("Proton VPN")
+    }
+    function parseActive(text: string): void {
+        const names = []; let first = ""; let proton = ""
+        for (const row of root.parseNmcli(text, 3)) {
+            const type = String(row[1]).toLowerCase()
+            if (!type.includes("vpn") && !type.includes("wireguard") && type !== "tun") continue
+            const server = root.protonServerOf(row[0])
+            if (server) { if (!proton) proton = server; continue }
+            names.push(row[0]); if (!first) first = row[0]
+        }
+        const protonServerChanged = proton !== "" && proton !== root.protonServer
+        root.protonServer = proton
+        root.activeProfiles = names
+        // onActiveChanged listeners read the provider and label: set them before `active` goes
+        // true, and clear them only after it goes false.
+        if (names.length) { root.activeProvider = "networkmanager"; root.activeProfile = first; root.statusText = first; root.active = true }
+        else if (proton) {
+            root.activeProvider = "protonvpn"; root.activeProfile = root.protonLabel(); root.statusText = root.activeProfile; root.active = true
+            // One status call per server change fills in the location; a refresh already queues it.
+            if (protonServerChanged && !root.refreshQueued) root.enqueue("protonStatus", ["protonvpn", "status"], null)
+        }
+        else {
+            if (!root.nordvpnAvailable || root.nordvpnStatus === Translation.tr("Disconnected")) { root.active = false; root.activeProvider = ""; root.activeProfile = ""; root.statusText = Translation.tr("Disconnected") }
+            if (root.protonvpnAvailable) { root.protonvpnStatus = Translation.tr("Disconnected"); root.protonvpnLocation = "" }
+        }
+    }
+
+    function normalizeProviderState(): void { if (root.activeProvider === "nordvpn" && root.nordvpnStatus === Translation.tr("Disconnected")) { root.active = false; root.activeProvider = ""; root.activeProfile = ""; root.statusText = Translation.tr("Disconnected") } else if (root.activeProvider === "protonvpn" && !root.protonServer && root.protonvpnStatus === Translation.tr("Disconnected")) { root.active = false; root.activeProvider = ""; root.activeProfile = ""; root.statusText = Translation.tr("Disconnected") } }
+    Process {
+        id: commandProc; running: false; environment: ({ "PATH": root.envPath })
+        stdout: StdioCollector { id: commandStdout }
+        stderr: StdioCollector { id: commandStderr }
+        onExited: (exitCode, exitStatus) => {
+            const op = root.currentOperation; if (op === null) return; const out = String(commandStdout.text || ""); const err = String(commandStderr.text || ""); const kind = op.kind
+            root.lastExitCode = exitCode; root.lastExitStatus = String(exitStatus); root.lastErrorOutput = err.trim()
+            if (kind === "probeNmcli") { root.available = exitCode === 0 && out.trim().length > 0; root.availableProviders = root.available ? ["networkmanager"] : []; root.enqueue("probeNord", ["which", "nordvpn"], null) }
+            else if (kind === "probeNord") { root.nordvpnAvailable = exitCode === 0 && out.trim().length > 0; if (root.nordvpnAvailable) root.availableProviders = root.availableProviders.concat(["nordvpn"]); root.enqueue("probeProton", ["which", "protonvpn"], null) }
+            else if (kind === "probeProton") { root.protonvpnAvailable = exitCode === 0 && out.trim().length > 0; if (root.protonvpnAvailable) root.availableProviders = root.availableProviders.concat(["protonvpn"]); root.providerCapabilities = { networkmanager: { status: root.available, connect: root.available, disconnect: root.available, location: root.available }, nordvpn: { status: root.nordvpnAvailable, connect: root.nordvpnAvailable, disconnect: root.nordvpnAvailable, location: root.nordvpnAvailable }, protonvpn: { status: root.protonvpnAvailable, connect: root.protonvpnAvailable, disconnect: root.protonvpnAvailable, location: root.protonvpnAvailable } }; if (root.available) { root.enqueue("profiles", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,UUID", "connection", "show"], null); root.enqueue("active", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], null) } if (root.nordvpnAvailable) root.enqueue("nordStatus", ["nordvpn", "status"], null); if (root.protonvpnAvailable) root.enqueue("protonStatus", ["protonvpn", "status"], null); root.enqueue("finishRefresh", ["true"], null) }
+            else if (kind === "profiles") { const result = []; for (const row of root.parseNmcli(out, 3)) { const type = String(row[1]).toLowerCase(); if ((type.includes("vpn") || type.includes("wireguard") || type === "tun") && !root.protonServerOf(row[0])) result.push({ name: row[0], type: row[1], uuid: row[2] || "" }) } root.profiles = result }
+            else if (kind === "active") { root.parseActive(out) }
+            else if (kind === "finishRefresh") { root.normalizeProviderState(); root.operationPending = false; root.refreshQueued = false; root.loading = false; if (!root.available && !root.nordvpnAvailable && !root.protonvpnAvailable) root.statusText = Translation.tr("No VPN backend found"); if (root.autoConnect && !root.autoConnectAttempted && !root.active) { root.autoConnectAttempted = true; root.connectDefault() } }
+            else if (kind === "nordStatus") { const p = root.parseProviderStatus(out); root.nordvpnStatus = p.status; root.nordvpnLocation = p.location; root.providerDiagnostics = Object.assign({}, root.providerDiagnostics, { nordvpn: { exitCode: exitCode, stderr: err.trim() } }); if (p.connected && !root.activeProfiles.length) { root.active = true; root.activeProvider = "nordvpn"; root.activeProfile = p.location; root.statusText = p.status } }
+            else if (kind === "protonStatus") { const p = root.parseProviderStatus(out); root.protonvpnStatus = p.status; root.protonvpnLocation = p.location; root.providerDiagnostics = Object.assign({}, root.providerDiagnostics, { protonvpn: { exitCode: exitCode, stderr: err.trim() } }); if (root.protonServer && root.activeProvider === "protonvpn") { root.activeProfile = root.protonLabel(); root.statusText = root.activeProfile } else if (p.connected && !root.active && !root.activeProfiles.length) { root.activeProvider = "protonvpn"; root.activeProfile = p.location; root.statusText = p.status; root.active = true } }
+            else if (kind === "readImport") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Unable to read VPN profile")); else { const type = root.detectImportType(out, root.importPath); if (!type) root.setError(Translation.tr("Could not identify profile as OpenVPN or WireGuard")); else root.enqueue("import", ["nmcli", "connection", "import", "type", type, "file", root.importPath], { type: type }) } }
+            else if (kind === "import") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Failed to import VPN profile")); else root.refresh() }
+            else if (kind === "connect") { if (exitCode !== 0) root.setError(root.cliError(err, Translation.tr("VPN connection failed"))); else { root.vpnConnected(op.data.profile || ""); root.refresh() } }
+            else if (kind === "disconnect") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("VPN disconnect failed")); else { root.vpnDisconnected(); if (op.data.refresh) root.refresh() } }
+            else if (kind === "delete") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Failed to delete VPN profile")); else root.refresh() }
+            else if (kind === "killSwitch") { root.killSwitchPending = false; if (exitCode !== 0) root.setError(root.cliError(err, Translation.tr("Failed to change the kill switch"))); protonSettingsFile.reload() }
+            root.finishOperation()
+        }
+    }
+    Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0 && root.wanted; onTriggered: root.pollStatus() }
+    // Only Settings shows the hook's state; read both copies while a VPN surface is open.
+    FileView {
+        id: installedHookFile
+        path: root.wanted ? root.staleSocketHookTarget : ""
+        printErrors: false
+        onLoaded: root.staleSocketHookInstalledText = text()
+        onLoadFailed: root.staleSocketHookInstalledText = ""
+    }
+    FileView {
+        id: sourceHookFile
+        path: root.wanted ? root.staleSocketHookSource : ""
+        printErrors: false
+        onLoaded: root.staleSocketHookSourceText = text()
+    }
+    Process {
+        id: hookInstallProc
+        command: ["pkexec", "/usr/bin/install", "-Dm755", root.staleSocketHookSource, root.staleSocketHookTarget]
+        // pkexec: 126 = the prompt was dismissed, 127 = not authorised.
+        onExited: exitCode => { root.staleSocketHookResult = exitCode === 0 ? "ok" : (exitCode === 126 || exitCode === 127 ? "cancelled" : "failed"); installedHookFile.reload() }
+    }
+    FileView {
+        id: protonSettingsFile
+        path: root.protonvpnAvailable ? FileUtils.trimFileProtocol(Directories.config) + "/Proton/VPN/settings.json" : ""
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: { try { root.protonKillSwitchState = Number(JSON.parse(text()).killswitch) || 0 } catch (e) { root.protonKillSwitchState = 0 } }
+        onLoadFailed: root.protonKillSwitchState = 0
+    }
+    Process {
+        id: filePickerProc
+        running: false
+        command: ["bash", "-lc", "if command -v kdialog >/dev/null 2>&1; then kdialog --getopenfilename \"$HOME\" '*.ovpn *.conf' 2>/dev/null; elif command -v zenity >/dev/null 2>&1; then zenity --file-selection --file-filter='VPN profiles | *.ovpn *.conf' 2>/dev/null; fi"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.filePickerLoading = false
+                const selected = String(this.text || "").trim()
+                if (selected.length > 0)
+                    root.importProfile(selected)
+            }
+        }
+        onExited: {
+            if (!root.filePickerLoading) return
+            root.filePickerLoading = false
+        }
+    }
+}
+

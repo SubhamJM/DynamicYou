@@ -6,6 +6,8 @@ import json
 import subprocess
 import signal
 import re
+import glob
+import shutil
 from collections import defaultdict
 
 # -----------------------------------------------------------------------------
@@ -54,7 +56,8 @@ ICON_MAPPINGS = {
     'slack': ('Slack', 'slack', 'forum'),
     'signal-desktop': ('Signal', 'signal-desktop', 'forum'),
 
-    'spotify': ('Spotify', 'spotify-launcher', 'music_note'),
+    'spotify': ('Spotify', 'spotify', 'music_note'),
+    'spotify-launcher': ('Spotify', 'spotify', 'music_note'),
     'amberol': ('Amberol', 'io.bassi.Amberol', 'music_note'),
     'rhythmbox': ('Rhythmbox', 'rhythmbox', 'music_note'),
     'mpv': ('MPV Player', 'mpv', 'play_circle'),
@@ -103,7 +106,12 @@ ICON_MAPPINGS = {
     'hyprsunset': ('Blue Light Filter', 'preferences-system', 'nightlight'),
     'gammastep': ('Blue Light Filter', 'preferences-system', 'nightlight'),
     'hyprpolkitagent': ('Auth Agent', 'system-lock-screen', 'security'),
-    'Xwayland': ('XWayland Server', 'xorg', 'display_settings'),
+    'polkit-kde-authentication-agent-1': ('Auth Agent', 'system-lock-screen', 'security'),
+    'polkit-gnome-authentication-agent-1': ('Auth Agent', 'system-lock-screen', 'security'),
+    'Xwayland': ('XWayland Server', 'xorg-server', 'display_settings'),
+    'xwayland': ('XWayland Server', 'xorg-server', 'display_settings'),
+    'wl-paste': ('Clipboard Daemon', 'edit-paste', 'content_paste'),
+    'cliphist': ('Clipboard History', 'edit-paste', 'history'),
     'cava': ('CAVA Audio Visualizer', 'audio-card', 'equalizer'),
     'python': ('Python', 'python', 'terminal'),
     'python3': ('Python 3', 'python', 'terminal'),
@@ -121,11 +129,7 @@ ICON_MAPPINGS = {
 }
 
 USER_APP_KEYS = {
-    'quickshell', 'qs', 'hyprland', 'waybar', 'rofi', 'wofi', 'fuzzel', 'tofi', 'dunst', 'mako',
-    'awww-daemon', 'swww-daemon', 'swww', 'hypridle', 'hyprlock', 'hyprpolkitagent',
-    'kdeconnectd', 'kdeconnect', 'wlsunset', 'hyprsunset', 'gammastep',
-    'wl-paste', 'cliphist', 'pipewire', 'wireplumber', 'pipewire-pulse', 'cava',
-    'python', 'python3', 'slurp', 'grim', 'grimblast', 'hyprpicker', 'wf-recorder',
+    'quickshell', 'qs', 'hyprland', 'waybar', 'rofi', 'wofi', 'fuzzel', 'tofi',
     'zen-bin', 'zen', 'firefox', 'chrome', 'google-chrome', 'chromium', 'brave', 'brave-browser', 'opera', 'vivaldi', 'edge',
     'kitty', 'alacritty', 'foot', 'wezterm', 'ghostty',
     'code', 'vscodium', 'cursor', 'cursor-bin', 'nvim', 'vim', 'sublime_text', 'zed',
@@ -310,6 +314,312 @@ def get_cpu_info():
         "load_1": loads[0] if len(loads) > 0 else "0.00",
         "load_5": loads[1] if len(loads) > 1 else "0.00",
         "load_15": loads[2] if len(loads) > 2 else "0.00"
+    }
+
+_STATIC_HW_CACHE = None
+
+def get_static_hardware():
+    global _STATIC_HW_CACHE
+    if _STATIC_HW_CACHE is not None:
+        return _STATIC_HW_CACHE
+
+    cache_file = '/dev/shm/quickshell_sysmon_static.json'
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r') as f:
+                _STATIC_HW_CACHE = json.load(f)
+                if isinstance(_STATIC_HW_CACHE, dict) and 'distro' in _STATIC_HW_CACHE:
+                    return _STATIC_HW_CACHE
+        except Exception:
+            pass
+
+    # 1. Distro & OS (works identically on NixOS and Arch Linux)
+    distro = "Linux"
+    if os.path.exists('/etc/os-release'):
+        try:
+            with open('/etc/os-release', 'r') as f:
+                for line in f:
+                    if line.startswith('PRETTY_NAME='):
+                        distro = line.split('=', 1)[1].strip('"\n')
+                        break
+        except Exception:
+            pass
+
+    # 2. Kernel
+    kernel = os.uname().release
+
+    # 3. CPU Model
+    cpu_model = "Processor"
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if 'model name' in line:
+                    raw = line.split(':', 1)[1].strip()
+                    cpu_model = raw.replace('(R)', '').replace('(TM)', '').replace(' CPU', '').split('@')[0].strip()
+                    break
+    except Exception:
+        pass
+
+    # 4. GPU Name Detection (fast & zero-hang)
+    gpu_name = "Graphics"
+    # Check nvidia-smi if available
+    if shutil.which('nvidia-smi'):
+        try:
+            nv = subprocess.run(
+                ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=0.3
+            )
+            if nv.returncode == 0 and nv.stdout.strip():
+                gpu_name = nv.stdout.strip().splitlines()[0].replace('NVIDIA ', '').replace('GeForce ', '')
+        except Exception:
+            pass
+
+    # If still generic, check lspci quickly or sysfs
+    if gpu_name in ["Graphics", "Intel Graphics", "AMD Radeon"] and shutil.which('lspci'):
+        try:
+            p = subprocess.run(['lspci'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=0.4)
+            found_gpus = []
+            for line in p.stdout.splitlines():
+                if any(x in line.lower() for x in ['vga compatible', '3d controller']):
+                    m = re.findall(r'\[([^\]]+)\]', line)
+                    if m and m[-1].lower() != "amd/ati":
+                        clean = m[-1].replace('NVIDIA ', '').replace('GeForce ', '')
+                        found_gpus.append(clean)
+            if found_gpus:
+                # Prefer dedicated GPU if present (e.g. RTX), else integrated
+                dedicated = [g for g in found_gpus if any(k in g for k in ['RTX', 'GTX', 'Radeon', 'Arc'])]
+                gpu_name = dedicated[0] if dedicated else found_gpus[0]
+        except Exception:
+            pass
+
+    # Fallback to sysfs vendor detection if still generic
+    if gpu_name == "Graphics":
+        for dev in glob.glob('/sys/bus/pci/devices/*'):
+            try:
+                with open(os.path.join(dev, 'class'), 'r') as f:
+                    cls = f.read().strip()
+                if cls.startswith(('0x0300', '0x0301', '0x0302', '0x0380')):
+                    with open(os.path.join(dev, 'vendor'), 'r') as f:
+                        vend = f.read().strip().lower()
+                    if '0x10de' in vend:
+                        gpu_name = "NVIDIA Dedicated GPU"
+                        break
+                    elif '0x1002' in vend:
+                        gpu_name = "AMD Radeon"
+                        break
+                    elif '0x8086' in vend:
+                        gpu_name = "Intel Graphics"
+            except Exception:
+                pass
+
+    # 5. Total Disk Space (Root '/')
+    disk_total = 0.0
+    try:
+        st = os.statvfs('/')
+        disk_total = round((st.f_blocks * st.f_frsize) / (1024**3), 1)
+    except Exception:
+        pass
+
+    # 6. Total Swap Space
+    swap_total = 0.0
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if line.startswith('SwapTotal:'):
+                    swap_total = round((int(line.split()[1]) * 1024) / (1024**3), 1)
+                    break
+    except Exception:
+        pass
+
+    _STATIC_HW_CACHE = {
+        "distro": distro,
+        "kernel": kernel,
+        "cpu_model": cpu_model,
+        "gpu_name": gpu_name,
+        "disk_total_gb": disk_total,
+        "swap_total_gb": swap_total
+    }
+
+    try:
+        with open(cache_file, 'w') as f:
+            json.dump(_STATIC_HW_CACHE, f)
+    except Exception:
+        pass
+
+    return _STATIC_HW_CACHE
+
+def get_hardware_info():
+    st_hw = get_static_hardware()
+    distro = st_hw.get("distro", "Linux")
+    kernel = st_hw.get("kernel", "")
+    cpu_model = st_hw.get("cpu_model", "Processor")
+    gpu_name = st_hw.get("gpu_name", "Graphics")
+    disk_total = st_hw.get("disk_total_gb", 0.0)
+    swap_total = st_hw.get("swap_total_gb", 0.0)
+
+    # Dynamic Uptime
+    uptime_secs = 0
+    try:
+        with open('/proc/uptime', 'r') as f:
+            uptime_secs = float(f.readline().split()[0])
+    except Exception:
+        pass
+    d = int(uptime_secs // 86400)
+    h = int((uptime_secs % 86400) // 3600)
+    m = int((uptime_secs % 3600) // 60)
+    uptime_str = f"{d}d {h}h {m}m" if d > 0 else (f"{h}h {m}m" if h > 0 else f"{m}m")
+
+    # Dynamic CPU Average MHz
+    mhz_list = []
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            for line in f:
+                if line.startswith('cpu MHz'):
+                    mhz_list.append(float(line.split(':', 1)[1].strip()))
+    except Exception:
+        pass
+    avg_mhz = round(sum(mhz_list) / len(mhz_list), 0) if mhz_list else 0
+
+    # Dynamic CPU Package Temperature
+    cpu_temp = -1
+    hwmon_paths = glob.glob('/sys/class/hwmon/hwmon*/temp*_input') + glob.glob('/sys/class/thermal/thermal_zone*/temp')
+    for p in hwmon_paths:
+        try:
+            with open(p, 'r') as f:
+                val = float(f.read().strip())
+                if val > 1000:
+                    val /= 1000.0
+                if 10.0 <= val <= 115.0:
+                    cpu_temp = round(val, 1)
+                    break
+        except Exception:
+            pass
+
+    # Dynamic Disk Free & Used
+    try:
+        st = os.statvfs('/')
+        disk_free = round((st.f_bavail * st.f_frsize) / (1024**3), 1)
+        disk_used = round(max(0.0, disk_total - disk_free), 1)
+        disk_pct = round((disk_used / disk_total) * 100, 1) if disk_total > 0 else 0
+    except Exception:
+        disk_used, disk_free, disk_pct = 0, 0, 0
+
+    # Dynamic Swap Used
+    swap_free = 0
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if line.startswith('SwapFree:'):
+                    swap_free = round((int(line.split()[1]) * 1024) / (1024**3), 1)
+                    break
+    except Exception:
+        pass
+    swap_used = round(max(0.0, swap_total - swap_free), 1)
+    swap_pct = round((swap_used / swap_total) * 100, 1) if swap_total > 0 else 0
+
+    # Dynamic GPU Usage & Temp
+    gpu_usage = 0.0
+    gpu_temp = -1
+    # Check AMD DRM busy percent
+    for p in glob.glob('/sys/class/drm/card*/device/gpu_busy_percent'):
+        try:
+            with open(p, 'r') as f:
+                gpu_usage = float(f.read().strip())
+                break
+        except Exception:
+            pass
+    # Check Intel DRM gt frequency activity
+    if gpu_usage == 0:
+        for p in glob.glob('/sys/class/drm/card*/gt_act_freq_mhz'):
+            try:
+                with open(p, 'r') as f:
+                    act = float(f.read().strip())
+                max_p = p.replace('gt_act_freq_mhz', 'gt_max_freq_mhz')
+                with open(max_p, 'r') as f:
+                    mx = float(f.read().strip())
+                if mx > 0:
+                    gpu_usage = round((act / mx) * 100, 1)
+                    break
+            except Exception:
+                pass
+
+    # Check NVIDIA usage via nvidia-smi if available
+    if shutil.which('nvidia-smi'):
+        try:
+            nv = subprocess.run(
+                ['nvidia-smi', '--query-gpu=utilization.gpu,temperature.gpu', '--format=csv,noheader,nounits'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=0.2
+            )
+            if nv.returncode == 0 and nv.stdout.strip():
+                parts = [x.strip() for x in nv.stdout.strip().split(',')]
+                if len(parts) >= 2:
+                    gpu_usage = float(parts[0])
+                    gpu_temp = float(parts[1])
+        except Exception:
+            pass
+
+    # Dynamic Network Throughput Rate
+    rx, tx = 0, 0
+    if os.path.exists('/proc/net/dev'):
+        try:
+            with open('/proc/net/dev', 'r') as f:
+                for line in f.readlines()[2:]:
+                    parts = line.split()
+                    if len(parts) >= 10 and not parts[0].startswith(('lo', 'virbr', 'docker', 'veth', 'br-')):
+                        rx += int(parts[1])
+                        tx += int(parts[9])
+        except Exception:
+            pass
+
+    stat_file = '/dev/shm/quickshell_net_stat'
+    prev_rx, prev_tx, prev_time = rx, tx, time.time()
+    if os.path.exists(stat_file):
+        try:
+            with open(stat_file, 'r') as f:
+                c = f.read().split()
+                if len(c) >= 3:
+                    prev_rx, prev_tx, prev_time = int(c[0]), int(c[1]), float(c[2])
+        except Exception:
+            pass
+
+    now = time.time()
+    dt = max(0.2, now - prev_time)
+    rx_rate = max(0, (rx - prev_rx) / dt)
+    tx_rate = max(0, (tx - prev_tx) / dt)
+    try:
+        with open(stat_file, 'w') as f:
+            f.write(f'{rx} {tx} {now}')
+    except Exception:
+        pass
+
+    def fmt_rate(bps):
+        if bps >= 1048576:
+            return f"{bps / 1048576:.1f} MB/s"
+        if bps >= 1024:
+            return f"{bps / 1024:.0f} KB/s"
+        return f"{bps:.0f} B/s"
+
+    return {
+        "distro": distro,
+        "kernel": kernel,
+        "uptime_str": uptime_str,
+        "cpu_model": cpu_model,
+        "cpu_mhz": avg_mhz,
+        "cpu_temp": cpu_temp,
+        "disk_total_gb": disk_total,
+        "disk_used_gb": disk_used,
+        "disk_free_gb": disk_free,
+        "disk_percent": disk_pct,
+        "swap_total_gb": swap_total,
+        "swap_used_gb": swap_used,
+        "swap_percent": swap_pct,
+        "gpu_name": gpu_name,
+        "gpu_usage": gpu_usage,
+        "gpu_temp": gpu_temp,
+        "net_rx_rate": round(rx_rate, 0),
+        "net_tx_rate": round(tx_rate, 0),
+        "net_rx_str": fmt_rate(rx_rate),
+        "net_tx_str": fmt_rate(tx_rate)
     }
 
 def get_hyprland_windows():
@@ -660,9 +970,14 @@ def list_processes():
         })
     all_list.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
 
+    hw_info = get_hardware_info()
+
     result = {
         "cpu_total": cpu_info["cpu_total"],
         "cpu_count": cpu_info["cpu_count"],
+        "cpu_mhz": hw_info["cpu_mhz"],
+        "cpu_temp": hw_info["cpu_temp"],
+        "cpu_model": hw_info["cpu_model"],
         "load_1": cpu_info["load_1"],
         "load_5": cpu_info["load_5"],
         "load_15": cpu_info["load_15"],
@@ -671,6 +986,23 @@ def list_processes():
         "mem_total_gb": mem_info["mem_total_gb"],
         "mem_used_gb": mem_info["mem_used_gb"],
         "mem_percent": mem_info["mem_percent"],
+        "swap_total_gb": hw_info["swap_total_gb"],
+        "swap_used_gb": hw_info["swap_used_gb"],
+        "swap_percent": hw_info["swap_percent"],
+        "disk_total_gb": hw_info["disk_total_gb"],
+        "disk_used_gb": hw_info["disk_used_gb"],
+        "disk_free_gb": hw_info["disk_free_gb"],
+        "disk_percent": hw_info["disk_percent"],
+        "gpu_name": hw_info["gpu_name"],
+        "gpu_usage": hw_info["gpu_usage"],
+        "gpu_temp": hw_info["gpu_temp"],
+        "net_rx_rate": hw_info["net_rx_rate"],
+        "net_tx_rate": hw_info["net_tx_rate"],
+        "net_rx_str": hw_info["net_rx_str"],
+        "net_tx_str": hw_info["net_tx_str"],
+        "distro": hw_info["distro"],
+        "kernel": hw_info["kernel"],
+        "uptime_str": hw_info["uptime_str"],
         "tasks_total": len(all_list),
         "tasks_apps": len(apps_list),
         "tasks_bg": len(bg_list),
@@ -731,27 +1063,18 @@ def focus_window(target):
 
     formatted_addr = target if target.startswith("0x") else f"0x{target}"
 
-    # Try Lua dispatch first (for Hyprland Lua setups)
+    # Focus window via standard Hyprland dispatcher
     try:
         res = subprocess.run(
-            ['hyprctl', 'dispatch', f"hl.dsp.focus({{ window = 'address:{formatted_addr}' }})"],
+            ['hyprctl', 'dispatch', 'focuswindow', f"address:{formatted_addr}"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.0
         )
         if res.returncode == 0 and "ok" in res.stdout.lower():
-            print(json.dumps({"success": True, "target": target, "method": "lua"}))
+            print(json.dumps({"success": True, "target": target, "method": "standard"}))
             return
-    except Exception:
-        pass
-
-    # Standard Hyprland fallback
-    try:
-        subprocess.run(
-            ['hyprctl', 'dispatch', 'focuswindow', f"address:{formatted_addr}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0
-        )
-        print(json.dumps({"success": True, "target": target, "method": "standard"}))
     except Exception as e:
         print(json.dumps({"success": False, "error": str(e)}))
+        return
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

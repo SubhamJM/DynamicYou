@@ -1,0 +1,1157 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.modules.common.functions
+import qs.services
+import "HyprlandBlur.js" as HyprlandBlur
+
+Singleton {
+    id: root
+    property QtObject m3colors
+    property QtObject animation
+    property QtObject animationCurves
+    property QtObject colors
+    property QtObject rounding
+    property QtObject font
+    property QtObject sizes
+    property string syntaxHighlightingTheme
+
+    readonly property int windowRounding: {
+        let rv = Config.options.appearance.roundingValue;
+        if (rv <= 0)
+            return 0;
+        return Math.round(18 * rv / 24.0);
+    }
+
+    onWindowRoundingChanged: {
+        if (Config.ready) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + windowRounding + " } })"]);
+        }
+    }
+
+    // Transparency. The quadratic functions were derived from analysis of hand-picked transparency values.
+    ColorQuantizer {
+        id: wallColorQuant
+        property string wallpaperPath: Config.options?.background?.wallpaperPath ?? ""
+        property bool wallpaperIsVideo: wallpaperPath !== "" && (wallpaperPath.endsWith(".mp4") || wallpaperPath.endsWith(".webm") || wallpaperPath.endsWith(".mkv") || wallpaperPath.endsWith(".avi") || wallpaperPath.endsWith(".mov"))
+        source: wallpaperPath !== "" ? Qt.resolvedUrl(wallpaperIsVideo ? Config.options?.background?.thumbnailPath ?? "" : wallpaperPath) : ""
+        depth: 0 // 2^0 = 1 color
+        rescaleSize: 10
+    }
+    property real wallpaperVibrancy: (wallColorQuant.colors[0]?.hslSaturation + wallColorQuant.colors[0]?.hslLightness) / 2
+    property real autoBackgroundTransparency: { // y = 0.5768x^2 - 0.759x + 0.2896
+        let x = wallpaperVibrancy;
+        let y = 0.5768 * (x * x) - 0.759 * (x) + 0.2896;
+        return Math.max(0, Math.min(0.22, y)) - 0.12 * (m3colors.darkmode ? 0 : 1);
+    }
+    property real autoContentTransparency: 0.9
+    property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
+    property real contentTransparency: Config?.options.appearance.transparency.enable ? (Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency) : 0
+
+    m3colors: QtObject {
+        property bool darkmode: true
+        property bool transparent: false
+        property color m3background: "#141313"
+        property color m3onBackground: "#e6e1e1"
+        property color m3surface: "#141313"
+        property color m3surfaceDim: "#141313"
+        property color m3surfaceBright: "#3a3939"
+        property color m3surfaceContainerLowest: "#0f0e0e"
+        property color m3surfaceContainerLow: "#1c1b1c"
+        property color m3surfaceContainer: "#201f20"
+        property color m3surfaceContainerHigh: "#2b2a2a"
+        property color m3surfaceContainerHighest: "#363435"
+        property color m3onSurface: "#e6e1e1"
+        property color m3surfaceVariant: "#49464a"
+        property color m3onSurfaceVariant: "#cbc5ca"
+        property color m3inverseSurface: "#e6e1e1"
+        property color m3inverseOnSurface: "#313030"
+        property color m3outline: "#948f94"
+        property color m3outlineVariant: "#49464a"
+        property color m3shadow: "#000000"
+        property color m3scrim: "#000000"
+        property color m3surfaceTint: "#cbc4cb"
+        property color m3primary: "#cbc4cb"
+        property color m3onPrimary: "#322f34"
+        property color m3primaryContainer: "#2d2a2f"
+        property color m3onPrimaryContainer: "#bcb6bc"
+        property color m3inversePrimary: "#615d63"
+        property color m3secondary: "#cac5c8"
+        property color m3onSecondary: "#323032"
+        property color m3secondaryContainer: "#4d4b4d"
+        property color m3onSecondaryContainer: "#ece6e9"
+        property color m3tertiary: "#d1c3c6"
+        property color m3onTertiary: "#372e30"
+        property color m3tertiaryContainer: "#31292b"
+        property color m3onTertiaryContainer: "#c1b4b7"
+        property color m3error: "#ffb4ab"
+        property color m3onError: "#690005"
+        property color m3errorContainer: "#93000a"
+        property color m3onErrorContainer: "#ffdad6"
+        property color m3primaryFixed: "#e7e0e7"
+        property color m3primaryFixedDim: "#cbc4cb"
+        property color m3onPrimaryFixed: "#1d1b1f"
+        property color m3onPrimaryFixedVariant: "#49454b"
+        property color m3secondaryFixed: "#e6e1e4"
+        property color m3secondaryFixedDim: "#cac5c8"
+        property color m3onSecondaryFixed: "#1d1b1d"
+        property color m3onSecondaryFixedVariant: "#484648"
+        property color m3tertiaryFixed: "#eddfe1"
+        property color m3tertiaryFixedDim: "#d1c3c6"
+        property color m3onTertiaryFixed: "#211a1c"
+        property color m3onTertiaryFixedVariant: "#4e4447"
+        property color m3success: "#B5CCBA"
+        property color m3onSuccess: "#213528"
+        property color m3successContainer: "#374B3E"
+        property color m3onSuccessContainer: "#D1E9D6"
+        property color term0: "#EDE4E4"
+        property color term1: "#B52755"
+        property color term2: "#A97363"
+        property color term3: "#AF535D"
+        property color term4: "#A67F7C"
+        property color term5: "#B2416B"
+        property color term6: "#8D76AD"
+        property color term7: "#272022"
+        property color term8: "#0E0D0D"
+        property color term9: "#B52755"
+        property color term10: "#A97363"
+        property color term11: "#AF535D"
+        property color term12: "#A67F7C"
+        property color term13: "#B2416B"
+        property color term14: "#8D76AD"
+        property color term15: "#221A1A"
+    }
+
+    colors: QtObject {
+        property color colSubtext: m3colors.m3outline
+        // Layer 0
+        property color colLayer0Base: ColorUtils.mix(m3colors.m3background, m3colors.m3primary, Config.options.appearance.extraBackgroundTint ? 0.99 : 1)
+        property color colLayer0: ColorUtils.transparentize(colLayer0Base, root.backgroundTransparency)
+        property color colOnLayer0: m3colors.m3onBackground
+        property color colLayer0Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer0, colOnLayer0, 0.9, root.contentTransparency))
+        property color colLayer0Active: ColorUtils.transparentize(ColorUtils.mix(colLayer0, colOnLayer0, 0.8, root.contentTransparency))
+        property color colLayer0Border: ColorUtils.mix(root.m3colors.m3outlineVariant, colLayer0, 0.4)
+        // Layer 1
+        property color colLayer1Base: m3colors.m3surfaceContainerLow
+        property color colLayer1: ColorUtils.solveOverlayColor(colLayer0Base, colLayer1Base, 1 - root.contentTransparency)
+        property color colOnLayer1: m3colors.m3onSurfaceVariant
+        property color colOnLayer1Inactive: ColorUtils.mix(colOnLayer1, colLayer1, 0.45)
+        property color colLayer1Hover: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.92), root.contentTransparency)
+        property color colLayer1Active: ColorUtils.transparentize(ColorUtils.mix(colLayer1, colOnLayer1, 0.85), root.contentTransparency)
+        // Layer 2
+        property color colLayer2Base: m3colors.m3surfaceContainer
+        property color colLayer2: ColorUtils.solveOverlayColor(colLayer1Base, colLayer2Base, 1 - root.contentTransparency)
+        property color colLayer2Hover: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, colOnLayer2, 0.90), 1 - root.contentTransparency)
+        property color colLayer2Active: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, colOnLayer2, 0.80), 1 - root.contentTransparency)
+        property color colLayer2Disabled: ColorUtils.solveOverlayColor(colLayer1Base, ColorUtils.mix(colLayer2Base, m3colors.m3background, 0.8), 1 - root.contentTransparency)
+        property color colOnLayer2: m3colors.m3onSurface
+        property color colOnLayer2Disabled: ColorUtils.mix(colOnLayer2, m3colors.m3background, 0.4)
+        // Layer 3
+        property color colLayer3Base: m3colors.m3surfaceContainerHigh
+        property color colLayer3: ColorUtils.solveOverlayColor(colLayer2Base, colLayer3Base, 1 - root.contentTransparency)
+        property color colLayer3Hover: ColorUtils.solveOverlayColor(colLayer2Base, ColorUtils.mix(colLayer3Base, colOnLayer3, 0.90), 1 - root.contentTransparency)
+        property color colLayer3Active: ColorUtils.solveOverlayColor(colLayer2Base, ColorUtils.mix(colLayer3Base, colOnLayer3, 0.80), 1 - root.contentTransparency)
+        property color colOnLayer3: m3colors.m3onSurface
+        // Layer 4
+        property color colLayer4Base: m3colors.m3surfaceContainerHighest
+        property color colLayer4: ColorUtils.solveOverlayColor(colLayer3Base, colLayer4Base, 1 - root.contentTransparency)
+        property color colLayer4Hover: ColorUtils.solveOverlayColor(colLayer3Base, ColorUtils.mix(colLayer4Base, colOnLayer4, 0.90), 1 - root.contentTransparency)
+        property color colLayer4Active: ColorUtils.solveOverlayColor(colLayer3Base, ColorUtils.mix(colLayer4Base, colOnLayer4, 0.80), 1 - root.contentTransparency)
+        property color colOnLayer4: m3colors.m3onSurface
+        // Primary
+        property color colPrimary: m3colors.m3primary
+        property color colOnPrimary: m3colors.m3onPrimary
+        property color colPrimaryHover: ColorUtils.mix(colors.colPrimary, colLayer1Hover, 0.87)
+        property color colPrimaryActive: ColorUtils.mix(colors.colPrimary, colLayer1Active, 0.7)
+        property color colPrimaryContainer: m3colors.m3primaryContainer
+        property color colPrimaryContainerHover: ColorUtils.mix(colors.colPrimaryContainer, colors.colOnPrimaryContainer, 0.9)
+        property color colPrimaryContainerActive: ColorUtils.mix(colors.colPrimaryContainer, colors.colOnPrimaryContainer, 0.8)
+        property color colOnPrimaryContainer: m3colors.m3onPrimaryContainer
+        // Secondary
+        property color colSecondary: m3colors.m3secondary
+        property color colSecondaryHover: ColorUtils.mix(m3colors.m3secondary, colLayer1Hover, 0.85)
+        property color colSecondaryActive: ColorUtils.mix(m3colors.m3secondary, colLayer1Active, 0.4)
+        property color colOnSecondary: m3colors.m3onSecondary
+        property color colSecondaryContainer: m3colors.m3secondaryContainer
+        property color colSecondaryContainerHover: ColorUtils.mix(m3colors.m3secondaryContainer, m3colors.m3onSecondaryContainer, 0.90)
+        property color colSecondaryContainerActive: ColorUtils.mix(m3colors.m3secondaryContainer, m3colors.m3onSecondaryContainer, 0.54)
+        property color colOnSecondaryContainer: m3colors.m3onSecondaryContainer
+        // Tertiary
+        property color colTertiary: m3colors.m3tertiary
+        property color colTertiaryHover: ColorUtils.mix(m3colors.m3tertiary, colLayer1Hover, 0.85)
+        property color colTertiaryActive: ColorUtils.mix(m3colors.m3tertiary, colLayer1Active, 0.4)
+        property color colTertiaryContainer: m3colors.m3tertiaryContainer
+        property color colTertiaryContainerHover: ColorUtils.mix(m3colors.m3tertiaryContainer, m3colors.m3onTertiaryContainer, 0.90)
+        property color colTertiaryContainerActive: ColorUtils.mix(m3colors.m3tertiaryContainer, colLayer1Active, 0.54)
+        property color colOnTertiary: m3colors.m3onTertiary
+        property color colOnTertiaryContainer: m3colors.m3onTertiaryContainer
+        // Surface
+        property color colBackgroundSurfaceContainer: ColorUtils.transparentize(m3colors.m3surfaceContainer, root.backgroundTransparency)
+        property color colBackgroundSurfaceContainerAccent: ColorUtils.transparentize(
+            ColorUtils.mix(m3colors.m3surfaceContainer, m3colors.m3primaryContainer,
+                           1.0 - (Config.options.search.appearance.accentPanels ? Config.options.search.appearance.accentStrength : 0.0)),
+            root.backgroundTransparency)
+        property color colSurfaceContainerLow: ColorUtils.solveOverlayColor(m3colors.m3background, m3colors.m3surfaceContainerLow, 1 - root.contentTransparency)
+        property color colSurfaceContainer: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainerLow, m3colors.m3surfaceContainer, 1 - root.contentTransparency)
+        property color colSurfaceContainerHigh: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainer, m3colors.m3surfaceContainerHigh, 1 - root.contentTransparency)
+        property color colSurfaceContainerHighest: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainerHigh, m3colors.m3surfaceContainerHighest, 1 - root.contentTransparency)
+        property color colSurfaceContainerHighestHover: ColorUtils.mix(m3colors.m3surfaceContainerHighest, m3colors.m3onSurface, 0.95)
+        property color colSurfaceContainerHighestActive: ColorUtils.mix(m3colors.m3surfaceContainerHighest, m3colors.m3onSurface, 0.85)
+        property color colOnSurface: m3colors.m3onSurface
+        property color colOnSurfaceVariant: m3colors.m3onSurfaceVariant
+        // Misc
+        property color colTooltip: m3colors.m3surfaceContainerHigh
+        property color colOnTooltip: m3colors.m3onSurface
+        property color colScrim: ColorUtils.transparentize(m3colors.m3scrim, 0.5)
+        property color colShadow: ColorUtils.transparentize(m3colors.m3shadow, 0.7)
+        property color colOutline: m3colors.m3outline
+        property color colOutlineVariant: m3colors.m3outlineVariant
+        property color colError: m3colors.m3error
+        property color colErrorHover: ColorUtils.mix(m3colors.m3error, colLayer1Hover, 0.85)
+        property color colErrorActive: ColorUtils.mix(m3colors.m3error, colLayer1Active, 0.7)
+        property color colOnError: m3colors.m3onError
+        property color colErrorContainer: m3colors.m3errorContainer
+        property color colErrorContainerHover: ColorUtils.mix(m3colors.m3errorContainer, m3colors.m3onErrorContainer, 0.90)
+        property color colErrorContainerActive: ColorUtils.mix(m3colors.m3errorContainer, m3colors.m3onErrorContainer, 0.70)
+        property color colOnErrorContainer: m3colors.m3onErrorContainer
+    }
+
+    rounding: QtObject {
+        property real scale: {
+            let rv = Config.options.appearance.roundingValue;
+            if (rv > 0)
+                return rv / 24.0;
+            if (rv < 0)
+                return 1.0; // not yet migrated, default to large
+            return 0.0; // roundingValue === 0 → sharp
+        }
+
+        property int unsharpen: Math.round(2 * scale)
+        property int unsharpenmore: Math.round(6 * scale)
+        property int verysmall: Math.round(8 * scale)
+        property int small: Math.round(12 * scale)
+        property int normal: Math.round(17 * scale)
+        property int large: Math.round(24 * scale)
+        property int verylarge: Math.round(32 * scale)
+        property int full: scale === 0 ? 0 : 9999
+        property int screenRounding: {
+            if (scale === 0)
+                return 0;
+
+            // Harmonious concentric screen rounding (UI/UX concentric radius rule):
+            // Outer Screen Radius = Bar Radius + Margins between bar and screen edge
+            if (BarInteraction.cornerStyle === 1 || BarInteraction.cornerStyle === 3 || BarInteraction.cornerStyle === 0) {
+                const isVertical = BarPlacement.vertical;
+                const barDim = isVertical
+                    ? (root.sizes?.baseVerticalBarWidth ?? Config.options?.bar?.sizes?.width ?? 44)
+                    : (root.sizes?.baseBarHeight ?? Config.options?.bar?.sizes?.height ?? 40);
+                const barRadius = Math.round(barDim / 2);
+                const barMargin = (BarInteraction.cornerStyle === 1)
+                    ? (root.sizes?.hyprlandGapsOut ?? Config.options?.appearance?.gapsOut ?? 5)
+                    : 0;
+                return barRadius + barMargin;
+            }
+
+            return large;
+        }
+        property int windowRounding: root.windowRounding
+    }
+
+    property color activeBorderColor: {
+        let type = Config.options.appearance.borderColorType;
+        if (type === "secondary")
+            return colors.colSecondary;
+        if (type === "tertiary")
+            return colors.colTertiary;
+        if (type === "primaryContainer")
+            return colors.colPrimaryContainer;
+        if (type === "surface")
+            return colors.colOutlineVariant;
+        return colors.colPrimary;
+    }
+
+    function pushBorderColor(): void {
+        let colorStr = root.activeBorderColor.toString();
+        let rgb = "";
+        if (colorStr.startsWith("#")) {
+            let hex = colorStr.substring(1);
+            rgb = hex.length === 8 ? hex.substring(2) : hex;
+        }
+        if (rgb === "")
+            return;
+        let hyprColor = "rgba(" + rgb + "AA)";
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
+    }
+
+    function pushBorderSize(): void {
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
+    }
+
+    Timer {
+        id: hyprctlBorderTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (!Config.ready)
+                return;
+            root.pushBorderColor();
+        }
+    }
+
+    onActiveBorderColorChanged: {
+        if (Config.ready) {
+            hyprctlBorderTimer.restart();
+        }
+    }
+
+    property bool borderless: Config.options.appearance.borderless ?? false
+    onBorderlessChanged: {
+        if (Config.ready) {
+            root.pushBorderSize();
+        }
+    }
+
+    property int borderWidth: Config.options.appearance.borderWidth ?? 2
+    onBorderWidthChanged: {
+        if (Config.ready && !borderless) {
+            root.pushBorderSize();
+        }
+    }
+    property int blurSize: Config.options.appearance.blurSize ?? 8
+    readonly property string blurConfigScript: HyprlandBlur.buildScript(root.blurSize, Config.options.appearance.blur)
+    onBlurConfigScriptChanged: root.scheduleBlurUpdate()
+    // Compositor blur for windows and shell surfaces (Settings > Windows): "live", "xray"
+    // (only the cached wallpaper is blurred) or "off". "off" travels in blurConfigScript, so
+    // every config reload (Game Mode, routines) re-applies it; the other modes leave
+    // blur.enabled to whoever owns it, so leaving "off" has to turn blur back on - unless
+    // Game Mode (animations off) is holding it off.
+    readonly property string compositorBlurMode: Config.options.appearance.blur?.mode ?? "live"
+    readonly property bool compositorBlurOff: root.compositorBlurMode === "off"
+    onCompositorBlurOffChanged: {
+        if (Config.ready && !root.compositorBlurOff)
+            Quickshell.execDetached(["sh", "-c", "hyprctl getoption animations:enabled -j | grep -qE '\"(int|bool)\": *(0|false)' "
+                + "|| hyprctl eval 'hl.config({ decoration = { blur = { enabled = true } } })'"]);
+    }
+    onCompositorBlurModeChanged: root.pushHyprlandLayerRules()
+    readonly property bool opaqueWindows: Config.options.appearance.blur?.opaqueWindows ?? false
+    onOpaqueWindowsChanged: root.pushHyprlandLayerRules()
+    property bool _blurUpdatePending: false
+    property bool _blurLayerRulesPending: false
+
+    function scheduleBlurUpdate() {
+        if (!Config.ready)
+            return;
+        root._blurUpdatePending = true;
+        if (!hyprlandBlurTimer.running && !hyprlandBlurProcess.running)
+            hyprlandBlurTimer.start();
+    }
+
+    // Throttle instead of restarting a debounce on every move: long drags still
+    // update live, with one process at a time and the newest values sent last.
+    Timer {
+        id: hyprlandBlurTimer
+        interval: 50
+        repeat: false
+        onTriggered: {
+            if (!Config.ready || (!root._blurUpdatePending && !root._blurLayerRulesPending) || hyprlandBlurProcess.running)
+                return;
+            const script = (root._blurUpdatePending ? root.blurConfigScript : "")
+                + (root._blurLayerRulesPending ? " " + root.getLayerRulesScript() : "");
+            root._blurUpdatePending = false;
+            root._blurLayerRulesPending = false;
+            hyprlandBlurProcess.command = ["hyprctl", "eval", script];
+            hyprlandBlurProcess.running = true;
+        }
+    }
+
+    Process {
+        id: hyprlandBlurProcess
+        stdout: StdioCollector { id: hyprlandBlurOutput }
+        stderr: StdioCollector { id: hyprlandBlurError }
+        onRunningChanged: {
+            if (!running && (root._blurUpdatePending || root._blurLayerRulesPending) && Config.ready)
+                hyprlandBlurTimer.start();
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.warn("[Appearance] Could not apply Hyprland blur settings (exit " + exitCode + "): "
+                    + (hyprlandBlurError.text || hyprlandBlurOutput.text).trim());
+        }
+    }
+
+    property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
+    // Opaque shell (transparency off): drop shadows are drawn (colShadow, the island's
+    // NotchShadow, ~0.3 alpha) and the blur behind opaque panels is invisible anyway.
+    // A threshold below the shadows blurs their margin into a hard-edged frosted ring
+    // around every shadowed surface, so the layer rules never go under 0.31 then.
+    // A transparent shell keeps the configured threshold untouched.
+    readonly property bool shellTransparent: Config.options?.appearance?.transparency?.enable ?? false
+    readonly property real layerIgnoreAlpha: root.shellTransparent ? root.ignoreAlpha : Math.max(root.ignoreAlpha, 0.31)
+
+    // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
+    // Dynamic Island variants use colLayer0, whose opacity follows the
+    // configured background transparency. Keep the threshold below that
+    // rendered opacity, otherwise the entire island is excluded from blur.
+    //
+    // A transparent bar (barBackgroundStyle 0) draws only the group pills, which
+    // are colLayer1 (content transparency), and their rounded edges are
+    // antialiased. A low threshold blurs every partly covered edge pixel too, so
+    // a 1px ring of the blurred backdrop (bright wherever a window sits under
+    // the bar) outlines each pill. Hold the threshold just under the pill's own
+    // opacity: the body still blurs, the edge pixels keep the sharp backdrop.
+    readonly property real barIgnoreAlpha: (Config.options?.bar?.barBackgroundStyle ?? 1) === 0
+        ? Math.max(0, 1 - root.contentTransparency - 0.01)
+        : root.islandIgnoreAlpha
+    // The island always paints colLayer0 (background transparency), whatever the
+    // bar style: tying it to the transparent bar's pill opacity put the threshold
+    // above the island's own alpha and dropped its blur. Its drop shadow and the body's
+    // antialiased edge pixels (measured at 0.55-0.65 of the body's alpha) blur into a
+    // bright ring under a lower threshold. An opaque shell holds it just under the body
+    // (0.99), as for the dock. A transparent one goes no lower than 0.65 of the body's
+    // alpha: a threshold right under it drops the whole island's blur, so the margin
+    // stays wide. A higher configured threshold still wins.
+    readonly property real bodyAlpha: Math.max(0, 1 - root.backgroundTransparency)
+    readonly property real islandIgnoreAlpha: Math.min(root.shellTransparent ? Math.max(root.ignoreAlpha, 0.65 * root.bodyAlpha) : 1, Math.max(0, root.bodyAlpha - 0.01))
+
+    // The dock's tray is colLayer0 (background transparency): hold the threshold just
+    // under it, as for the bar, or every antialiased edge of its widgets blurs too and
+    // a ring of the bright backdrop outlines each one. On the wrapped frame's band the
+    // dock paints no tray at all - the band below already carries the blur - so only
+    // opaque pixels pass. Set by the dock (Dock.qml), which knows when it is on the band.
+    property bool dockOnFrameBand: false
+    // Dock popups (window preview) are blurred with the dock layer's ignore_alpha, so while
+    // one is open the band drops to the card's threshold instead of 0.99.
+    property int dockPopupsOpen: 0
+    readonly property real dockIgnoreAlpha: root.dockOnFrameBand && root.dockPopupsOpen <= 0 ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
+
+    // Popups only need compositor blur when transparency is enabled; for opaque popups,
+    // compositor blur behind a 100% opaque surface is completely invisible and causes
+    // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
+    readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
+    readonly property real popupIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+
+    // Desktop widgets: compositor blur behind a see-through widget background.
+    // Their background alpha (the scheme surface times the tint, set by
+    // WidgetColorScheme) bounds the threshold - above it the whole card would be
+    // left unblurred. Opaque widgets need no blur, and a screen whose widgets blur
+    // themselves under open windows (BackgroundWidgetsWindow) turns it off: over the
+    // already blurred wallpaper it only adds a hard-edged, noise-grained patch.
+    // Every screen's widget layer has its own namespace (quickshell:backgroundWidgets:<screen>),
+    // so each gets its own rule and one screen's windows never touch another's glass.
+    // Bound by BackgroundWidgetsWindow, so the two singletons never build each other.
+    property real widgetBackgroundAlpha: 1
+    property var widgetSelfBlurScreens: ({})
+    function setWidgetSelfBlur(screenName: string, active: bool): void {
+        if (screenName === "" || root.widgetSelfBlurScreens[screenName] === active)
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        next[screenName] = active;
+        root.widgetSelfBlurScreens = next;
+    }
+    function forgetWidgetScreen(screenName: string): void {
+        if (!(screenName in root.widgetSelfBlurScreens))
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        delete next[screenName];
+        root.widgetSelfBlurScreens = next;
+    }
+    // Screens whose desktop shows a glass app group: the group is the only
+    // translucent thing there when the widgets are opaque, so it asks for the
+    // compositor blur on its own.
+    property var desktopGlassScreens: ({})
+    function setDesktopGlass(screenName: string, active: bool): void {
+        if (screenName === "" || (root.desktopGlassScreens[screenName] === true) === active)
+            return;
+        const next = Object.assign({}, root.desktopGlassScreens);
+        if (active)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.desktopGlassScreens = next;
+    }
+    // A glass group's alpha: always above the blur's ignore_alpha, so it is
+    // blurred whatever the widgets do.
+    readonly property real desktopGlassAlpha: Math.max(0.4, root.ignoreAlpha + 0.08)
+    readonly property bool backgroundWidgetsTranslucent: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
+    readonly property real backgroundWidgetsIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, root.widgetBackgroundAlpha - 0.01))
+    // Serialised so the rules are re-pushed only when a screen's answer changes.
+    readonly property string backgroundWidgetsRules: {
+        let out = "";
+        for (const screen of Object.keys(root.widgetSelfBlurScreens)) {
+            const blur = (root.backgroundWidgetsTranslucent || root.desktopGlassScreens[screen] === true) && root.widgetSelfBlurScreens[screen] !== true;
+            out += "hl.layer_rule({ name = 'ii:appearance:background-widgets:" + screen + "', match = { namespace = '^quickshell:backgroundWidgets:" + screen + "$' }, blur = "
+                + (blur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
+        }
+        return out;
+    }
+
+    function getLayerRulesScript(): string {
+        var a = root.layerIgnoreAlpha;
+        var barA = root.barIgnoreAlpha;
+        var script = "";
+        // Named rules merge on re-declaration: dragging Ignore Alpha must update
+        // the existing rules, not keep adding anonymous rules to the compositor.
+        // xray is explicit: rules.lua turns it off for every shell layer.
+        const xray = root.compositorBlurMode === "xray" ? "true" : "false";
+        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, xray = " + xray + ", ignore_alpha = " + a + " }) ";
+        if (root.popupBlurEnabled) {
+            var popupA = root.popupIgnoreAlpha;
+            script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
+            script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
+        } else {
+            script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
+            script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
+        }
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        // The sidebars' body is colLayer0 too: the island's threshold keeps their
+        // antialiased edges from blurring into a 1px ring.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
+        // The idle dim scrim's 50% black sits above every ignore_alpha, so the
+        // quickshell.* rule above would blur the screen behind it (with xray: down
+        // to the bare wallpaper) instead of just darkening it.
+        script += "hl.layer_rule({ name = 'ii:appearance:idle-dim', match = { namespace = '^quickshell:idleDim$' }, blur = false }) ";
+        // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
+        // until the shell has pushed these.
+        script += root.backgroundWidgetsRules;
+        // Both Media Mode designs share this namespace. The classic one relies on
+        // compositor blur; the Immersive one draws its own and, over the music video,
+        // compositor blur would hit only the pixels above ignore_alpha and carve
+        // sharp holes into it. So blur follows the design that is selected.
+        script += "hl.layer_rule({ name = 'ii:appearance:media-mode', match = { namespace = 'quickshell:mediaMode' }, blur = " + (root.mediaModeImmersive ? "false" : "true") + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:corners', match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:session', match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
+        // The popup slides in over the dock, bar, screen corners and every other shell
+        // surface. Hyprland draws lower orders on top, so -2 clears the default 0 those
+        // surfaces sit at (and the -1 overlays), while live draw keeps its -5 ink above all.
+        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true, order = -2 }) ";
+        // These layer surfaces animate their content with the Windows preset. Never also
+        // animate the fullscreen transparent layer (or alter animations for other overlays).
+        script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";
+        // Opaque app windows (Settings > Windows). A named rule cannot be dropped at
+        // runtime, so turning it off re-declares it with a match nothing has.
+        script += root.opaqueWindows
+            ? "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '.*' }, opacity = '1.0 override 1.0 override 1.0 override', opaque = true }) "
+            : "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '^ii-no-window-has-this-class$' } }) ";
+        // ignore_alpha is a layer effect, not a supported window-rule field.
+        script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
+        return script;
+    }
+
+    function pushHyprlandLayerRules() {
+        if (Config.ready) {
+            root._blurLayerRulesPending = true;
+            if (!hyprlandBlurTimer.running && !hyprlandBlurProcess.running)
+                hyprlandBlurTimer.start();
+        }
+    }
+
+    onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onDockIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBackgroundWidgetsRulesChanged: root.pushHyprlandLayerRules()
+    onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
+    onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    readonly property bool mediaModeImmersive: Config.options?.background?.mediaMode?.immersive ?? false
+    onMediaModeImmersiveChanged: root.pushHyprlandLayerRules()
+
+    Connections {
+        target: Config.options?.appearance?.transparency ?? null
+        function onPopupsChanged() { root.pushHyprlandLayerRules(); }
+        function onEnableChanged() { root.pushHyprlandLayerRules(); }
+    }
+
+    property bool _isApplyingRules: false
+    // Border size, border colour, gaps, rounding and blur only exist at runtime:
+    // a config reload throws them away and puts the Lua file's values back. So a
+    // reload arriving mid-cooldown cannot simply be ignored — nothing would ever
+    // push them again, and the window borders would stay wrong for the rest of
+    // the session. Remember it instead and re-apply once the cooldown lapses.
+    property bool _rulesReapplyPending: false
+
+    // The border is the only part of this the user can see, and one write can make
+    // Hyprland reload several times over, so waiting out the rule cooldown leaves
+    // the focus border missing for seconds. Two `hyprctl` calls are cheap enough to
+    // put on their own near-instant cooldown; the rest can take its time.
+    property bool _isApplyingBorder: false
+    property bool _borderReapplyPending: false
+
+    Timer {
+        id: hyprlandBorderCooldownTimer
+        interval: 150
+        repeat: false
+        onTriggered: {
+            root._isApplyingBorder = false;
+            if (!root._borderReapplyPending)
+                return;
+            root._borderReapplyPending = false;
+            root.applyHyprlandBorder();
+        }
+    }
+
+    function applyHyprlandBorder() {
+        if (!Config.ready)
+            return;
+        if (root._isApplyingBorder) {
+            root._borderReapplyPending = true;
+            return;
+        }
+        root._isApplyingBorder = true;
+        hyprlandBorderCooldownTimer.restart();
+        root.pushBorderSize();
+        root.pushBorderColor();
+    }
+
+    Timer {
+        id: hyprlandRuleCooldownTimer
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            root._isApplyingRules = false;
+            if (!root._rulesReapplyPending)
+                return;
+            root._rulesReapplyPending = false;
+            root.applyHyprlandRules();
+        }
+    }
+
+    function applyHyprlandRules() {
+        // Disabled: Hyprland configuration is managed exclusively by ~/.config/hypr/
+        return;
+    }
+
+    Connections {
+        target: HyprlandConfig
+        function onReloaded() {
+            // Do not override user Hyprland config on reload
+        }
+    }
+
+    Timer {
+        id: startupRoundingTimer
+        interval: 1500
+        running: Config.ready
+        repeat: false
+        onTriggered: {
+            root.applyHyprlandRules();
+        }
+    }
+
+    property int gapsIn: Config.options.appearance.gapsIn ?? 4
+    /// What Hyprland actually gets. The tablet family's split handle lives in the gutter
+    /// between tiled windows, so there the gutter is at least as wide as the handle —
+    /// otherwise Hyprland lays the windows out underneath it.
+    readonly property int effectiveGapsIn: (PanelFamily.isTablet && (Config.options?.tablet?.windows?.splitHandles ?? true))
+        ? Math.max(root.gapsIn, Math.ceil((Config.options?.tablet?.windows?.splitHandleWidth ?? 12) / 2)
+            + Math.max(0, Config.options?.tablet?.windows?.splitHandleSpacing ?? 4))
+        : root.gapsIn
+    onEffectiveGapsInChanged: {
+        if (Config.ready) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + root.effectiveGapsIn + "' } })"]);
+        }
+    }
+
+    property int gapsOut: Config.options.appearance.gapsOut ?? 5
+    onGapsOutChanged: {
+        if (Config.ready) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_out = '" + gapsOut + "' } })"]);
+        }
+    }
+
+    font: QtObject {
+        property QtObject family: QtObject {
+            property string main: Config.options.appearance.fonts.main
+            property string numbers: Config.options.appearance.fonts.numbers
+            property string title: Config.options.appearance.fonts.title
+            property string iconMaterial: "Material Symbols Rounded"
+            property string iconNerd: Config.options.appearance.fonts.iconNerd
+            property string monospace: Config.options.appearance.fonts.monospace
+            property string reading: Config.options.appearance.fonts.reading
+            property string expressive: Config.options.appearance.fonts.expressive
+        }
+        property QtObject variableAxes: QtObject {
+            property var main: ({
+                    "wght": 450,
+                    "wdth": 100,
+                    "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
+                })
+            property var numbers: ({
+                    "wght": 450,
+                    "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
+                })
+            property var title: ({ // Slightly bold weight for title
+                    "wght": 550 // Weight (Lowered to compensate for increased grade)
+                    ,
+                    "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
+                })
+            property var rounded: ({
+                    "wght": 450,
+                    "wdth": 100,
+                    "ROND": 100
+                })
+            property var titleRounded: ({
+                    "wght": 550,
+                    "ROND": 100
+                })
+
+            // Every distinct axes value makes Qt open a new FreeType face of the font: a
+            // fresh 4 MB mmap of the whole file (~1.4 MB resident, never shared in RSS) that
+            // the font cache only trims ~5 engines per 10 s. An axis that follows an animated
+            // value therefore creates one face per frame, hundreds per session (that was the
+            // 1.5 -> 2.2 GB regression). Interpolated axes must go through blend()/snap(),
+            // which keep the number of distinct values to steps + 1 per pair of endpoints.
+            readonly property int steps: 3
+            function snap(t: real): real {
+                return Math.round(Math.max(0, Math.min(1, t)) * steps) / steps;
+            }
+            function blend(from: real, to: real, t: real): real {
+                return Math.round(from + (to - from) * snap(t));
+            }
+            // For an axis that carries meaning along its whole range (a clock whose width
+            // tracks the minute): n steps instead of the shell-wide default.
+            function blendIn(from: real, to: real, t: real, n: int): real {
+                return Math.round(from + (to - from) * Math.round(Math.max(0, Math.min(1, t)) * n) / n);
+            }
+        }
+        property QtObject pixelSize: QtObject {
+            property int smallest: 10
+            property int smaller: 12
+            property int smallie: 13
+            property int small: 15
+            property int normal: 16
+            property int large: 17
+            property int larger: 19
+            property int huge: 22
+            property int hugeass: 23
+            property int title: huge
+        }
+    }
+
+    // Global animation speed multiplier — driven by Config.options.appearance.animationMultiplier
+    readonly property real animMultiplier: Config.options?.appearance?.animationMultiplier ?? 1.0
+    // Below this the shell skips animations outright rather than running them absurdly fast (the
+    // sidebars' own convention); Edit Mode reads it as one flag instead of repeating the test.
+    readonly property bool reducedMotion: root.animMultiplier <= 0.25
+
+    animationCurves: QtObject {
+        readonly property list<real> expressiveFastSpatial: [0.42, 1.67, 0.21, 0.90, 1, 1] // Default, 350ms
+        readonly property list<real> expressiveDefaultSpatial: [0.38, 1.21, 0.22, 1.00, 1, 1] // Default, 500ms
+        readonly property list<real> expressiveSlowSpatial: [0.39, 1.29, 0.35, 0.98, 1, 1] // Default, 650ms
+        readonly property list<real> expressiveEffects: [0.34, 0.80, 0.34, 1.00, 1, 1] // Default, 200ms
+        readonly property list<real> emphasized: [0.05, 0, 2 / 15, 0.06, 1 / 6, 0.4, 5 / 24, 0.82, 0.25, 1, 1, 1]
+        readonly property list<real> emphasizedFirstHalf: [0.05, 0, 2 / 15, 0.06, 1 / 6, 0.4, 5 / 24, 0.82]
+        readonly property list<real> emphasizedLastHalf: [5 / 24, 0.82, 0.25, 1, 1, 1]
+        readonly property list<real> emphasizedAccel: [0.3, 0, 0.8, 0.15, 1, 1]
+        readonly property list<real> emphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
+        readonly property list<real> standard: [0.2, 0, 0, 1, 1, 1]
+        readonly property list<real> standardAccel: [0.3, 0, 1, 1, 1, 1]
+        readonly property list<real> standardDecel: [0, 0, 0, 1, 1, 1]
+        readonly property real expressiveFastSpatialDuration: 350
+        readonly property real expressiveDefaultSpatialDuration: 500
+        readonly property real expressiveSlowSpatialDuration: 650
+        readonly property real expressiveEffectsDuration: 200
+    }
+
+    animation: QtObject {
+        property QtObject elementMove: QtObject {
+            property int duration: Math.round(animationCurves.expressiveDefaultSpatialDuration * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveDefaultSpatial
+            property int velocity: 650
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.elementMove.duration
+                    easing.type: root.animation.elementMove.type
+                    easing.bezierCurve: root.animation.elementMove.bezierCurve
+                }
+            }
+        }
+
+        property QtObject elementMoveSmall: QtObject {
+            property int duration: Math.round(animationCurves.expressiveFastSpatialDuration * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property int velocity: 650
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.elementMoveSmall.duration
+                    easing.type: root.animation.elementMoveSmall.type
+                    easing.bezierCurve: root.animation.elementMoveSmall.bezierCurve
+                }
+            }
+        }
+
+        property QtObject elementMoveEnter: QtObject {
+            property int duration: Math.round(400 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.emphasizedDecel
+            property int velocity: 650
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.elementMoveEnter.duration
+                    easing.type: root.animation.elementMoveEnter.type
+                    easing.bezierCurve: root.animation.elementMoveEnter.bezierCurve
+                }
+            }
+        }
+
+        property QtObject elementMoveExit: QtObject {
+            property int duration: Math.round(200 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.emphasizedAccel
+            property int velocity: 650
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.elementMoveExit.duration
+                    easing.type: root.animation.elementMoveExit.type
+                    easing.bezierCurve: root.animation.elementMoveExit.bezierCurve
+                }
+            }
+        }
+
+        // Context menus and popups opening under the cursor: the WINDOW the
+        // cascade lives in. The reveal scalar runs LINEAR and every slice
+        // eases its own arrival — the sidebar's rhythm (StaggeredEntrance:
+        // 26 ms stagger, ~400 ms fade per row). Two clocks, strictly
+        // separate: the card body + plate land in the first ~22% (the menu
+        // pops in and STANDS STILL), and the rows wave in inside it from
+        // there to 100%. One global curve over the scalar was the blink
+        // (emphasizedDecel is ~85% done at 30% of its time — every row
+        // flashed at once); a body that grows across the whole window makes
+        // the menu itself perform as a cascade item and hides the rows'
+        // wave behind its drift. The exit stays short and flat: a menu
+        // waving away, not a page leaving.
+        // Duration only: the scalar runs Linear and the slices carry the
+        // easing, so there is no curve to hand out. Kept short: 640 ms read
+        // well once, then made a menu opened many times a day feel stuck.
+        property QtObject popupEnter: QtObject {
+            property int duration: Math.round(280 * root.animMultiplier)
+        }
+
+        property QtObject popupExit: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+        }
+
+        property QtObject elementMoveSlow: QtObject {
+            property int duration: Math.round(animationCurves.expressiveEffectsDuration * 2.5 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveEffects
+            property int velocity: 850
+            property Component colorAnimation: Component {
+                ColorAnimation {
+                    duration: root.animation.elementMoveSlow.duration
+                    easing.type: root.animation.elementMoveSlow.type
+                    easing.bezierCurve: root.animation.elementMoveSlow.bezierCurve
+                }
+            }
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.elementMoveSlow.duration
+                    easing.type: root.animation.elementMoveSlow.type
+                    easing.bezierCurve: root.animation.elementMoveSlow.bezierCurve
+                }
+            }
+        }
+
+        property QtObject elementMoveFast: QtObject {
+            property int duration: Math.round(animationCurves.expressiveEffectsDuration * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveEffects
+            property int velocity: 850
+            property Component colorAnimation: Component {
+                ColorAnimation {
+                    duration: root.animation.elementMoveFast.duration
+                    easing.type: root.animation.elementMoveFast.type
+                    easing.bezierCurve: root.animation.elementMoveFast.bezierCurve
+                }
+            }
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.elementMoveFast.duration
+                    easing.type: root.animation.elementMoveFast.type
+                    easing.bezierCurve: root.animation.elementMoveFast.bezierCurve
+                }
+            }
+        }
+
+        /**
+         * A selection that follows the keyboard (Alt+Tab's highlight). Shorter than
+         * elementMoveFast so a held key reads as one motion, and deliberately without
+         * `alwaysRunToEnd`: a Behavior retargets from wherever the value is, and running
+         * each leg to its end would queue every press behind the last one.
+         */
+        property QtObject elementMoveSnap: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.elementMoveSnap.duration
+                    easing.type: root.animation.elementMoveSnap.type
+                    easing.bezierCurve: root.animation.elementMoveSnap.bezierCurve
+                }
+            }
+        }
+
+        property QtObject elementResize: QtObject {
+            property int duration: Math.round(300 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.emphasized
+            property int velocity: 650
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.elementResize.duration
+                    easing.type: root.animation.elementResize.type
+                    easing.bezierCurve: root.animation.elementResize.bezierCurve
+                }
+            }
+        }
+
+        // Every size change that happens *inside* the bar reads from here: the
+        // widgets and the island backgrounds that wrap them have to reach their
+        // new size at the same instant, and they only do that if they share one
+        // duration and one curve. A widget that animates its own implicitWidth
+        // faster than the island around it makes the island look like it is
+        // chasing the content (and vice versa).
+        // 280ms is the duration the Dynamic Island already used; the fast
+        // spatial curve keeps its slight overshoot without the OutBack tail.
+        property QtObject barResize: QtObject {
+            property int duration: Math.round(280 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.barResize.duration
+                    easing.type: root.animation.barResize.type
+                    easing.bezierCurve: root.animation.barResize.bezierCurve
+                }
+            }
+        }
+
+        // Dashboard indicators use a staged transition: the slot changes size
+        // before/after the icon pop. Keep these slower and softer than the
+        // global barResize clock without slowing every other responsive widget.
+        property QtObject dashboardIndicatorResize: QtObject {
+            property int duration: Math.round(420 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.standard
+        }
+
+        property QtObject dashboardIndicatorPop: QtObject {
+            property int enterDuration: Math.round(360 * root.animMultiplier)
+            property int exitDuration: Math.round(280 * root.animMultiplier)
+            property int cueDelay: Math.round(90 * root.animMultiplier)
+            property int exitHoldDuration: Math.round(220 * root.animMultiplier)
+            property int enterType: Easing.OutBack
+            property real enterOvershoot: 1.18
+            property int exitType: Easing.BezierSpline
+            property list<real> exitCurve: animationCurves.emphasizedAccel
+        }
+
+        // The bar and the wrapped frame leaving the screen together: a
+        // fullscreen window taking over, media mode, or a placement swap. The
+        // exit accelerates away and the entrance decelerates in, so a swap does
+        // not read as two halves of the same easing.
+        property QtObject shellEdgeSlide: QtObject {
+            property int exitDuration: Math.round(260 * root.animMultiplier)
+            property int enterDuration: Math.round(420 * root.animMultiplier)
+            property int swapHold: Math.round(90 * root.animMultiplier)
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.shellEdgeSlide.enterDuration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.animationCurves.emphasized
+                }
+            }
+        }
+
+        // Sidebars sliding in and out, and the wallpaper parallax that follows them.
+        // No overshoot anywhere: expressive spatial curves kick off at ~3x linear speed and
+        // bounce the wallpaper past its rest, which reads as hard. The sidebar enters on M3
+        // emphasized (gentle start, long settle) and leaves accelerating, like end4's layer
+        // animations; the wallpaper runs its own, longer emphasized clock in both directions,
+        // since an accelerating exit is invisible for a sidebar but stops the wallpaper dead.
+        property QtObject sidebarSlide: QtObject {
+            property int enterDuration: Math.round(500 * root.animMultiplier)
+            property int exitDuration: Math.round(500 * root.animMultiplier)
+            property list<real> enterCurve: root.animationCurves.emphasized
+            property list<real> exitCurve: root.animationCurves.emphasized
+            property int parallaxDuration: Math.round(700 * root.animMultiplier)
+            property list<real> parallaxCurve: root.animationCurves.emphasized
+        }
+
+        property QtObject clickBounce: QtObject {
+            property int duration: Math.round(400 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveDefaultSpatial
+            property int velocity: 850
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    alwaysRunToEnd: true
+                    duration: root.animation.clickBounce.duration
+                    easing.type: root.animation.clickBounce.type
+                    easing.bezierCurve: root.animation.clickBounce.bezierCurve
+                }
+            }
+        }
+
+        // One lens shared by every dock icon. pointerLag smooths the pointer the
+        // lens follows (critically damped, never overshoots); strengthDuration
+        // is how long the lens takes to grow in on enter. Past the window edge
+        // there are no pointer samples, so the exit is timed: exitDuration, on
+        // a curve that starts and ends gently.
+        property QtObject dockMagnificationScale: QtObject {
+            property QtObject fast: QtObject {
+                property real pointerLag: 0
+                property int strengthDuration: Math.round(90 * root.animMultiplier)
+                property int exitDuration: Math.round(220 * root.animMultiplier)
+            }
+            property QtObject balanced: QtObject {
+                property real pointerLag: 28
+                property int strengthDuration: Math.round(150 * root.animMultiplier)
+                property int exitDuration: Math.round(280 * root.animMultiplier)
+            }
+            property QtObject smooth: QtObject {
+                property real pointerLag: 60
+                property int strengthDuration: Math.round(220 * root.animMultiplier)
+                property int exitDuration: Math.round(340 * root.animMultiplier)
+            }
+            property int hoverExitGrace: 90
+        }
+
+        // Retained for discrete magnification feedback in secondary popups.
+        property QtObject dockMagnification: QtObject {
+            property int duration: Math.round(220 * root.animMultiplier)
+            property int type: Easing.OutBack
+            property real overshoot: 1.35
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.dockMagnification.duration
+                    easing.type: root.animation.dockMagnification.type
+                    easing.overshoot: root.animation.dockMagnification.overshoot
+                }
+            }
+        }
+
+        property QtObject scroll: QtObject {
+            property int duration: Math.round(200 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: root.animationCurves.standardDecel
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.scroll.duration
+                    easing.type: root.animation.scroll.type
+                    easing.bezierCurve: root.animation.scroll.bezierCurve
+                }
+            }
+        }
+
+        property QtObject menuDecel: QtObject {
+            property int duration: Math.round(350 * root.animMultiplier)
+            property int type: Easing.OutExpo
+        }
+    }
+
+    sizes: QtObject {
+        // A finger needs a bigger target than a cursor. A touch-first family raises the
+        // bar's FLOOR rather than replacing the value: a bar the user configured taller
+        // than this stays taller, and the stored preference is never rewritten.
+        //
+        // This is deliberately here and not a per-window scale. Scaling the bar window was
+        // tried and reverted — every widget inside sizes itself off barHeight, so the window
+        // grew while the content did not, and backgrounds, hit targets and popup anchors all
+        // measured against a bar that was not the one on screen.
+        // Material's minimum touch target, and the Pixel Tablet's status bar height.
+        property real minimumTouchTarget: 48
+
+        // Snap step for desktop widgets and icons on the wallpaper canvas.
+        //
+        // Ten pixels is a fine-positioning aid for a mouse: it takes the jitter out of a
+        // drag without really constraining where something lands. A finger cannot place
+        // anything that precisely, and a home screen is supposed to look laid out on a
+        // grid rather than merely tidy — so a touch-first family snaps to a step coarse
+        // enough to read as cells, the way Android's home screen does.
+        // What this family wants when nothing is configured. Kept separate from the
+        // resolved value below so a settings control can offer it as the fallback without
+        // reading a property that depends on the very key it writes — that was a binding
+        // loop, and the page it was on rendered empty.
+        readonly property real familyWidgetGridStep: PanelFamily.touchFirst ? 40 : 10
+
+        property real widgetGridStep: {
+            const configured = Config.options?.background?.widgets?.gridStep ?? 0;
+            return configured > 0 ? configured : root.sizes.familyWidgetGridStep;
+        }
+        property real baseBarHeight: PanelFamily.touchFirst
+            ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
+            : Config.options.bar.sizes.height
+        property real barHeight: BarInteraction.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // Bar widgets were drawn against a 40px horizontal bar and a 44px vertical one, and
+        // most of them size their outer plate off the bar while leaving the glyph inside at
+        // the number it was drawn with. On a touch-first family the bar is taller than that
+        // by definition, so those widgets became big plates around small icons. Scaling the
+        // insides by the same ratio is a no-op at the default and correct everywhere else.
+        readonly property real barReferenceHeight: 40
+        readonly property real barReferenceWidth: 44
+        readonly property real barContentScale: root.sizes.baseBarHeight / root.sizes.barReferenceHeight
+        readonly property real verticalBarContentScale: root.sizes.verticalBarWidth / root.sizes.barReferenceWidth
+
+        property real barCenterSideModuleWidth: Config.options?.bar.verbose ? 360 : 140
+        property real barCenterSideModuleWidthShortened: 280
+        property real barCenterSideModuleWidthHellaShortened: 190
+        property real barShortenScreenWidthThreshold: 1200 // Shorten if screen width is at most this value
+        property real barHellaShortenScreenWidthThreshold: 1000 // Shorten even more...
+        property real elevationMargin: 10
+        // The M3 toolbar's height: one number the toolbar and the band Edit Mode reserves for it
+        // both read.
+        property real toolbarHeight: 46
+        // Edit Mode's toolbar: taller than the M3 default, so its groups read
+        // as surfaces of their own (EditModeChromeContent, EditModeInsets).
+        property real editModeToolbarHeight: 60
+        // Edit Mode's viewport: the gap between the shrunk desktop and what surrounds it, the
+        // tighter gap between the chrome and the usable area's edge, and the width the widget
+        // drawer opens into (reserved from the first frame so the desktop never resizes mid-edit).
+        property real editModeMargin: 24
+        property real editModeEdgeMargin: 12
+        property real editModeDrawerWidth: 380
+        property real fabShadowRadius: 5
+        property real fabHoveredShadowRadius: 7
+        property real hyprlandGapsOut: 5
+        property real mediaControlsWidth: 440
+        property real mediaControlsHeight: 160
+        property real notificationPopupWidth: 410
+        property real osdWidth: 200
+        property real searchWidthCollapsed: 350
+        property real searchWidth: 500
+        property real sidebarWidth: 460
+        property real sidebarWidthExtended: 750
+        property real baseVerticalBarWidth: Config.options.bar.sizes.width
+        property real verticalBarWidth: baseVerticalBarWidth
+        property real verticalBarWindowWidth: BarInteraction.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
+        property real wallpaperSelectorWidth: 1200
+        property real wallpaperSelectorHeight: 690
+        property real wallpaperSelectorSidebarWidth: 180
+        property real wallpaperSelectorSidebarButtonHeight: 48
+        property real wallpaperSelectorSidebarHorizontalPadding: 6
+        property real wallpaperSelectorSidebarButtonSpacing: 3
+        property real wallpaperSelectorSidebarGroupSpacing: 10
+        property real wallpaperSelectorSearchWidth: 300
+        property real wallpaperSelectorSortDialogWidth: 280
+        property real wallpaperSelectorItemMargins: 8
+        property real wallpaperSelectorItemPadding: 6
+        property int dockButtonSize: Math.round((Config.options?.dock.height ?? 60) * 0.85)
+    }
+
+    syntaxHighlightingTheme: root.m3colors.darkmode ? "Monokai" : "ayu Light"
+}

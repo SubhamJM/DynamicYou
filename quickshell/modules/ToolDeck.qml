@@ -6,7 +6,7 @@ import Quickshell.Io
 import Quickshell.Bluetooth
 import "../"
 
-Item {
+FocusScope {
     id: toolDeckRoot
     Layout.fillWidth: true
     Layout.fillHeight: true

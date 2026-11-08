@@ -1,0 +1,389 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
+// From https://github.com/caelestia-dots/shell with modifications.
+// License: GPLv3
+
+import qs.modules.common
+import qs.modules.common.functions
+import Quickshell
+import Quickshell.Io
+import Quickshell.Hyprland
+import QtQuick
+
+/**
+ * For managing brightness of monitors. Supports both brightnessctl and ddcutil.
+ */
+Singleton {
+    id: root
+    signal brightnessChanged
+
+    property var ddcMonitors: []
+    readonly property list<BrightnessMonitor> monitors: Quickshell.screens.map(screen => monitorComp.createObject(root, {
+            screen
+        }))
+    // Hyprland's follow_mouse=1 keeps focusedMonitor aligned with the output
+    // under the pointer, including when a global shortcut is used.
+    readonly property var targetScreen: Quickshell.screens.find(screen => screen.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")) || Quickshell.screens[0] || null
+
+    function getMonitorForScreen(screen: ShellScreen): var {
+        return monitors.find(m => m.screen === screen);
+    }
+
+    function getTargetMonitor(): var {
+        return root.getMonitorForScreen(root.targetScreen);
+    }
+
+    // Dimming below the backlight minimum by lowering gamma is opt-out
+    readonly property bool gammaDimming: Config.options?.light?.gamma?.dimBelowMinimum ?? true
+
+    function increaseBrightness(): void {
+        // if gamma is not yet 100, first increase gamma
+        if (root.gammaDimming && Hyprsunset.gamma !== 100) {
+            Hyprsunset.setGamma(Hyprsunset.gamma + 5);
+            return;
+        }
+
+        const monitor = root.getTargetMonitor();
+        if (monitor)
+            monitor.setBrightness(monitor.brightness + 0.05);
+    }
+
+    function decreaseBrightness(): void {
+        const monitor = root.getTargetMonitor();
+        if (monitor && monitor.brightness > monitor.floorBrightness) {
+            monitor.setBrightness(monitor.brightness - 0.05);
+            return;
+        }
+        // if the backlight is on its floor, then decrease gamma
+        if (root.gammaDimming)
+            Hyprsunset.setGamma(Hyprsunset.gamma - 5);
+    }
+
+    // Changes made outside the shell (brightness keys bound straight to brightnessctl, keyd,
+    // an ambient-light daemon) reach the OSD through here. With `osd.brightnessKeysOnly` on,
+    // one only counts when a key press was reported (`ipc call brightness keyPressed`) within
+    // pressWindowMs, before or after it: an unattended write is byte-identical to a keypress
+    // at the sysfs level, so the press is the only thing that tells them apart.
+    readonly property bool keysOnly: Config.options?.osd?.brightnessKeysOnly ?? false
+    readonly property int pressWindowMs: 400
+    property real keyPressedAt: -1e9
+    property real externalChangeAt: -1e9
+
+    function keyPressed(): void {
+        root.keyPressedAt = Date.now();
+        root.fireExternalChange();
+    }
+
+    function reportExternalChange(): void {
+        if (!root.keysOnly) {
+            root.brightnessChanged();
+            return;
+        }
+        root.externalChangeAt = Date.now();
+        root.fireExternalChange();
+    }
+
+    // Both halves call this, since either can land first: the key's IPC call and the
+    // kernel's notification race each other.
+    function fireExternalChange(): void {
+        const now = Date.now();
+        if (now - root.keyPressedAt >= root.pressWindowMs || now - root.externalChangeAt >= root.pressWindowMs)
+            return;
+        // Consume the change but leave the press armed: a press that also wakes an idle
+        // dimmer is followed by a second, corrected write, and that one should show.
+        root.externalChangeAt = -1e9;
+        root.brightnessChanged();
+    }
+
+    reloadableId: "brightness"
+
+    onMonitorsChanged: {
+        ddcMonitors = [];
+        ddcProc.running = true;
+    }
+
+    function initializeMonitor(i: int): void {
+        if (i >= monitors.length)
+            return;
+        monitors[i].initialize();
+    }
+
+    function ddcDetectFinished(): void {
+        initializeMonitor(0);
+    }
+
+    Process {
+        id: ddcProc
+
+        command: ["ddcutil", "detect", "--brief"]
+        stdout: SplitParser {
+            splitMarker: "\n\n"
+            onRead: data => {
+                if (data.startsWith("Display ")) {
+                    const lines = data.split("\n").map(l => l.trim());
+                    root.ddcMonitors.push({
+                        name: lines.find(l => l.startsWith("DRM connector:")).split("-").slice(1).join('-'),
+                        busNum: lines.find(l => l.startsWith("I2C bus:")).split("/dev/i2c-")[1]
+                    });
+                }
+            }
+        }
+        onExited: root.ddcDetectFinished()
+    }
+
+    component BrightnessMonitor: QtObject {
+        id: monitor
+
+        required property ShellScreen screen
+        property bool isDdc
+        property string busNum
+        property int rawMaxBrightness: 100
+        property real brightness
+        property real brightnessMultiplier: 1.0
+        property real multipliedBrightness: Math.max(0, Math.min(1, brightness * (Config.options.light.antiFlashbang.enable ? brightnessMultiplier : 1)))
+        property bool ready: false
+        property bool animateChanges: !monitor.isDdc
+        // The sysfs name brightnessctl drives (non-DDC monitors only).
+        property string backlightDevice: ""
+        // Writes land on whole percent and never below raw 1, so this is as low as it goes.
+        readonly property real floorBrightness: Math.max(0.01, monitor.rawMaxBrightness > 0 ? 1 / monitor.rawMaxBrightness : 0)
+        // Set while a value read back from the hardware is taken over: it is already on the
+        // panel, so nothing may animate towards it or write it back.
+        property bool adopting: false
+        property real lastWriteAt: 0
+        readonly property int writeSettleMs: 300
+
+        onBrightnessChanged: {
+            if (!monitor.ready || monitor.adopting)
+                return;
+            root.brightnessChanged();
+        }
+
+        Behavior on multipliedBrightness {
+            enabled: monitor.animateChanges && !monitor.adopting
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.expressiveEffects
+            }
+        }
+        onMultipliedBrightnessChanged: {
+            if (monitor.adopting)
+                return;
+            if (monitor.animateChanges)
+                syncBrightness();
+            else
+                setTimer.restart();
+        }
+
+        function initialize() {
+            monitor.ready = false;
+            const match = root.ddcMonitors.find(m => m.name === screen.name && !root.monitors.slice(0, root.monitors.indexOf(this)).some(mon => mon.busNum === m.busNum));
+            isDdc = !!match;
+            busNum = match?.busNum ?? "";
+            // brightnessctl -m prints `name,class,current,percent,max`
+            initProc.command = isDdc ? ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"] : ["brightnessctl", "--class", "backlight", "--machine-readable", "info"];
+            initProc.running = true;
+        }
+
+        readonly property Process initProc: Process {
+            stdout: SplitParser {
+                onRead: data => {
+                    // ddcutil: `VCP 10 C <current> <max>`
+                    const fields = monitor.isDdc ? data.split(" ") : data.trim().split(",");
+                    if (!monitor.isDdc)
+                        monitor.backlightDevice = fields[0] ?? "";
+                    monitor.rawMaxBrightness = parseInt(fields[4]);
+                    // Taken over like any outside change: the level is already on the panel,
+                    // so it is not animated up from 0 and written back frame by frame.
+                    monitor.adopting = true;
+                    monitor.brightness = parseInt(fields[monitor.isDdc ? 3 : 2]) / monitor.rawMaxBrightness;
+                    monitor.adopting = false;
+                    monitor.ready = true;
+                }
+            }
+            onExited: (exitCode, exitStatus) => {
+                initializeMonitor(root.monitors.indexOf(monitor) + 1);
+            }
+        }
+
+        // The kernel notifies `actual_brightness` on every write, whoever makes it, so this
+        // costs nothing while idle and keeps the cached value from going stale when the keys
+        // (or anything else) write the backlight without going through the shell.
+        readonly property FileView backlightView: FileView {
+            id: backlightView
+            path: !monitor.isDdc && monitor.backlightDevice !== ""
+                ? `/sys/class/backlight/${monitor.backlightDevice}/actual_brightness` : ""
+            watchChanges: true
+            onFileChanged: {
+                // Our own writes echo back here too: let them settle, then compare once.
+                if (Date.now() - monitor.lastWriteAt < monitor.writeSettleMs) {
+                    settleTimer.restart();
+                    return;
+                }
+                requestedView.reload();
+            }
+        }
+
+        // The level itself is read from `brightness`, not `actual_brightness`: amdgpu reads the
+        // latter back through its luminance curve (65535 -> 56905, everything under ~5% -> 3277),
+        // so adopting it dragged sliders below where they were left and kept the level above the
+        // floor, where each step down re-animated the backlight up from 5%.
+        readonly property FileView requestedView: FileView {
+            id: requestedView
+            path: !monitor.isDdc && monitor.backlightDevice !== ""
+                ? `/sys/class/backlight/${monitor.backlightDevice}/brightness` : ""
+            onLoaded: monitor.adoptHardware(parseInt(requestedView.text()))
+        }
+
+        readonly property Timer settleTimer: Timer {
+            id: settleTimer
+            interval: monitor.writeSettleMs
+            onTriggered: requestedView.reload()
+        }
+
+        function adoptHardware(raw: int): void {
+            if (!monitor.ready || monitor.isDdc || isNaN(raw) || monitor.rawMaxBrightness <= 0)
+                return;
+            const hardware = raw / monitor.rawMaxBrightness;
+            // Within rounding of what the shell last wrote: nothing changed behind its back.
+            if (Math.abs(hardware - monitor.multipliedBrightness) <= 0.01 + 1 / monitor.rawMaxBrightness)
+                return;
+            const multiplier = Config.options.light.antiFlashbang.enable ? monitor.brightnessMultiplier : 1;
+            monitor.adopting = true;
+            monitor.brightness = Math.max(0, Math.min(1, multiplier > 0 ? hardware / multiplier : hardware));
+            monitor.adopting = false;
+            root.reportExternalChange();
+        }
+
+        readonly property Process setProc: Process {}
+
+        // We need a delay for DDC monitors because they can be quite slow and might act weird with rapid changes
+        property var setTimer: Timer {
+            id: setTimer
+            interval: monitor.isDdc ? 300 : 0
+            onTriggered: {
+                syncBrightness();
+            }
+        }
+
+        function syncBrightness() {
+            monitor.lastWriteAt = Date.now();
+            const brightnessValue = Math.max(monitor.multipliedBrightness, 0);
+            if (isDdc) {
+                const rawValueRounded = Math.max(Math.floor(brightnessValue * monitor.rawMaxBrightness), 1);
+                monitor.setProc.exec(["ddcutil", "-b", busNum, "setvcp", "10", rawValueRounded]);
+            } else {
+                const valuePercentNumber = Math.floor(brightnessValue * 100);
+                let valuePercent = `${valuePercentNumber}%`;
+                if (valuePercentNumber == 0)
+                    valuePercent = "1"; // Prevent fully black
+                monitor.setProc.exec(["brightnessctl", "--class", "backlight", "s", valuePercent, "--quiet"]);
+            }
+        }
+
+        function setBrightness(value: real): void {
+            value = Math.max(0, Math.min(1, value));
+            monitor.brightness = value;
+        }
+
+        function setBrightnessMultiplier(value: real): void {
+            monitor.brightnessMultiplier = value;
+        }
+    }
+
+    Component {
+        id: monitorComp
+
+        BrightnessMonitor {}
+    }
+
+    // Anti-flashbang
+    property int workspaceAnimationDelay: 500
+    property int contentSwitchDelay: 30
+    property string screenshotDir: `/tmp/quickshell-${SystemInfo.username}/brightness/antiflashbang`
+    function brightnessMultiplierForLightness(x: real): real {
+        // I hand picked some values and fitted an exponential curve for this
+        // 6.600135 + 216.360356 * e^(-0.0811129189x)
+        // Division by 100 is to normalize to [0, 1]
+        return (6.600135 + 216.360356 * Math.pow(Math.E, -0.0811129189 * x)) / 100.0;
+    }
+    Variants {
+        model: Quickshell.screens
+        Scope {
+            id: screenScope
+            required property var modelData
+            property string screenName: modelData.name
+            property string screenshotPath: `${root.screenshotDir}/screenshot-${screenName}.png`
+            Connections {
+                enabled: Config.options.light.antiFlashbang.enable && Appearance.m3colors.darkmode
+                target: Hyprland
+                function onRawEvent(event) {
+                    if (["activewindowv2", "windowtitlev2"].includes(event.name)) {
+                        screenshotTimer.interval = root.contentSwitchDelay;
+                        screenshotTimer.restart();
+                    } else if (["workspacev2"].includes(event.name)) {
+                        screenshotTimer.interval = root.workspaceAnimationDelay;
+                        screenshotTimer.restart();
+                    }
+                }
+            }
+
+            Timer {
+                id: screenshotTimer
+                interval: 700 // This is what I have for a Hyprland ws anim
+                onTriggered: {
+                    screenshotProc.running = false;
+                    screenshotProc.running = true;
+                }
+            }
+
+            Process {
+                id: screenshotProc
+                command: ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(root.screenshotDir)}'` + ` && grim -o '${StringUtils.shellSingleQuoteEscape(screenScope.screenName)}' -` + ` | magick png:- -colorspace Gray -format "%[fx:mean*100]" info:`]
+                stdout: StdioCollector {
+                    id: lightnessCollector
+                    onStreamFinished: {
+                        Quickshell.execDetached(["rm", screenScope.screenshotPath]); // Cleanup
+                        const lightness = lightnessCollector.text;
+                        const newMultiplier = root.brightnessMultiplierForLightness(parseFloat(lightness));
+                        Brightness.getMonitorForScreen(screenScope.modelData).setBrightnessMultiplier(newMultiplier);
+                    }
+                }
+            }
+        }
+    }
+
+    // External trigger points
+
+    IpcHandler {
+        target: "brightness"
+
+        function increment() {
+            root.increaseBrightness();
+        }
+
+        function decrement() {
+            root.decreaseBrightness();
+        }
+
+        // A brightness key that writes the backlight itself reports the press here; see
+        // keysOnly. scripts/brightness/brightness-key.sh does this for the default binds.
+        function keyPressed() {
+            root.keyPressed();
+        }
+    }
+
+    GlobalShortcut {
+        name: "brightnessIncrease"
+        description: "Increase brightness"
+        onPressed: root.increaseBrightness()
+    }
+
+    GlobalShortcut {
+        name: "brightnessDecrease"
+        description: "Decrease brightness"
+        onPressed: root.decreaseBrightness()
+    }
+}
