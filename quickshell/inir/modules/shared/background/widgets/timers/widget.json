@@ -1,0 +1,41 @@
+{
+  "name": "Timers",
+  "group": "Timers",
+  "main": "TimerWidget.qml",
+  "icon": "timer",
+  "tint": "#ff9f0a",
+  "category": "today",
+  "keywords": "timer stopwatch countdown alarm pomodoro",
+  "sizes": ["medium", "small", "large"],
+  "lock": true,
+  "palette": true,
+  "face": "timer",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "vertical": false,
+    "style": "cards",
+    "glow": true,
+    "showProgress": true,
+    "showState": true,
+    "showHundredths": true,
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "useBlur": false,
+    "backgroundOpacity": 0,
+    "borderWidth": 0,
+    "borderOpacity": 0.16,
+    "cornerRadius": -1,
+    "colorMode": "auto",
+    "dim": 0,
+    "x": 360,
+    "y": 420
+  },
+  "options": [
+    {"key":"style","label":"Style","type":"choice","default":"cards","when":"material","choices":[["cards","Cards"],["instrument","Instrument"]]},
+    {"key":"vertical","label":"Orientation","type":"choice","default":false,"when":"plain","choices":[[false,"Horizontal"],[true,"Vertical"]]},
+    {"key":"glow","label":"Active pulse","type":"switch","default":true,"when":["plain",{"style":"instrument"}],"tune":true},
+    {"key":"showProgress","label":"Progress","type":"switch","default":true,"when":["plain",{"style":"instrument"}],"tune":true},
+    {"key":"showState","label":"Details","type":"switch","default":true,"when":["plain",{"style":"instrument"}],"tune":true},
+    {"key":"showHundredths","label":"Hundredths","type":"switch","default":true,"when":["plain",{"style":"instrument"}],"tune":true}
+  ]
+}

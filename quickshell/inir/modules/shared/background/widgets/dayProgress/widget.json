@@ -1,0 +1,43 @@
+{
+  "name": "Day",
+  "group": "Day progress",
+  "main": "DayProgressWidget.qml",
+  "icon": "timelapse",
+  "tint": "#ff9f0a",
+  "category": "today",
+  "keywords": "day sun hours",
+  "sizes": ["small", "medium", "large"],
+  "freeShape": true,
+  "lock": true,
+  "palette": true,
+  "face": "day",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "colorMode": "auto",
+    "dim": 0,
+    "style": "ring",
+    "comet": true,
+    "showIcon": true,
+    "showDate": true,
+    "hourLabels": true,
+    "fontScale": 100,
+    "backgroundOpacity": 0,
+    "borderWidth": 0,
+    "borderOpacity": 0.2,
+    "cornerRadius": -1,
+    "useBlur": false,
+    "x": 80,
+    "y": 260
+  },
+  "bare": true,
+  "options": [
+    {"key":"style","label":"Style","type":"choice","default":"ring","when":"material","choices":[["ring","Ring"],["arc","Arc"],["ticks","Ticks"]]},
+    {"key":"comet","label":"Comet tail","type":"switch","default":true,"when":"plain"},
+    {"key":"showIcon","label":"Sun icon","type":"switch","default":true,"when":"plain"},
+    {"key":"showDate","label":"Show date","type":"switch","default":true,"when":"plain"},
+    {"key":"hourLabels","label":"Hour labels","type":"switch","default":true,"when":"plain","tune":true},
+    {"key":"fontScale","label":"Text size","type":"range","default":100,"when":"plain","min":60,"max":180,"step":10,"unit":" %"}
+  ]
+}

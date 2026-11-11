@@ -1,0 +1,71 @@
+[Unit]
+Description=iNiR shell
+# The compositor owns the graphical-session environment: Niri or Umbriel, whichever
+# the person logged into.  Both units are Type=notify, so ordering after them
+# guarantees DISPLAY, WAYLAND_DISPLAY and NIRI_SOCKET or UMBRIEL_SOCKET are
+# already published to the user manager before iNiR starts.  Only a wants link
+# under one of them starts it ('inir service enable'); stopping it stops iNiR.
+PartOf=niri.service umbriel.service
+After=niri.service umbriel.service
+# Keep the StatusNotifier watcher ready before desktop autostart applications
+# register tray items.  Niri also orders itself before this target.
+Before=xdg-desktop-autostart.target
+# Rate-limit restarts: max 3 attempts in 30 seconds, then stop trying.
+# These MUST live in [Unit], not [Service] — systemd ignores them elsewhere.
+StartLimitIntervalSec=30
+StartLimitBurst=3
+
+[Service]
+Type=dbus
+BusName=org.kde.StatusNotifierWatcher
+
+# Pre-seed stable environment so the bash wrapper skips detection at boot.
+# QT_SCALE_FACTOR must be 1 — shell scaling is handled in QML.
+# QT_SCALE_FACTOR_ROUNDING_POLICY=RoundPreferFloor prevents blurry rendering
+# when compositor uses fractional scaling (1.25 etc) — Qt rounds to integer.
+# QT_LOGGING_RULES suppresses noisy Qt/KF warnings.
+Environment=QT_SCALE_FACTOR=1
+Environment=QT_SCALE_FACTOR_ROUNDING_POLICY=RoundPreferFloor
+Environment=QT_LOGGING_RULES=quickshell.dbus.properties=false;quickshell.dbus.objectmanager.warning=false;qt.qml.settings.warning=false;qt.core.qsettings.warning=false;kf.xmlgui=false;kf.coreaddons=false;kf.config.core=false;kf.iconthemes=false;qt.qpa.wayland.textinput.warning=false
+
+# Started by hand outside a session (a TTY, another desktop): skip, never a failure.
+ExecCondition=/bin/sh -c 'systemctl --user is-active --quiet niri.service || systemctl --user is-active --quiet umbriel.service'
+ExecStart=/usr/bin/inir run --session
+SuccessExitStatus=143
+
+# process mode: only SIGTERM the main PID so user-spawned apps (terminals,
+# media players, etc.) survive shell restarts.  Orphan shell helpers are
+# cleaned by ExecStopPost instead.
+KillMode=process
+KillSignal=SIGTERM
+
+# on-failure: restart on both signals (SIGSEGV, SIGABRT) AND non-zero exit
+# codes (QML errors, unhandled exceptions).  Clean SIGTERM shutdown is already
+# excluded via SuccessExitStatus=143.  The rate limiter (3 in 30s) prevents
+# infinite crash loops — after 3 rapid failures systemd gives up.
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+# Disable coredumps and QS crash reports. Stock Quickshell can segfault on
+# hot-reload (extensions freed before the root), each coredump is 45-90 MB and
+# its crash reports pile up in ~/.cache/quickshell/crashes/.
+LimitCORE=0
+# The shell holds an fd per process, watch, socket and texture source; the 1024 default ran out after a
+# long day of reloads and Wayland dropped the connection ("Too many open files").
+LimitNOFILE=65536
+Environment=QS_DISABLE_CRASH_HANDLER=1
+
+# Clean up stale Quickshell runtime entries (by-pid, by-id) left behind
+# after crashes.  KillMode=process only kills the main PID, so orphaned
+# QS child processes and their runtime artifacts accumulate over time.
+ExecStopPost=-/usr/bin/inir cleanup-orphans
+
+# Boost I/O priority so QML/Qt library loading wins over background services
+# during cold-boot I/O contention (portals, tray apps, etc.)
+IOSchedulingPriority=2
+
+# No [Install] section — wiring is managed by 'inir service enable' which
+# creates compositor-specific wants links (niri.service.wants/,
+# umbriel.service.wants/) so inir only starts under a compositor it runs on,
+# not under KDE/GNOME/etc.

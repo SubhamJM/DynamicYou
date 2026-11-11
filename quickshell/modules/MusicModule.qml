@@ -596,8 +596,8 @@ Item {
         bottomLeftRadius: 26
         bottomRightRadius: 26
         color: musicModule.effectiveArtUrl !== "" ? Qt.rgba(0.07, 0.07, 0.08, 0.82) : "#121214"
-        border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.06)
+        border.width: 0
+        border.color: "transparent"
     }
 
     // Mouse area over container to allow volume adjustment via wheel

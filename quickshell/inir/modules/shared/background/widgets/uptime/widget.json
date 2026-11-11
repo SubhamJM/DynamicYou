@@ -1,0 +1,36 @@
+{
+  "name": "Uptime",
+  "group": "System uptime",
+  "main": "UptimeWidget.qml",
+  "icon": "avg_pace",
+  "tint": "#5e5ce6",
+  "category": "system",
+  "keywords": "boot session running",
+  "sizes": ["small", "medium", "large"],
+  "freeShape": true,
+  "lock": true,
+  "palette": true,
+  "face": "uptime",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "colorMode": "auto",
+    "dim": 0,
+    "style": "row",
+    "showSince": true,
+    "showBreakdown": true,
+    "backgroundOpacity": 0.16,
+    "borderWidth": 1,
+    "borderOpacity": 0.2,
+    "cornerRadius": -1,
+    "useBlur": false,
+    "x": 80,
+    "y": 80
+  },
+  "options": [
+    {"key":"showSince","label":"Start time","type":"switch","default":true},
+    {"key":"style","label":"Style","type":"choice","default":"row","when":"material","choices":[["row","Row"],["instrument","Instrument"]]},
+    {"key":"showBreakdown","label":"Breakdown","type":"switch","default":true,"when":["plain",{"style":"instrument"}],"tune":true}
+  ]
+}

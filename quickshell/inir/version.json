@@ -1,0 +1,20 @@
+{
+  "version": "3.0.1",
+  "commit": "e8a8c0c",
+  "installed_at": "2026-11-09T16:24:35+05:30",
+  "installedAt": "2026-11-09T16:24:35+05:30",
+  "source": "setup-install",
+  "repo_path": "",
+  "repoPath": "",
+  "install_mode": "package-managed",
+  "installMode": "package-managed",
+  "update_strategy": "package-manager",
+  "updateStrategy": "package-manager",
+  "package_manager": "nix",
+  "packageManager": "nix",
+  "package_name": "inir",
+  "packageName": "inir",
+  "package_update_hint": "nix flake update inir, then nixos-rebuild switch",
+  "packageUpdateHint": "nix flake update inir, then nixos-rebuild switch",
+  "dependencies": "user"
+}

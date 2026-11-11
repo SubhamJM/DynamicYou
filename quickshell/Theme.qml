@@ -27,16 +27,16 @@ QtObject {
         var activeAcc = (theme.mediaAccent !== "") ? theme.mediaAccent : theme.baseAccent;
         var raw = theme.rawThemeColors || {};
         theme.colors = {
-            "bg": raw.bg || "#0b0a10",
-            "card_bg": raw.card_bg || "#14121a",
-            "hover_bg": raw.hover_bg || "#1d1a26",
-            "border": raw.border || Qt.rgba(255, 255, 255, 0.08),
-            "border_hover": (theme.mediaAccent !== "") ? theme.mediaAccent : (raw.border_hover || Qt.rgba(255, 255, 255, 0.18)),
-            "text_primary": raw.text_primary || "#f8fafc",
-            "text_secondary": raw.text_secondary || "#94a3b8",
-            "text_muted": raw.text_muted || "#64748b",
+            "bg": "#000000",
+            "card_bg": raw.card_bg || "#1c1b1f",
+            "hover_bg": raw.hover_bg || "#2b2930",
+            "border": "transparent",
+            "border_hover": "transparent",
+            "text_primary": raw.text_primary || "#f0dfd7",
+            "text_secondary": raw.text_secondary || "#d7c2b8",
+            "text_muted": raw.text_muted || "#9f8d84",
             "accent": activeAcc,
-            "error": raw.error || "#f87171",
+            "error": raw.error || "#ffb4ab",
             "warning": raw.warning || "#fbbf24"
         };
         theme.themeReloaded();
@@ -68,18 +68,18 @@ QtObject {
         }
     }
 
-    // Minflair Deep Midnight Palette with razor-sharp borders and reactive accent
+    // Material 3 Palette with clean borderless surfaces and reactive accent
     property var colors: ({
-        "bg": "#0b0a10",
-        "card_bg": "#14121a",
-        "hover_bg": "#1d1a26",
-        "border": Qt.rgba(255, 255, 255, 0.08),
-        "border_hover": Qt.rgba(255, 255, 255, 0.18),
-        "text_primary": "#f8fafc",
-        "text_secondary": "#94a3b8",
-        "text_muted": "#64748b",
-        "accent": "#7aa2f7",
-        "error": "#f87171",
+        "bg": "#000000",
+        "card_bg": "#1c1b1f",
+        "hover_bg": "#2b2930",
+        "border": "transparent",
+        "border_hover": "transparent",
+        "text_primary": "#f0dfd7",
+        "text_secondary": "#d7c2b8",
+        "text_muted": "#9f8d84",
+        "accent": "#ffb68b",
+        "error": "#ffb4ab",
         "warning": "#fbbf24"
     })
 

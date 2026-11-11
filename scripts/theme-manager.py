@@ -75,6 +75,7 @@ def extract_colors_from_wallpaper(image_path):
         try:
             cmd = [
                 matugen_bin, "image", image_path,
+                "-t", "scheme-tonal-spot",
                 "--source-color-index", "0",
                 "-m", "dark",
                 "--dry-run",
@@ -297,13 +298,13 @@ def write_theme_configs(palette, theme_name):
     fg_stripped = strip_hash(fg)
     subtext_stripped = strip_hash(subtext)
 
-    # 1. Quickshell Theme Colors JSON
+    # 1. Quickshell Theme Colors JSON (clean M3, zero harsh border lines)
     qs_colors = {
         "bg": bg,
         "card_bg": card_bg,
         "hover_bg": hover_bg,
-        "border": border,
-        "border_hover": accent,
+        "border": "transparent",
+        "border_hover": "transparent",
         "text_primary": fg,
         "text_secondary": subtext,
         "accent": accent
@@ -322,26 +323,26 @@ def write_theme_configs(palette, theme_name):
         "on_surface": fg,
         "surface_container": card_bg,
         "surface_container_high": hover_bg,
-        "outline": border,
-        "outline_variant": border,
+        "outline": "transparent",
+        "outline_variant": "transparent",
         "background": bg,
         "on_background": fg,
         "error": error
     }
     safe_write(qs_gen_dir / "colors.json", json.dumps(qs_gen_m3, indent=2))
 
-    # 2. Hyprland Border Colors
+    # 2. Hyprland Border Colors (Zero coloured lines at borders)
     hypr_lua = f"""local colors = {{
-    active_border = "rgba({accent_stripped}ee)",
-    inactive_border = "rgba({border_stripped}aa)"
+    active_border = "rgba(00000000)",
+    inactive_border = "rgba(00000000)"
 }}
 
 return colors
 """
     safe_write(ACTIVE_DIR / "hypr-colors.lua", hypr_lua)
 
-    hypr_conf = f"""$active_border = rgb({accent_stripped})
-$inactive_border = rgb({border_stripped})
+    hypr_conf = f"""$active_border = rgba(00000000)
+$inactive_border = rgba(00000000)
 """
     safe_write(ACTIVE_DIR / "hyprland-colors.conf", hypr_conf)
 
@@ -366,9 +367,9 @@ cursor                {fg}
 cursor_text_color     {bg}
 url_color             {accent}
 
-# Window border colors
-active_border_color     {accent}
-inactive_border_color   {border}
+# Window border colors (Zero coloured borders)
+active_border_color     #00000000
+inactive_border_color   #00000000
 bell_border_color       {error}
 
 wayland_titlebar_color system
@@ -567,12 +568,13 @@ bright_magenta = "{ansi[13]}"
 """
             safe_write(OMARCHY_DIR / "colors.toml", omarchy_colors)
 
-            # Hyprland border in omarchy
-            omarchy_hypr = f"""local active_border_color = "{accent}"
-local inactive_border_color = "rgba({border_stripped}aa)"
+            # Hyprland border in omarchy (strictly zero border)
+            omarchy_hypr = f"""local active_border_color = "rgba(00000000)"
+local inactive_border_color = "rgba(00000000)"
 
 hl.config({{
   general = {{
+    border_size = 0,
     col = {{
       active_border = active_border_color,
       inactive_border = inactive_border_color,

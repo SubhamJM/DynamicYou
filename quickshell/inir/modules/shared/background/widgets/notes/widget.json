@@ -1,0 +1,41 @@
+{
+  "name": "Notes",
+  "group": "Notes",
+  "main": "NotesWidget.qml",
+  "icon": "sticky_note_2",
+  "tint": "#ffcc00",
+  "category": "notes",
+  "keywords": "sticky memo text write",
+  "sizes": ["medium", "small", "large"],
+  "freeShape": true,
+  "lock": true,
+  "palette": true,
+  "face": "notes",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "text": "",
+    "fontSize": 14,
+    "fontFamily": "sans",
+    "textAlign": "left",
+    "style": "card",
+    "showRules": true,
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "useBlur": false,
+    "backgroundOpacity": 0.1,
+    "borderWidth": 1,
+    "borderOpacity": 0.12,
+    "cornerRadius": -1,
+    "colorMode": "auto",
+    "dim": 0,
+    "x": 80,
+    "y": 80
+  },
+  "options": [
+    {"key":"style","label":"Presentation","type":"choice","default":"card","when":"material","choices":[["card","Card"],["instrument","Instrument"]]},
+    {"key":"showRules","label":"Writing guides","type":"switch","default":true,"when":["plain",{"style":"instrument"}]},
+    {"key":"fontFamily","label":"Font","type":"choice","default":"sans","when":"plain","choices":[["sans","Sans"],["mono","Mono"]]},
+    {"key":"textAlign","label":"Alignment","type":"choice","default":"left","when":"plain","tune":true,"choices":[["left","Left","format_align_left"],["center","Center","format_align_center"],["right","Right","format_align_right"]]},
+    {"key":"fontSize","label":"Font size","type":"range","default":14,"when":"plain","min":10,"max":48,"unit":" px"}
+  ]
+}

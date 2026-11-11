@@ -382,7 +382,7 @@ ShellRoot {
     }
 
     readonly property bool isDashMode: activeMode === "idle" || activeMode === "hover"
-    readonly property color notchSurfaceColor: Theme.colors.bg ?? "#1e1e22"
+    readonly property color notchSurfaceColor: "#000000"
     readonly property bool isPopupMode: activeMode !== "idle" && activeMode !== "osd"
 
     function collapseToIdle() {
@@ -1646,20 +1646,10 @@ for f in sorted_files:
                 width: root.targetWidth
                 height: root.targetHeight
                 color: root.notchSurfaceColor
-                border.width: 1
-                border.color: Qt.rgba(255, 255, 255, 0.08)
+                border.width: 0
+                border.color: "transparent"
                 antialiasing: true
                 clip: true
-
-                // Subtle Top Glass Sheen (Minflair / Impasto polished edge)
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1
-                    color: Qt.rgba(255, 255, 255, 0.12)
-                    z: 20
-                }
 
                 // Consumes clicks on empty space inside notch so they do not fall through to click-away catcher
                 MouseArea {
@@ -1702,10 +1692,10 @@ for f in sorted_files:
                 Item {
                     id: modulesContainer
                     anchors.fill: parent
-                    anchors.leftMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper") ? 0 : 12
-                    anchors.rightMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper") ? 0 : 12
-                    anchors.topMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper") ? 0 : 12
-                    anchors.bottomMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper") ? 0 : 12
+                    anchors.leftMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.rightMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.topMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.bottomMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
                     z: 2
 
                     opacity: (!root.isDashMode && root.activeMode !== "osd" && notch.height > 35) ? 1.0 : 0.0

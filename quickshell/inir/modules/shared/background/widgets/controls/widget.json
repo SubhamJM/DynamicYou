@@ -1,0 +1,21 @@
+{
+  "name": "Controls",
+  "group": "Controls",
+  "main": "ControlsWidget.qml",
+  "icon": "toggle_on",
+  "tint": "#0a84ff",
+  "category": "system",
+  "keywords": "toggles wifi bluetooth volume brightness quick settings",
+  "sizes": ["medium", "small", "large"],
+  "lock": true,
+  "faceOnly": true,
+  "face": "controls",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "widgetScale": 100,
+    "cornerRadius": -1,
+    "x": 120,
+    "y": 420
+  },
+  "plate": false
+}

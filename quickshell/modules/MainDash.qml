@@ -754,59 +754,42 @@ Item {
             Row {
                 id: wsIslandRow
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: 4
 
                 Repeater {
                     model: dash.workspaceIds
 
-                    delegate: Item {
+                    delegate: Rectangle {
                         id: indicatorItem
                         property int wsId: modelData
                         property bool isFocused: indicatorItem.wsId === dash.activeWsId
 
-                        width: isFocused ? 26 : 8
-                        height: 8
+                        width: 24
+                        height: 24
+                        radius: 7
                         anchors.verticalCenter: parent.verticalCenter
 
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutCubic
-                            }
-                        }
+                        color: isFocused
+                            ? Theme.accent
+                            : (dotMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
 
-                        Rectangle {
-                            id: pillShape
-                            anchors.fill: parent
-                            radius: 4
+                        Behavior on color { ColorAnimation { duration: 160 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: String(indicatorItem.wsId)
                             color: indicatorItem.isFocused
-                                ? Theme.accent
-                                : (dotMouse.containsMouse ? (Theme.colors.text_primary ?? "#c0caf5") : Qt.rgba(1, 1, 1, 0.28))
-
-                            Behavior on color {
-                                ColorAnimation { duration: 240; easing.type: Easing.OutCubic }
-                            }
-
-                            // Soft glow ring for active workspace pill
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                radius: 5
-                                color: "transparent"
-                                border.width: 0
-                                border.color: "transparent"
-                                opacity: indicatorItem.isFocused ? 0.35 : 0.0
-                                visible: opacity > 0.001
-                                Behavior on opacity {
-                                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
-                                }
-                            }
+                                ? (Theme.colors.on_primary ?? "#000000")
+                                : (dotMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : Qt.rgba(255, 255, 255, 0.55))
+                            font.family: "Noto Sans"
+                            font.pixelSize: 11
+                            font.weight: indicatorItem.isFocused ? Font.Bold : Font.DemiBold
+                            renderType: Text.NativeRendering
                         }
 
                         MouseArea {
                             id: dotMouse
                             anchors.fill: parent
-                            anchors.margins: -6
                             cursorShape: Qt.PointingHandCursor
                             hoverEnabled: true
                             onClicked: dash.switchToWorkspace(indicatorItem.wsId)
@@ -1436,16 +1419,16 @@ Item {
         Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
 
         // ── 1. LEFT GROUP: LAUNCHER & WORKSPACES ─────────────────
-        RowLayout {
+        Row {
             id: leftGroupRow
             spacing: 6
             Layout.alignment: Qt.AlignVCenter
 
-            // Revamped Expressive Launcher Icon (Rocket Launch with tilt anim)
+            // Distro Launcher Icon Button (NixOS Snowflake)
             Item {
                 width: 28
                 height: 28
-                Layout.alignment: Qt.AlignVCenter
+                anchors.verticalCenter: parent.verticalCenter
 
                 Rectangle {
                     id: launcherBg
@@ -1459,8 +1442,8 @@ Item {
 
                     MaterialSymbol {
                         anchors.centerIn: parent
-                        text: "rocket_launch"
-                        iconSize: 17
+                        text: "" // NixOS Nerd Font glyph \uf313
+                        iconSize: 18
                         color: launcherMouse.containsMouse ? Qt.lighter(Theme.accent, 1.25) : Theme.accent
                         rotation: launcherMouse.containsMouse ? -15 : 0
 
@@ -1482,84 +1465,65 @@ Item {
             Rectangle {
                 width: 1
                 height: 14
-                Layout.alignment: Qt.AlignVCenter
+                anchors.verticalCenter: parent.verticalCenter
                 color: Qt.rgba(255, 255, 255, 0.15)
             }
 
-            // Minimalist dot-to-pill indicator (Identical to Workspace Change OSD)
-            Item {
-                id: wsContainer
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: wsRow.implicitWidth
-                implicitHeight: 28
+            // Workspaces Pager (Numbers 1, 2, 3...)
+            Row {
+                id: wsRow
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 4
 
-                Row {
-                    id: wsRow
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
-                    z: 2
+                Repeater {
+                    model: dash.workspaceIds
 
-                    Repeater {
-                        model: dash.workspaceIds
+                    delegate: Rectangle {
+                        id: wsCell
+                        property int wsId: modelData
+                        property bool isFocused: wsCell.wsId === dash.activeWsId
 
-                        delegate: Item {
-                            id: wsIndicatorItem
-                            property int wsId: modelData
-                            property bool isFocused: wsIndicatorItem.wsId === dash.activeWsId
+                        width: 24
+                        height: 24
+                        implicitWidth: 24
+                        implicitHeight: 24
+                        radius: 7
+                        anchors.verticalCenter: parent.verticalCenter
 
-                            width: isFocused ? 26 : 8
-                            height: 8
-                            anchors.verticalCenter: parent.verticalCenter
+                        color: isFocused
+                            ? Theme.accent
+                            : (wsCellMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
+                        scale: isFocused ? 1.05 : (wsCellMouse.pressed ? 0.92 : (wsCellMouse.containsMouse ? 1.04 : 1.0))
 
-                            Behavior on width {
-                                NumberAnimation {
-                                    duration: 300
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
 
-                            Rectangle {
-                                id: wsPillShape
-                                anchors.fill: parent
-                                radius: 4
-                                color: wsIndicatorItem.isFocused
-                                    ? Theme.accent
-                                    : (wsDotMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : Qt.rgba(255, 255, 255, 0.28))
+                        Text {
+                            anchors.centerIn: parent
+                            text: String(wsCell.wsId)
+                            color: wsCell.isFocused
+                                ? (Theme.colors.on_primary ?? "#000000")
+                                : (wsCellMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : Qt.rgba(255, 255, 255, 0.55))
+                            font.family: "Noto Sans"
+                            font.pixelSize: 11
+                            font.weight: wsCell.isFocused ? Font.Bold : Font.DemiBold
+                            renderType: Text.NativeRendering
+                        }
 
-                                Behavior on color {
-                                    ColorAnimation { duration: 240; easing.type: Easing.OutCubic }
-                                }
-                            }
-
-                            MouseArea {
-                                id: wsDotMouse
-                                anchors.fill: parent
-                                anchors.margins: -6
-                                cursorShape: Qt.PointingHandCursor
-                                hoverEnabled: true
-                                onClicked: dash.switchToWorkspace(wsIndicatorItem.wsId)
-                                onWheel: (wheel) => {
-                                    wheel.accepted = true;
-                                    dash.handleWorkspaceScroll(wheel.angleDelta.y);
-                                }
+                        MouseArea {
+                            id: wsCellMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: dash.switchToWorkspace(wsCell.wsId)
+                            onWheel: (wheel) => {
+                                wheel.accepted = true;
+                                dash.handleWorkspaceScroll(wheel.angleDelta.y);
                             }
                         }
                     }
                 }
-
-                // Mouse wheel workspace scrolling
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    z: 1
-                    onWheel: (wheel) => {
-                        wheel.accepted = true;
-                        dash.handleWorkspaceScroll(wheel.angleDelta.y);
-                    }
-                }
             }
-
-
         }
 
         // ── 2. CENTER GROUP: DATE & TABULAR CLOCK (Original Design) ─

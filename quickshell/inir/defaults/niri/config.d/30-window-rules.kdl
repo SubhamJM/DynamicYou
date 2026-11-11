@@ -1,0 +1,102 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 30 — Window rules
+// ─────────────────────────────────────────────────────────────────────────────
+// Docs: https://niri-wm.github.io/niri/Configuration:-Window-Rules
+//
+// Rules are evaluated top-to-bottom. A window can match multiple rules and
+// all matching properties accumulate. Use `niri msg windows` to inspect
+// app-id and title of running windows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Global defaults ─────────────────────────────────────────────────────────
+// Round every window's corners and clip content to match.
+// Works best with prefer-no-csd (set in config.kdl).
+// Borders and the focus ring follow that shape instead of filling in behind
+// the window: a see-through app that draws its own title bar stays see-through.
+window-rule {
+    geometry-corner-radius 16
+    clip-to-geometry true
+    draw-border-with-background false
+}
+
+// iNiR Settings as a window (iRiS "iNiR Settings", Material and Waffle "Settings — iNiR"): two thirds of the screen,
+// room for the sidebar beside a page that keeps its answers in a column, instead of half a column. The shell and the
+// Settings window carry app id "inir-settings" (its desktop entry and icon), the welcome "inir"; org.quickshell is what
+// a shell older than that carries.
+window-rule {
+    match app-id=r#"^(inir|inir-settings|org\.quickshell)$"# title="^iNiR Settings$"
+    match app-id=r#"^(inir|inir-settings|org\.quickshell)$"# title="^Settings — iNiR$"
+    default-column-width { proportion 0.66667; }
+}
+
+// Gaming surfaces: avoid client clipping so fullscreen games remain eligible
+// for direct scanout. Keep the global rounded/clipped behavior for normal apps.
+window-rule {
+    match app-id=r#"^(gamescope|steam_app_[0-9]+|dota2|lutris|net\.lutris\..*|heroic|com\.heroicgameslauncher\.hgl|org\.prismlauncher\.PrismLauncher|minecraft|wine|wine64)$"#
+
+    geometry-corner-radius 0
+    clip-to-geometry false
+}
+
+// Dim unfocused windows slightly for visual hierarchy.
+window-rule {
+    match is-active=false
+    opacity 0.9
+}
+
+// ── Per-app fixes ───────────────────────────────────────────────────────────
+
+// WezTerm: work around initial configure bug (needs an empty default width).
+window-rule {
+    match app-id=r#"^org\.wezfurlong\.wezterm$"#
+    default-column-width {}
+}
+
+// Picture-in-picture opens floating: Firefox and Zen title it "Picture-in-Picture", Chromium browsers
+// "Picture in picture" and, before Brave 1.96, with no app-id at all, so the title alone decides.
+window-rule {
+    match title=r#"(?i)^picture.in.picture$"#
+    open-floating true
+}
+
+window-rule {
+    match app-id="steam" title=r#"^notificationtoasts_\d+_desktop$"#
+    open-floating true
+    open-focused false
+    default-floating-position x=10 y=10 relative-to="bottom-right"
+}
+
+// KDE's XEmbed→SNI bridge exposes a transient X11 window during tray watcher
+// restarts. Keep it floating, transparent and unfocused so it never flashes.
+window-rule {
+    match app-id=r#"^xembedsniproxy$"#
+    open-floating true
+    open-focused false
+    opacity 0.0
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// ── Privacy: block password managers from screen capture ────────────────────
+// Uncomment the block below to hide these apps during screencasts.
+// /-window-rule {
+//     match app-id=r#"^org\.keepassxc\.KeePassXC$"#
+//     match app-id=r#"^org\.gnome\.World\.Secrets$"#
+//     block-out-from "screen-capture"
+// }
+
+// ── Floating apps ───────────────────────────────────────────────────────────
+// Apps that work better as floating windows.
+// window-rule {
+//     match app-id="pavucontrol"
+//     open-floating true
+// }
+// window-rule {
+//     match app-id="nm-connection-editor"
+//     open-floating true
+// }
+// window-rule {
+//     match app-id=r#"^org\.gnome\.Calculator$"#
+//     open-floating true
+// }

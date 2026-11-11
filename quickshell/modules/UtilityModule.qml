@@ -35,6 +35,9 @@ Item {
     Component.onCompleted: {
         fetchAudioDevices.running = true;
         fetchVpnStatus.running = true;
+        checkNightLight.running = true;
+        checkCaffeineState.running = true;
+        checkHotspotStatus.running = true;
     }
     property bool nightLightActive: false
     property bool caffeineActive: false
@@ -48,14 +51,14 @@ Item {
     property bool isDraggingMic: false
     property bool isDraggingBrightness: false
 
-    readonly property color colBg: (Theme.colors && Theme.colors.bg) ? Theme.colors.bg : "#0b0a10"
-    readonly property color colCard: (Theme.colors && Theme.colors.card_bg) ? Theme.colors.card_bg : Qt.rgba(255, 255, 255, 0.055)
-    readonly property color colCardHover: (Theme.colors && Theme.colors.hover_bg) ? Theme.colors.hover_bg : Qt.rgba(255, 255, 255, 0.12)
-    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.18)
+    readonly property color colBg: (Theme.colors && Theme.colors.bg) ? Theme.colors.bg : "#1a120d"
+    readonly property color colCard: (Theme.colors && Theme.colors.card_bg) ? Theme.colors.card_bg : "#271e19"
+    readonly property color colCardHover: (Theme.colors && Theme.colors.hover_bg) ? Theme.colors.hover_bg : "#312823"
+    readonly property color colCardActive: Qt.alpha(Theme.accent, 0.24)
     readonly property color colAccent: Theme.accent
-    readonly property color colText: (Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#f5f5f7"
-    readonly property color colSubtext: (Theme.colors && Theme.colors.text_secondary) ? Theme.colors.text_secondary : Qt.rgba(255, 255, 255, 0.60)
-    readonly property color colMuted: (Theme.colors && Theme.colors.text_muted) ? Theme.colors.text_muted : Qt.rgba(255, 255, 255, 0.38)
+    readonly property color colText: (Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#f0dfd7"
+    readonly property color colSubtext: (Theme.colors && Theme.colors.text_secondary) ? Theme.colors.text_secondary : "#d7c2b8"
+    readonly property color colMuted: (Theme.colors && Theme.colors.text_muted) ? Theme.colors.text_muted : "#9f8d84"
     readonly property color colBorder: "transparent"
     readonly property color colBorderHover: "transparent"
 
@@ -181,15 +184,22 @@ Item {
         }
     }
 
+    Timer {
+        id: nightLightCheckTimer
+        interval: 200
+        repeat: false
+        onTriggered: checkNightLight.running = true
+    }
+
     function toggleNightLight() {
-        if (nightLightActive) {
-            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset wlsunset 2>/dev/null"]);
-            nightLightActive = false;
+        var targetState = !utilModule.nightLightActive;
+        utilModule.nightLightActive = targetState;
+        if (targetState) {
+            Quickshell.execDetached(["sh", "-c", "pkill -9 -x hyprsunset 2>/dev/null; pkill -9 -x wlsunset 2>/dev/null; (hyprsunset -t 4500 2>/dev/null || wlsunset -t 4500 2>/dev/null) & notify-send -a 'Night Light' -i night-light 'Night Light On' 'Warm color temperature applied (4500K)'"]);
         } else {
-            Quickshell.execDetached(["sh", "-c", "killall -9 hyprsunset wlsunset 2>/dev/null; if command -v hyprsunset >/dev/null 2>&1; then hyprsunset -t 4500; else wlsunset -t 4500; fi"]);
-            nightLightActive = true;
+            Quickshell.execDetached(["sh", "-c", "pkill -9 -x hyprsunset 2>/dev/null; pkill -9 -x wlsunset 2>/dev/null; notify-send -a 'Night Light' -i night-light 'Night Light Off' 'Color temperature reset to normal'"]);
         }
-        checkNightLight.running = true;
+        nightLightCheckTimer.restart();
     }
 
     // 4. Caffeine / Keep Me Awake (hypridle inhibitor)
@@ -202,7 +212,7 @@ Item {
     Process {
         id: checkCaffeineState
         running: false
-        command: ["sh", "-c", "if [ -f /tmp/quickshell_keep_awake ]; then if pidof hypridle >/dev/null 2>&1; then rm -f /tmp/quickshell_keep_awake; echo 'inactive'; else echo 'active'; fi; else echo 'inactive'; fi"]
+        command: ["sh", "-c", "([ -f /tmp/quickshell_keep_awake ] || ! pgrep -x hypridle >/dev/null) && echo 'active' || echo 'inactive'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 utilModule.caffeineActive = (this.text.trim() === "active");
@@ -210,23 +220,39 @@ Item {
         }
     }
 
+    Timer {
+        id: caffeineCheckTimer
+        interval: 250
+        repeat: false
+        onTriggered: checkCaffeineState.running = true
+    }
+
     function toggleCaffeine() {
-        if (caffeineActive) {
-            caffeineInhibitor.running = false;
-            caffeineActive = false;
-            Quickshell.execDetached(["sh", "-c", "rm -f /tmp/quickshell_keep_awake; pidof hypridle >/dev/null 2>&1 || hyprctl dispatch exec hypridle || hypridle &"]);
-        } else {
-            caffeineActive = true;
-            Quickshell.execDetached(["sh", "-c", "touch /tmp/quickshell_keep_awake; killall -9 hypridle 2>/dev/null; hyprctl dispatch dpms on 2>/dev/null"]);
+        var targetState = !utilModule.caffeineActive;
+        utilModule.caffeineActive = targetState;
+        if (targetState) {
             caffeineInhibitor.running = true;
+            Quickshell.execDetached(["sh", "-c", "touch /tmp/quickshell_keep_awake; pkill -9 -x hypridle 2>/dev/null; notify-send -a 'Caffeine' -i coffee 'Caffeine Active' 'Sleep and idle lock disabled'"]);
+        } else {
+            caffeineInhibitor.running = false;
+            Quickshell.execDetached(["sh", "-c", "rm -f /tmp/quickshell_keep_awake; pgrep -x hypridle >/dev/null || (hypridle &); notify-send -a 'Caffeine' -i coffee 'Caffeine Inactive' 'Screen sleep re-enabled'"]);
         }
-        checkCaffeineState.running = true;
+        caffeineCheckTimer.restart();
+    }
+
+    // 5. Do Not Disturb (DND)
+    function toggleDnd() {
+        if (typeof root !== "undefined") {
+            root.dndEnabled = !root.dndEnabled;
+            var isDnd = root.dndEnabled;
+            Quickshell.execDetached(["notify-send", "-a", "Do Not Disturb", "-i", isDnd ? "notifications-disabled" : "notifications", isDnd ? "Do Not Disturb On" : "Do Not Disturb Off", isDnd ? "Notifications and alerts are silenced" : "Notifications resumed"]);
+        }
     }
 
     // 6. Color Picker (hyprpicker)
     function triggerColorPicker() {
         root.collapseToIdle();
-        Quickshell.execDetached(["sh", "-c", "sleep 0.15; hyprpicker -a && notify-send 'Color Picker' \"Copied $(wl-paste) to clipboard\""]);
+        Quickshell.execDetached(["sh", "-c", "sleep 0.18; hyprpicker -a -n"]);
     }
 
     // 7. Area Screenshot Hub (grim + slurp -> Dynamic Island annotation hub)
@@ -553,11 +579,11 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 44
-        radius: 14
+        implicitHeight: 48
+        radius: 16
 
-        // Clean neutral dark frosted glass (never whole-card colored)
-        color: plateMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.055)
+        // Material 3 Surface Container plate
+        color: plateMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
         border.width: 0
 
         scale: plateMouse.pressed ? 0.985 : (plateMouse.containsMouse ? 1.01 : 1.0)
@@ -575,20 +601,20 @@ Item {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 6
-            anchors.rightMargin: 6
-            spacing: 5.25
+            anchors.leftMargin: 8
+            anchors.rightMargin: 12
+            spacing: 8
 
             // Left: Circular Icon Disc (toggles state specifically)
             Rectangle {
                 id: iplateDisc
                 z: 10
-                width: 33
-                height: 33
-                radius: 16.5
+                width: 34
+                height: 34
+                radius: 17
                 color: iplate.lit
                     ? iplate.tint
-                    : (discMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.16) : Qt.rgba(255, 255, 255, 0.085))
+                    : (discMouse.containsMouse ? utilModule.colCardHover : Qt.rgba(255, 255, 255, 0.08))
                 scale: discMouse.pressed ? 0.88 : (discMouse.containsMouse ? 1.05 : 1.0)
                 Behavior on scale { NumberAnimation { duration: 80 } }
                 Behavior on color { ColorAnimation { duration: 110 } }
@@ -597,8 +623,8 @@ Item {
                     anchors.centerIn: parent
                     text: iplate.glyph
                     fill: iplate.lit ? 1 : 0
-                    iconSize: 18.5
-                    color: iplate.lit ? "#101318" : "#f5f5f7"
+                    iconSize: 18
+                    color: iplate.lit ? utilModule.colBg : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
 
@@ -625,9 +651,9 @@ Item {
                     Layout.fillWidth: true
                     text: iplate.title
                     font.family: "Noto Sans"
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
-                    color: "#ffffff"
+                    color: utilModule.colText
                     fontSizeMode: Text.HorizontalFit
                     minimumPixelSize: 10
                     elide: Text.ElideRight
@@ -641,7 +667,7 @@ Item {
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     font.weight: Font.Normal
-                    color: Qt.rgba(255, 255, 255, 0.70)
+                    color: utilModule.colSubtext
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -651,8 +677,8 @@ Item {
             MaterialSymbol {
                 visible: iplate.showChevron
                 text: "chevron_right"
-                iconSize: 14
-                color: Qt.rgba(255, 255, 255, 0.40)
+                iconSize: 15
+                color: utilModule.colMuted
                 opacity: 0.8
             }
         }
@@ -668,15 +694,16 @@ Item {
         signal clicked()
 
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
         Layout.fillHeight: true
-        Layout.preferredHeight: 44
-        implicitHeight: 44
-        radius: 14
+        Layout.preferredHeight: 48
+        implicitHeight: 48
+        radius: 16
 
-        // Solid accent when active, clean glass container when off
+        // Material 3 tonal surface
         color: gtile.lit
             ? gtile.tint
-            : (tileMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.065))
+            : (tileMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
         border.width: 0
 
         scale: tileMouse.pressed ? 0.93 : (tileMouse.containsMouse ? 1.02 : 1.0)
@@ -687,8 +714,8 @@ Item {
             anchors.centerIn: parent
             text: gtile.glyph
             fill: gtile.lit ? 1 : 0
-            iconSize: 18.5
-            color: gtile.lit ? (Theme.colors.bg ?? "#000000") : (tileMouse.containsMouse ? "#ffffff" : "#f5f5f7")
+            iconSize: 19
+            color: gtile.lit ? utilModule.colBg : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
             Behavior on color { ColorAnimation { duration: 100 } }
         }
 
@@ -697,7 +724,11 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
-            onClicked: gtile.clicked()
+            preventStealing: true
+            onClicked: (mouse) => {
+                mouse.accepted = true;
+                gtile.clicked();
+            }
         }
     }
 
@@ -722,7 +753,7 @@ Item {
             id: track
             anchors.fill: parent
             radius: 18
-            color: Qt.rgba(255, 255, 255, 0.08)
+            color: utilModule.colCard
             border.width: 0
             clip: true
 
@@ -735,10 +766,10 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                visible: vslider.currentRatio > 0.02
-                height: vslider.muted ? 0 : Math.max(0, Math.min(parent.height, parent.height * vslider.currentRatio))
+                visible: !vslider.muted && vslider.currentRatio > 0.01
+                height: vslider.muted ? 0 : (vslider.currentRatio > 0.01 ? Math.max(38, Math.min(parent.height, parent.height * vslider.currentRatio)) : 0)
                 radius: 18
-                color: vslider.muted ? Qt.rgba(255, 255, 255, 0.20) : vslider.activeColor
+                color: vslider.muted ? utilModule.colMuted : vslider.activeColor
 
                 Behavior on height {
                     enabled: vslider.dragVal < 0
@@ -750,17 +781,17 @@ Item {
             // Top Numeric Percentage Readout
             Text {
                 anchors.top: parent.top
-                anchors.topMargin: 8
+                anchors.topMargin: 10
                 anchors.horizontalCenter: parent.horizontalCenter
                 z: 5
                 text: vslider.percentText
                 font.family: "Noto Sans"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 font.weight: Font.Bold
                 font.features: ({ "tnum": 1 })
                 color: vslider.muted
-                    ? "#ff6961"
-                    : (vslider.currentRatio >= 0.85 ? (Theme.colors.bg ?? "#000000") : "#ffffff")
+                    ? (Theme.colors.error || "#ffb4ab")
+                    : (vslider.currentRatio >= 0.82 ? utilModule.colBg : utilModule.colText)
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
 
@@ -770,12 +801,12 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 6
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 30
-                height: 30
-                radius: 15
+                width: 32
+                height: 32
+                radius: 16
                 z: 6
                 color: viconMouse.containsMouse
-                    ? (vslider.currentRatio >= 0.25 ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(255, 255, 255, 0.18))
+                    ? (vslider.currentRatio >= 0.25 ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(255, 255, 255, 0.12))
                     : "transparent"
                 scale: viconMouse.pressed ? 0.88 : (viconMouse.containsMouse ? 1.06 : 1.0)
                 Behavior on scale { NumberAnimation { duration: 75 } }
@@ -785,10 +816,10 @@ Item {
                     anchors.centerIn: parent
                     text: vslider.icon
                     fill: 1
-                    iconSize: 17
+                    iconSize: 18
                     color: vslider.muted
-                        ? "#ff453a"
-                        : (vslider.currentRatio >= 0.22 ? (Theme.colors.bg ?? "#000000") : "#ffffff")
+                        ? (Theme.colors.error || "#ffb4ab")
+                        : (vslider.currentRatio >= 0.01 ? utilModule.colBg : utilModule.colText)
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
@@ -1220,9 +1251,9 @@ Item {
         property color hoverBg: utilModule.colCardHover
         signal clicked()
 
-        width: 26
-        height: 26
-        radius: 13
+        width: 28
+        height: 28
+        radius: 14
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
         border.width: 0
 
@@ -1233,7 +1264,7 @@ Item {
         MaterialSymbol {
             anchors.centerIn: parent
             text: hbtn.glyph
-            iconSize: 14.5
+            iconSize: 15
             color: hmouse.containsMouse ? "#f5f5f7" : hbtn.iconColor
         }
 
@@ -1251,18 +1282,21 @@ Item {
     // ========================================================
     ColumnLayout {
         anchors.fill: parent
-        anchors.topMargin: 4
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.topMargin: 14
+        anchors.bottomMargin: 14
         spacing: 10
 
         // ── TOP HEADER BAR ─────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            spacing: 10
+            Layout.preferredHeight: 32
+            spacing: 8
 
             // Tactile Back / Exit Button
             Rectangle {
-                width: 29; height: 29; radius: 14.5
+                width: 30; height: 30; radius: 15
                 color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
                 border.width: 0
                 scale: headerBackMouse.pressed ? 0.90 : 1.0
@@ -1271,7 +1305,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: utilModule.activeSection !== "" ? "arrow_back" : "tune"
-                    iconSize: 15.5
+                    iconSize: 16
                     color: utilModule.activeSection !== "" ? utilModule.colAccent : utilModule.colText
                 }
 
@@ -1292,15 +1326,16 @@ Item {
 
             // Title & Date Subtitle
             ColumnLayout {
-                spacing: 0
+                spacing: 1
                 Layout.preferredWidth: 150
+                Layout.alignment: Qt.AlignVCenter
 
                 Text {
                     text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : (utilModule.activeSection === "pomo" ? "Focus & Pomodoro" : "Control Center"))
                     font.family: "Noto Sans"
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
-                    color: "#f5f5f7"
+                    color: utilModule.colText
                 }
 
                 Text {
@@ -1317,7 +1352,7 @@ Item {
             // Quick Shortcut Badges & System Actions (Notes, Clipboard, Theme, Tasks, Lock, Power)
             RowLayout {
                 spacing: 6
-                Layout.alignment: Qt.AlignRight
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 visible: utilModule.activeSection === ""
 
                 // 1. Notes
@@ -1365,7 +1400,7 @@ Item {
             // Quick Disconnect Button in Header when in VPN subview
             Rectangle {
                 visible: utilModule.activeSection === "vpn" && (utilModule.vpnActive || utilModule.vpnConnecting)
-                Layout.alignment: Qt.AlignRight
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 width: headerDisconnectText.implicitWidth + 16
                 height: 24
                 radius: 12
@@ -1397,7 +1432,6 @@ Item {
             id: mainViewContainer
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignTop
-            Layout.topMargin: 2
             spacing: 10
             visible: utilModule.activeSection === ""
 
@@ -1405,20 +1439,20 @@ Item {
             RowLayout {
                 id: upperSection
                 Layout.fillWidth: true
-                Layout.preferredHeight: 206
+                Layout.preferredHeight: 222
                 Layout.fillHeight: false
-                spacing: 10
+                spacing: 12
 
                 // LEFT STACK: Ethernet, Bluetooth, Hotspot & Caffeine, Night Light & DND
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 195
+                    Layout.preferredWidth: 198
                     Layout.fillHeight: true
                     spacing: 10
 
                     // 1. Ethernet / Wi-Fi Plate
                     IrisActionPlate {
-                        implicitHeight: 44
+                        implicitHeight: 48
                         glyph: (utilModule.activeNetType === "eth") ? "lan" : (utilModule.wifiEnabled ? "wifi" : "wifi_off")
                         title: (utilModule.activeNetType === "eth") ? "Ethernet" : "Wi-Fi"
                         subtitle: {
@@ -1437,7 +1471,7 @@ Item {
 
                     // 2. Bluetooth Plate
                     IrisActionPlate {
-                        implicitHeight: 44
+                        implicitHeight: 48
                         glyph: utilModule.btEnabled ? "bluetooth" : "bluetooth_disabled"
                         title: "Bluetooth"
                         subtitle: {
@@ -1456,7 +1490,7 @@ Item {
                     // 3. Upper Action Buttons (Hotspot, Caffeine)
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 44
+                        Layout.preferredHeight: 48
                         spacing: 10
 
                         // Hotspot
@@ -1481,7 +1515,7 @@ Item {
                     // 4. Lower Action Buttons (Night Light, DND) - Aligned with Color & Timer
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 44
+                        Layout.preferredHeight: 48
                         spacing: 10
 
                         // Night Light
@@ -1495,11 +1529,11 @@ Item {
 
                         // DND
                         IrisGridTile {
-                            glyph: root.dndEnabled ? "do_not_disturb_on" : "do_not_disturb_off"
+                            glyph: (typeof root !== "undefined" && root.dndEnabled) ? "do_not_disturb_on" : "do_not_disturb_off"
                             label: "DND"
-                            lit: root.dndEnabled
+                            lit: typeof root !== "undefined" && root.dndEnabled
                             tint: "#a855f7"
-                            onClicked: root.dndEnabled = !root.dndEnabled
+                            onClicked: utilModule.toggleDnd()
                         }
                     }
                 }
@@ -1507,15 +1541,15 @@ Item {
                 // RIGHT STACK: 3 Sliders (Volume, Brightness, Mic) + [Color & Pomodoro] (Square tiles)
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 195
+                    Layout.preferredWidth: 198
                     Layout.fillHeight: true
                     spacing: 10
 
-                    // 3 Vertical Capsule Sliders side-by-side with 9.5px spacing (Volume, Brightness, Mic)
+                    // 3 Vertical Capsule Sliders side-by-side with 8px spacing (Volume, Brightness, Mic)
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 152
-                        spacing: 9.5
+                        Layout.preferredHeight: 164
+                        spacing: 8
 
                         // 1. Volume Capsule Slider
                         IrisVerticalCapsuleSlider {
@@ -1560,7 +1594,7 @@ Item {
                     // Directly Under Sliders: Color Picker & Pomodoro (Square tiles matching the grid)
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 44
+                        Layout.preferredHeight: 48
                         spacing: 10
 
                         IrisGridTile {
@@ -1588,14 +1622,14 @@ Item {
             RowLayout {
                 id: lowerSection
                 Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                spacing: 10
+                Layout.preferredHeight: 48
+                spacing: 12
 
                 // Audio Output (wide plate)
                 IrisActionPlate {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 195
-                    implicitHeight: 44
+                    Layout.preferredWidth: 198
+                    implicitHeight: 48
                     glyph: utilModule.audioMuted ? "volume_off" : (utilModule.defaultSink ? utilModule.getSinkIcon(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "speaker")
                     title: "Audio Output"
                     subtitle: utilModule.defaultSink ? utilModule.cleanDeviceName(utilModule.defaultSink.name, utilModule.defaultSink.desc) : "Default Device"
@@ -1611,8 +1645,8 @@ Item {
                 // Screen Record (wide plate)
                 IrisActionPlate {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 195
-                    implicitHeight: 44
+                    Layout.preferredWidth: 198
+                    implicitHeight: 48
                     glyph: root.isScreenRecording ? "stop_circle" : "radio_button_checked"
                     title: "Screen Record"
                     subtitle: root.isScreenRecording ? "Recording" : "Ready"

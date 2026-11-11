@@ -273,20 +273,12 @@ Singleton {
     }
 
     function pushBorderColor(): void {
-        let colorStr = root.activeBorderColor.toString();
-        let rgb = "";
-        if (colorStr.startsWith("#")) {
-            let hex = colorStr.substring(1);
-            rgb = hex.length === 8 ? hex.substring(2) : hex;
-        }
-        if (rgb === "")
-            return;
-        let hyprColor = "rgba(" + rgb + "AA)";
-        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
+        let hyprColor = "rgba(00000000)";
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "', ['col.inactive_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', ['col.border_inactive'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "', ['col.inactive'] = '" + hyprColor + "' } } })"]);
     }
 
     function pushBorderSize(): void {
-        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
+        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = 0 } })"]);
     }
 
     Timer {
@@ -297,6 +289,7 @@ Singleton {
             if (!Config.ready)
                 return;
             root.pushBorderColor();
+            root.pushBorderSize();
         }
     }
 
@@ -306,16 +299,16 @@ Singleton {
         }
     }
 
-    property bool borderless: Config.options.appearance.borderless ?? false
+    property bool borderless: true
     onBorderlessChanged: {
         if (Config.ready) {
             root.pushBorderSize();
         }
     }
 
-    property int borderWidth: Config.options.appearance.borderWidth ?? 2
+    property int borderWidth: 0
     onBorderWidthChanged: {
-        if (Config.ready && !borderless) {
+        if (Config.ready) {
             root.pushBorderSize();
         }
     }

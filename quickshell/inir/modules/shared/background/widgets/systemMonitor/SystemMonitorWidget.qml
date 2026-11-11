@@ -1,0 +1,1039 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.functions
+import qs.modules.common.widgets
+import qs.modules.common.widgets.widgetCanvas
+import qs.modules.shared.background.widgets
+import qs.modules.shared.background.widgets.instrument
+AbstractBackgroundWidget {
+    id: root
+
+    configEntryName: "systemMonitor"
+
+    // a sized card takes the column count that gives each meter the most room: three across a large card left
+    // a band of small meters in the middle of it
+    readonly property int meterColumns: {
+        const count = Math.max(1, root._resourceModel.length)
+        const gap = 10 * root.scaleFactor, inner = 28 * root.scaleFactor
+        const label = root.displayMode === "rings" && root.showLabels ? 20 * root.scaleFactor : 0
+        let best = 1, bestSide = 0
+        for (let columns = 1; columns <= count; ++columns) {
+            const rows = Math.ceil(count / columns)
+            const side = Math.min((root.footprintHeight - inner - gap * (rows - 1)) / rows - label, (root.footprintWidth - inner - gap * (columns - 1)) / columns)
+            if (side > bestSide + 0.5) { best = columns; bestSide = side }
+        }
+        return best
+    }
+    // too small for a meter each (small with three or more): a ledger, a row per reading
+    readonly property bool meterLedger: root.isSmall && root._resourceModel.length > 2
+    readonly property int meterRows: Math.ceil(root._resourceModel.length / root.meterColumns)
+    visibleWhenLocked: false
+    needsColText: true
+    designFaceKey: "widgetVitals"
+    familyOptions: [
+        { key: "showCpu", raw: true, label: Translation.tr("CPU"), icon: "memory", fallback: true },
+        { key: "showMemory", raw: true, label: Translation.tr("Memory"), icon: "storage", fallback: true },
+        { key: "showGpu", raw: true, label: Translation.tr("GPU"), icon: "developer_board", fallback: true },
+        { key: "showTemp", raw: true, label: Translation.tr("CPU heat"), icon: "thermostat", fallback: false },
+        { key: "showGpuTemp", raw: true, label: Translation.tr("GPU heat"), icon: "device_thermostat", fallback: false },
+        { key: "showDisk", raw: true, label: Translation.tr("Disk"), icon: "hard_drive", fallback: false }
+    ]
+    resizeMinWidth: root.displayMode === "tiles" ? 100
+        : root.displayMode === "instrument" ? 150 : 120
+    resizeMinHeight: root.displayMode === "tiles" ? 100
+        : root.displayMode === "instrument" ? 150 : 60
+
+    // ── Config properties ──
+    // The loader already represents the effective per-output enabled state.
+    // Rechecking the global base here breaks output-local overrides and can
+    // leave a visible monitor without ResourceUsage keep-alive.
+    readonly property bool _active: root.visible
+    readonly property string displayMode: root._readConfigKey("displayMode") ?? "bars"
+    readonly property bool showCpu: root._readConfigKey("showCpu") ?? true
+    readonly property bool showMemory: root._readConfigKey("showMemory") ?? true
+    readonly property bool showGpu: root._readConfigKey("showGpu") ?? true
+    readonly property bool showTemp: root._readConfigKey("showTemp") ?? false
+    readonly property bool showGpuTemp: root._readConfigKey("showGpuTemp") ?? false
+    readonly property bool showDisk: root._readConfigKey("showDisk") ?? false
+    readonly property bool showLabels: root._readConfigKey("showLabels") ?? true
+    readonly property real trackAlpha: root._readConfigKey("trackAlpha") ?? 0.08
+    readonly property real fillOpacity: root._readConfigKey("fillOpacity") ?? 0.7
+    readonly property real graphFillOpacity: root._readConfigKey("graphFillOpacity") ?? 0.3
+
+    // ── Static resource model (metadata only — no live values) ──
+    readonly property var _resourceModel: {
+        const items = [];
+        if (root.showCpu) items.push({ icon: "memory", label: Translation.tr("CPU"), key: "cpu" });
+        if (root.showMemory) items.push({ icon: "storage", label: Translation.tr("RAM"), key: "mem" });
+        if (root.showGpu) items.push({ icon: "developer_board", label: Translation.tr("GPU"), key: "gpu" });
+        if (root.showTemp) items.push({ icon: "thermostat", label: Translation.tr("CPU"), key: "temp" });
+        if (root.showGpuTemp) items.push({ icon: "device_thermostat", label: Translation.tr("GPU"), key: "gpuTemp" });
+        if (root.showDisk) items.push({ icon: "hard_drive", label: Translation.tr("Disk"), key: "disk" });
+        return items;
+    }
+
+    // What the widget shows: the live readings while the desktop is seen, the last ones behind windows.
+    // Another consumer (ii's bar) can keep ResourceUsage polling; a covered widget must not redraw for it.
+    function _readingNow(): var {
+        return {
+            cpu: ResourceUsage.cpuUsage, mem: ResourceUsage.memoryUsedPercentage, gpu: ResourceUsage.gpuUsage,
+            cpuTemp: ResourceUsage.cpuTemp, gpuTemp: ResourceUsage.gpuTemp, gpuTempPercentage: ResourceUsage.gpuTempPercentage,
+            disk: ResourceUsage.diskUsedPercentage, cpuHistory: ResourceUsage.cpuUsageHistory,
+            memHistory: ResourceUsage.memoryUsageHistory, gpuHistory: ResourceUsage.gpuUsageHistory,
+            gpuTempHistory: ResourceUsage.gpuTempHistory
+        };
+    }
+    property var reading: ({})
+    Binding on reading {
+        // behind windows it follows only the one reading it asked for at birth, until the service lets go
+        when: root.motionActive || (root._primedHere && ResourceUsage._runningRequested)
+        value: root._readingNow()
+        restoreMode: Binding.RestoreNone
+    }
+
+    // Live value accessor — delegates use this to read current value
+    function _getValue(key: string): real {
+        switch (key) {
+            case "cpu": return root.reading.cpu ?? 0;
+            case "mem": return root.reading.mem ?? 0;
+            case "gpu": return root.reading.gpu ?? 0;
+            case "temp": return Math.min((root.reading.cpuTemp ?? 0) / 100, 1.0);
+            case "gpuTemp": return root.reading.gpuTempPercentage ?? 0;
+            case "disk": return root.reading.disk ?? 0;
+            default: return 0;
+        }
+    }
+
+    function _getColor(key: string): color {
+        switch (key) {
+            case "cpu": return root.cpuColor;
+            case "mem": return root.memColor;
+            case "gpu": return root.gpuColor;
+            case "temp": return root.tempColor;
+            case "gpuTemp": return root.gpuTempColor;
+            case "disk": return root.diskColor;
+            default: return root.cpuColor;
+        }
+    }
+
+    function _getDisplayText(key: string): string {
+        if (key === "temp") return (root.reading.cpuTemp ?? 0) + "°C";
+        if (key === "gpuTemp") return (root.reading.gpuTemp ?? 0) + "°C";
+        return Math.round(root._getValue(key) * 100) + "%";
+    }
+
+    function _tileShape(key: string): int {
+        // iRiS keeps glyph badges plain round; expressive shapes are Material's.
+        if (root.familyDesign) return MaterialShape.Shape.Circle
+        switch (key) {
+            case "cpu": return MaterialShape.Shape.Gem;
+            case "mem": return MaterialShape.Shape.Cookie4Sided;
+            case "gpu": return MaterialShape.Shape.Cookie12Sided;
+            case "temp": return MaterialShape.Shape.Sunny;
+            case "gpuTemp": return MaterialShape.Shape.Cookie9Sided;
+            case "disk": return MaterialShape.Shape.Clover4Leaf;
+            default: return MaterialShape.Shape.Cookie12Sided;
+        }
+    }
+
+    // Tiles are the reference composition: each resource is a semantic role pair
+    // (container + badge). The same selected slots feed every other monitor mode.
+    function _tileRole(key: string): var {
+        const role = key === "mem" ? root.widgetSecondaryRole
+            : key === "gpu" ? root.widgetTertiaryRole
+            // Heat is only a signal when it is one: a cool reading in the alarm colour reads as a fault.
+            : key === "temp" || key === "gpuTemp" ? (root._metricSeverity(key) >= 2 ? root.widgetSignalRole
+                : root._metricSeverity(key) === 1 ? "warning" : root.widgetSurfaceRole)
+            : key === "disk" ? root.widgetSurfaceRole
+            : root.widgetPrimaryRole;
+        const set = root.widgetSemanticSet(role);
+        if (key === "disk") {
+            const accent = root.widgetSemanticSet(root.widgetTertiaryRole);
+            return { bg: set.container, ink: set.onContainer,
+                badge: accent.color, onBadge: accent.onColor };
+        }
+        return { bg: set.container, ink: set.onContainer,
+            badge: set.color, onBadge: set.onColor };
+    }
+
+    readonly property real _tileUnit: Math.round(96 * root.scaleFactor)
+    readonly property real _tileGap: Math.round(10 * root.scaleFactor)
+
+    // Width determines both column and row counts.
+    readonly property int _tileColumns: {
+        const count = Math.max(1, root._resourceModel.length);
+        const fit = Math.floor((root.width + root._tileGap) / (root._tileUnit + root._tileGap));
+        return Math.max(1, Math.min(count, fit));
+    }
+    readonly property int _tileRows: Math.ceil(
+        Math.max(1, root._resourceModel.length) / Math.max(1, root._tileColumns))
+
+    // ── Style tokens ──
+    readonly property real cardRadius: root.widgetCardRadius
+    readonly property int _innerMargin: Math.round(14 * root.scaleFactor)
+
+    // Rings/bars/text reuse the same categorical palette as Tiles. The wallpaper
+    // already generated these semantic roles, so position analysis must not invent
+    // a second hue. Threshold state only overrides that base role when a metric is
+    // actually caution/warning.
+    function _metricBaseColor(key: string): color {
+        return root._tileRole(key).badge;
+    }
+    readonly property color _metricNormal: root._metricBaseColor("cpu")
+    readonly property color _metricCaution: root.widgetSemanticColor("warning")
+    readonly property color _metricWarning: root.widgetSignal
+
+    // Telemetry text is neutral information, not another accent. Select between
+    // the generated on-surface and inverse-on-surface roles according to the real
+    // backdrop polarity; do not saturate or re-hue either token. This keeps the
+    // labels consistent with the shell's text hierarchy while the metric arc owns
+    // the accent color.
+    readonly property color _metricLightInk: root._inkLight
+    readonly property color _metricDarkInk: root._inkDark
+    readonly property color _metricText: root.forceLightInk ? root._metricLightInk
+        : root.forceDarkInk ? root._metricDarkInk
+        : root.widgetHasSurface
+            ? (root.widgetPlateIsDark ? root._metricLightInk : root._metricDarkInk)
+            : (root.regionIsBright ? root._metricDarkInk : root._metricLightInk)
+    readonly property color _metricSubtext: ColorUtils.applyAlpha(root._metricText, 0.66)
+
+    // The track is the background of the metric, not an outline. Keep it in the
+    // exact same semantic color family as the active arc and let the existing
+    // Track opacity setting control only its alpha. This restores the original
+    // System Monitor composition without reintroducing gray/black helper rings.
+    function _metricTrackColor(key: string): color {
+        return ColorUtils.applyAlpha(root._metricColor(key), root.trackAlpha);
+    }
+
+    // Graph mode needs categorical identity but no severity override: use the
+    // exact same generated role that the corresponding Tile badge uses.
+    function _graphColor(key: string): color {
+        return root._metricBaseColor(key);
+    }
+
+    function _metricSeverity(key: string): int {
+        const value = root._getValue(key) * 100;
+        switch (key) {
+        case "temp":
+        case "gpuTemp": {
+            const caution = Config.options?.resources?.tempCautionThreshold ?? 65;
+            const warning = Config.options?.resources?.tempWarningThreshold ?? 80;
+            return value >= warning ? 2 : value >= caution ? 1 : 0;
+        }
+        case "cpu":
+            return value >= (Config.options?.resources?.cpuWarningThreshold ?? 90) ? 2 : 0;
+        case "mem":
+            return value >= (Config.options?.resources?.memoryWarningThreshold ?? 90) ? 2 : 0;
+        case "gpu":
+            return value >= (Config.options?.resources?.gpuWarningThreshold ?? 90) ? 2 : 0;
+        case "disk":
+            return value >= 90 ? 2 : 0;
+        default:
+            return 0;
+        }
+    }
+
+    function _metricColor(key: string): color {
+        const severity = root._metricSeverity(key);
+        return severity >= 2 ? root._metricWarning
+            : severity === 1 ? root._metricCaution
+            : root._metricBaseColor(key);
+    }
+
+    readonly property color cpuColor: root._metricColor("cpu")
+    readonly property color memColor: root._metricColor("mem")
+    readonly property color gpuColor: root._metricColor("gpu")
+    readonly property color tempColor: root._metricColor("temp")
+    readonly property color gpuTempColor: root._metricColor("gpuTemp")
+    readonly property color diskColor: root._metricColor("disk")
+
+    // Animation duration for smooth value transitions
+    readonly property int _animDuration: Appearance.animation.elementMove.duration
+    // Values tick every second: easing them behind windows repaints the desktop for nothing. Every mode's body
+    // exists at once (they crossfade) and iRiS draws its own face over all of them: each body eases only while
+    // it is the one shown, or a hidden one repaints the whole desktop window on every reading.
+    readonly property bool animatesValues: Appearance.animationsEnabled && root.motionActive
+
+    // Readings behind windows are never seen and each one redraws the desktop: polling follows motionActive.
+    property bool _holdingResourceUsage: false
+    function _syncResourceUsage(): void {
+        const shouldHold = root._active && root.visible && root.motionActive;
+        if (shouldHold && !root._holdingResourceUsage) {
+            root._holdingResourceUsage = true;
+            ResourceUsage.keepAlive(root);
+        } else if (!shouldHold && root._holdingResourceUsage) {
+            root._holdingResourceUsage = false;
+            ResourceUsage.releaseKeepAlive(root);
+        }
+        // Shown but resting behind a window from the start, it still reads the machine once (the service lets go after
+        // its auto-stop delay): a strip shows past the window's edge, and never-read values said 0 °C and 0 % (10-30).
+        if (root._active && !root._readOnce) {
+            root._readOnce = true;
+            if (!shouldHold) {
+                root._primedHere = true;
+                ResourceUsage.ensureRunning();
+            }
+        }
+    }
+    property bool _readOnce: false
+    property bool _primedHere: false
+    on_ActiveChanged: root._syncResourceUsage()
+    onVisibleChanged: root._syncResourceUsage()
+    onMotionActiveChanged: root._syncResourceUsage()
+    Component.onCompleted: { root.reading = root._readingNow(); root._syncResourceUsage(); }
+    Component.onDestruction: if (root._holdingResourceUsage) {
+        root._holdingResourceUsage = false;
+        ResourceUsage.releaseKeepAlive(root);
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            WidgetSurface {
+                widget: root
+                anchors.fill: parent
+                surfaceRadius: root.cornerRadiusOverride >= 0 ? root.cornerRadiusOverride : root.cardRadius
+                shown: !root.familyFaced
+                    && (root.backgroundOpacity > 0 || root.borderWidth > 0 || root.effectiveBlur)
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // INSTRUMENT MODE — a bank of comparable vertical measurement rails.
+    // Values, units and resource identity stay readable without watch faces.
+    // ══════════════════════════════════════════════════════════
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: root._innerMargin
+                visible: !root.familyFaced && root.displayMode === "instrument" && root.meterLedger
+                spacing: Math.round((ledger.tight ? 4 : 6) * root.scaleFactor)
+                // past four meters a row is one line (name, scale, figure) or the last ones fall off the box
+                QtObject {
+                    id: ledger
+                    readonly property bool tight: root._resourceModel.length > 4
+                    readonly property var names: root._resourceModel.map(item => item.key === "temp" ? Translation.tr("CPU temp")
+                        : item.key === "gpuTemp" ? Translation.tr("GPU temp") : item.label)
+                }
+                InstrumentLabel {
+                    id: ledgerName
+                    visible: false
+                    scaleFactor: root.scaleFactor
+                    text: ledger.names.reduce((longest, name) => name.length > longest.length ? name : longest, "")
+                }
+                TextMetrics {
+                    id: ledgerFigure
+                    font.family: root.widgetNumbersFamily
+                    font.pixelSize: Math.round(15 * root.scaleFactor)
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                    text: "100°C"
+                }
+                Repeater {
+                    model: root.meterLedger ? root._resourceModel : []
+                    ColumnLayout {
+                        id: ledgerRow
+                        required property var modelData
+                        required property int index
+                        readonly property color liveColor: root.widgetRoleColor(root._getColor(ledgerRow.modelData.key))
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: Math.round(3 * root.scaleFactor)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Math.round(6 * root.scaleFactor)
+                            InstrumentLabel {
+                                Layout.fillWidth: !ledger.tight
+                                Layout.preferredWidth: ledger.tight ? Math.ceil(ledgerName.implicitWidth) : -1
+                                text: ledger.names[ledgerRow.index] ?? ""
+                                color: root.widgetInkMuted
+                                scaleFactor: root.scaleFactor
+                            }
+                            InstrumentScale {
+                                visible: ledger.tight
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.round(8 * root.scaleFactor)
+                                divisions: 16
+                                fraction: root._getValue(ledgerRow.modelData.key)
+                                ink: root.widgetInk
+                                accent: ledgerRow.liveColor
+                                animated: root.animationsActive
+                            }
+                            StyledText {
+                                Layout.preferredWidth: ledger.tight ? Math.ceil(ledgerFigure.advanceWidth) : -1
+                                horizontalAlignment: Text.AlignRight
+                                text: root._getDisplayText(ledgerRow.modelData.key)
+                                color: root.widgetInk
+                                font.family: root.widgetNumbersFamily
+                                font.pixelSize: Math.round(15 * root.scaleFactor)
+                                font.weight: Font.Bold
+                                font.features: ({ "tnum": 1 })
+                            }
+                        }
+                        InstrumentScale {
+                            visible: !ledger.tight
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.round(8 * root.scaleFactor)
+                            divisions: 24
+                            fraction: root._getValue(ledgerRow.modelData.key)
+                            ink: root.widgetInk
+                            accent: ledgerRow.liveColor
+                            animated: root.animationsActive
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            Grid {
+                id: instrumentBody
+                anchors.centerIn: parent
+                opacity: root.displayMode === "instrument" && !root.meterLedger ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "instrument"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+                columns: root.meterColumns
+                spacing: Math.round(10 * root.scaleFactor)
+                move: Transition {
+                    enabled: root.animateGeometry
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Repeater {
+                    model: root._resourceModel
+
+                    Item {
+                        id: resourceMeter
+                        required property var modelData
+                        readonly property real side: Math.min(
+                            (root.height - root._innerMargin * 2 - Math.round(10 * root.scaleFactor) * (root.meterRows - 1)) / Math.max(1, root.meterRows),
+                            (root.width - root._innerMargin * 2 - Math.round(10 * root.scaleFactor) * (root.meterColumns - 1))
+                                / root.meterColumns)
+                        readonly property real liveValue: root._getValue(modelData.key)
+                        readonly property color liveColor: root.widgetRoleColor(root._getColor(modelData.key))
+
+                        width: Math.max(40, Math.round(resourceMeter.side))
+                        height: Math.max(40, Math.round(resourceMeter.side))
+
+                        InstrumentScale {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: Math.round(8 * root.scaleFactor)
+                            anchors.bottomMargin: Math.round(8 * root.scaleFactor)
+                            width: Math.round(14 * root.scaleFactor)
+                            vertical: true
+                            divisions: 20
+                            fraction: resourceMeter.liveValue
+                            ink: root.widgetInk
+                            accent: resourceMeter.liveColor
+                            animated: root.animationsActive && instrumentBody.visible
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Math.round(24 * root.scaleFactor)
+                            anchors.topMargin: Math.round(6 * root.scaleFactor)
+                            anchors.bottomMargin: Math.round(6 * root.scaleFactor)
+                            spacing: Math.round(4 * root.scaleFactor)
+
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignLeft
+                                text: resourceMeter.modelData.icon
+                                iconSize: Math.max(14, Math.round(resourceMeter.side * 0.12))
+                                color: resourceMeter.liveColor
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                verticalAlignment: Text.AlignBottom
+                                fontSizeMode: Text.Fit
+                                minimumPixelSize: Math.round(14 * root.scaleFactor)
+                                text: root._getDisplayText(resourceMeter.modelData.key)
+                                color: root.widgetInk
+                                font {
+                                    family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily
+                                    pixelSize: Math.round(resourceMeter.side * 0.29)
+                                    weight: Font.Bold
+                                    features: ({ "tnum": 1 })
+                                    letterSpacing: -0.5
+                                }
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                visible: root.showLabels
+                                elide: Text.ElideRight
+                                // a tile is too narrow for "CPU temp"; its thermometer and the °C already say it
+                                text: resourceMeter.modelData.label
+                                color: root.widgetInkMuted
+                                font {
+                                    family: root.widgetBodyFamily
+                                    pixelSize: Math.max(10, Math.round(resourceMeter.side * 0.075))
+                                    weight: Font.DemiBold
+                                    letterSpacing: Math.round(1.4 * root.scaleFactor)
+                                    capitalization: root.familyDesign ? Font.MixedCase : Font.AllUppercase
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // BARS MODE — horizontal fill bars with icon + percentage
+    // ══════════════════════════════════════════════════════════
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            ColumnLayout {
+                id: barsBody
+                anchors.fill: parent
+                anchors.margins: root._innerMargin
+                spacing: Appearance.sizes.spacingSmall ?? 4
+                opacity: root.displayMode === "bars" ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "bars"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                Repeater {
+                    model: root._resourceModel
+
+                    RowLayout {
+                        id: barRow
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: Appearance.sizes.spacingSmall ?? 4
+
+                        readonly property real _liveValue: root._getValue(modelData.key)
+                        readonly property color _liveColor: root._getColor(modelData.key)
+                        // Sized: the type grows with the row and the bar stays a bar, not a slab.
+                        readonly property real big: Math.min(barsBody.height / Math.max(1, root._resourceModel.length) * 0.42, 26 * root.scaleFactor)
+                        MaterialSymbol {
+                            visible: root.showLabels
+                            text: barRow.modelData.icon
+                            iconSize: barRow.big > 0 ? Math.round(barRow.big) : Appearance.font.pixelSize.small
+                            color: barRow._liveColor
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: barRow.big === 0
+                            Layout.preferredHeight: barRow.big > 0 ? Math.max(8, Math.round(barRow.big * 0.55)) : -1
+                            Layout.alignment: Qt.AlignVCenter
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: barRow.big > 0 ? height / 2 : Appearance.rounding.verysmall
+                                color: root._metricTrackColor(barRow.modelData.key)
+                            }
+
+                            Rectangle {
+                                id: barFill
+                                property real targetWidth: parent.width * Math.min(1, barRow._liveValue)
+                                width: targetWidth
+                                height: parent.height
+                                radius: barRow.big > 0 ? height / 2 : Appearance.rounding.verysmall
+                                color: barRow._liveColor
+                                opacity: barRow.big > 0 ? 1 : root.fillOpacity
+
+                                Behavior on width {
+                                    enabled: root.animatesValues && barsBody.visible
+                                    NumberAnimation { duration: root._animDuration; easing.type: Easing.OutCubic }
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            visible: root.showLabels
+                            text: root._getDisplayText(barRow.modelData.key)
+                            color: barRow._liveColor
+                            font {
+                                pixelSize: barRow.big > 0 ? Math.round(barRow.big * 0.8) : Appearance.font.pixelSize.smaller
+                                family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily
+                                weight: barRow.big > 0 ? Font.DemiBold : Font.Normal
+                            }
+                            horizontalAlignment: Text.AlignRight
+                            Layout.preferredWidth: barRow.big > 0 ? Math.round(barRow.big * (barRow.modelData.key === "temp" ? 3 : 2.4))
+                                : barRow.modelData.key === "temp" ? 40 : 32
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // GRAPH MODE — area fills with legend overlay
+    // ══════════════════════════════════════════════════════════
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            Item {
+                anchors.fill: parent
+                anchors.margins: root._innerMargin
+                opacity: root.displayMode === "graph" ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "graph"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                readonly property int _legendH: root.showLabels ? 16 : 0
+
+                Row {
+                    visible: root.showLabels
+                    z: 1
+                    spacing: Appearance.sizes.spacingSmall ?? 4
+                    anchors { top: parent.top; left: parent.left; margins: 2 }
+
+                    Repeater {
+                        model: root._resourceModel
+                        Row {
+                            required property var modelData
+                            spacing: 2
+                            MaterialSymbol {
+                                text: modelData.icon
+                                iconSize: Appearance.font.pixelSize.smaller
+                                color: root._graphColor(modelData.key)
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            StyledText {
+                                text: root._getDisplayText(modelData.key)
+                                color: root._graphColor(modelData.key)
+                                font { pixelSize: Appearance.font.pixelSize.smaller; family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily }
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+                }
+
+                // Y-axis labels
+                Repeater {
+                    model: [
+                        { pct: 0, label: "0%" },
+                        { pct: 0.5, label: "50%" },
+                        { pct: 1.0, label: "100%" }
+                    ]
+                    StyledText {
+                        required property var modelData
+                        text: modelData.label
+                        color: root._metricSubtext
+                        font { pixelSize: Appearance.font.pixelSize.smaller - 2; family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily }
+                        anchors.right: parent.right
+                        anchors.rightMargin: 2
+                        y: parent._legendH + (parent.height - parent._legendH) * (1.0 - modelData.pct) - height / 2
+                    }
+                }
+
+                // Grid lines at 25/50/75%
+                Repeater {
+                    model: [0.25, 0.50, 0.75]
+                    Rectangle {
+                        required property real modelData
+                        anchors { left: parent.left; right: parent.right }
+                        y: parent._legendH + (parent.height - parent._legendH) * (1.0 - modelData)
+                        height: 1
+                        color: ColorUtils.applyAlpha(root._metricText, 0.06)
+                    }
+                }
+
+                Graph {
+                    anchors.fill: parent
+                    anchors.topMargin: parent._legendH
+                    values: root.showCpu ? (root.reading.cpuHistory ?? []) : []
+                    color: root._graphColor("cpu")
+                    fillOpacity: root.graphFillOpacity + 0.05
+                    alignment: Graph.Alignment.Right
+                    visible: root.showCpu
+                }
+
+                Graph {
+                    anchors.fill: parent
+                    anchors.topMargin: parent._legendH
+                    values: root.showMemory ? (root.reading.memHistory ?? []) : []
+                    color: root._graphColor("mem")
+                    fillOpacity: root.graphFillOpacity
+                    alignment: Graph.Alignment.Right
+                    visible: root.showMemory
+                }
+
+                Graph {
+                    anchors.fill: parent
+                    anchors.topMargin: parent._legendH
+                    values: root.showGpuTemp ? (root.reading.gpuTempHistory ?? []) : []
+                    color: root._graphColor("gpuTemp")
+                    fillOpacity: root.graphFillOpacity - 0.05
+                    alignment: Graph.Alignment.Right
+                    visible: root.showGpuTemp
+                }
+
+                Graph {
+                    anchors.fill: parent
+                    anchors.topMargin: parent._legendH
+                    values: root.showGpu ? (root.reading.gpuHistory ?? []) : []
+                    color: root._graphColor("gpu")
+                    fillOpacity: root.graphFillOpacity - 0.05
+                    alignment: Graph.Alignment.Right
+                    visible: root.showGpu
+                }
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // RINGS MODE — circular gauges per resource
+    // ══════════════════════════════════════════════════════════
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            Grid {
+                columns: root.sized ? root.meterColumns : Math.max(1, root._resourceModel.length)
+                id: ringsBody
+                anchors.centerIn: parent
+                spacing: Appearance.sizes.spacingNormal ?? 8
+                opacity: root.displayMode === "rings" ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "rings"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                Repeater {
+                    model: root._resourceModel
+
+                    Column {
+                        id: ringCol
+                        required property var modelData
+                        spacing: Appearance.sizes.spacingSmall ?? 4
+                        readonly property int _ringSize: {
+                            const across = root.sized ? root.meterColumns : Math.max(1, root._resourceModel.length)
+                            const down = root.sized ? root.meterRows : 1
+                            const gap = ringsBody.spacing
+                            return Math.max(12, Math.min(
+                                (root.height - root._innerMargin * 2 - gap * (down - 1)) / down - (root.showLabels ? 20 : 0),
+                                (root.width - root._innerMargin * 2 - gap * (across - 1)) / across))
+                        }
+                        readonly property real _liveValue: root._getValue(modelData.key)
+                        readonly property color _liveColor: root._getColor(modelData.key)
+                        width: _ringSize
+
+                        // Smoothly interpolated value for display
+                        property real _animatedValue: _liveValue
+                        Behavior on _animatedValue {
+                            enabled: root.animatesValues && ringsBody.visible
+                            NumberAnimation { duration: root._animDuration; easing.type: Easing.OutCubic }
+                        }
+
+                        Item {
+                            width: ringCol._ringSize
+                            height: ringCol._ringSize
+                            anchors.horizontalCenter: parent.horizontalCenter
+
+                            CircularProgress {
+                                anchors.centerIn: parent
+                                implicitSize: parent.width
+                                lineWidth: Math.max(3, Math.round(parent.width * 0.09))
+                                value: ringCol._animatedValue
+                                // `_animatedValue` already owns the transition. Letting
+                                // CircularProgress animate `degree` again chained two
+                                // full animations per sample and kept five Shape layers
+                                // rendering for most of every 3-second polling cycle.
+                                enableAnimation: false
+                                colPrimary: ringCol._liveColor
+                                colSecondary: root._metricTrackColor(ringCol.modelData.key)
+                            }
+
+                            // Percentage/value inside the ring
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: ringCol.modelData.key === "temp" ? (root.reading.cpuTemp ?? 0) + "°"
+                                    : ringCol.modelData.key === "gpuTemp" ? (root.reading.gpuTemp ?? 0) + "°"
+                                    : Math.round(ringCol._animatedValue * 100)
+                                color: ringCol._liveColor
+                                font {
+                                    pixelSize: Math.max(10, Math.round(ringCol._ringSize * 0.26))
+                                    family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily
+                                    weight: Font.DemiBold
+                                }
+                            }
+                        }
+
+                        // Label below ring
+                        Row {
+                            visible: root.showLabels
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            spacing: 2
+                            MaterialSymbol {
+                                id: ringLabelIcon
+                                text: ringCol.modelData.icon
+                                iconSize: Appearance.font.pixelSize.smaller
+                                color: root._metricSubtext
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            StyledText {
+                                width: Math.min(
+                                    implicitWidth,
+                                    Math.max(0, ringCol._ringSize - ringLabelIcon.implicitWidth - parent.spacing)
+                                )
+                                text: ringCol.modelData.label
+                                color: root._metricSubtext
+                                font { pixelSize: Appearance.font.pixelSize.smaller; family: root.widgetBodyFamily }
+                                anchors.verticalCenter: parent.verticalCenter
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // TEXT MODE — compact numeric readout with chip style
+    // ══════════════════════════════════════════════════════════
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            Flow {
+                anchors.centerIn: parent
+                spacing: Appearance.sizes.spacingSmall ?? 4
+                opacity: root.displayMode === "text" ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "text"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+                width: parent.width - root._innerMargin * 2
+
+                Repeater {
+                    model: root._resourceModel
+
+                    Rectangle {
+                        id: textChip
+                        required property var modelData
+                        readonly property color _liveColor: root._getColor(modelData.key)
+                        width: chipRow.implicitWidth + 12
+                        height: chipRow.implicitHeight + 8
+                        radius: Appearance.rounding.small
+                        color: root._metricTrackColor(textChip.modelData.key)
+
+                        Row {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: Appearance.sizes.spacingSmall ?? 4
+
+                            MaterialSymbol {
+                                text: textChip.modelData.icon
+                                iconSize: Math.round(Appearance.font.pixelSize.normal * root.scaleFactor)
+                                color: textChip._liveColor
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                text: textChip.modelData.label
+                                font.weight: root.widgetLabelWeight
+                                color: root._metricSubtext
+                                font {
+                                    pixelSize: Math.round(Appearance.font.pixelSize.small * root.scaleFactor)
+                                    family: root.widgetBodyFamily
+                                }
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+
+                            StyledText {
+                                text: root._getDisplayText(textChip.modelData.key)
+                                color: textChip._liveColor
+                                font {
+                                    pixelSize: Math.round(Appearance.font.pixelSize.normal * root.scaleFactor)
+                                    family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily
+                                    weight: Font.DemiBold
+                                }
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            GridLayout {
+                id: tileGrid
+                anchors.fill: parent
+                anchors.margins: root._innerMargin
+                opacity: root.displayMode === "tiles" && root._resourceModel.length > 0 ? 1 : 0
+                visible: !root.familyFaced && opacity > 0
+                enabled: root.displayMode === "tiles"
+                Behavior on opacity {
+                    enabled: root.animationsActive
+                    NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+                columnSpacing: root._tileGap
+                rowSpacing: root._tileGap
+                columns: root._tileColumns
+
+                Repeater {
+                    model: root._resourceModel
+
+                    Rectangle {
+                        id: tile
+                        required property var modelData
+                        readonly property var role: root._tileRole(modelData.key)
+
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: root.cardRadius
+                        color: root.look.tilePlate ? "transparent" : tile.role.bg
+
+                        Loader {
+                            readonly property real plateRadius: tile.radius
+                            anchors.fill: parent
+                            z: -1
+                            active: root.look.tilePlate !== null
+                            sourceComponent: root.look.tilePlate
+                        }
+
+                        Behavior on color {
+                            enabled: root.animationsActive && tileGrid.visible
+                            ColorAnimation {
+                                duration: root._animDuration
+                                easing.type: Appearance.animation.elementMove.type
+                                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                            }
+                        }
+
+                        StyledRectangularShadow {
+                            target: tile
+                            z: -2
+                            visible: !root.familyDesign && root.look.tileDepth
+                        }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: Math.round(tile.height * 0.13)
+                            spacing: 0
+
+                            MaterialShapeWrappedMaterialSymbol {
+                                Layout.alignment: Qt.AlignRight
+                                visible: tile.height >= 76
+                                shape: root._tileShape(tile.modelData.key)
+                                color: tile.role.badge
+                                colSymbol: tile.role.onBadge
+                                text: tile.modelData.icon
+                                fill: 1
+                                iconSize: Math.max(13, Math.round(tile.height * 0.17))
+                                padding: Math.max(5, Math.round(tile.height * 0.055))
+                            }
+
+                            Item { Layout.fillHeight: true }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root._getDisplayText(tile.modelData.key)
+                                color: tile.role.ink
+                                elide: Text.ElideRight
+                                font {
+                                    pixelSize: Math.max(14, Math.min(
+                                        Math.round(Appearance.font.pixelSize.hugeass * root.scaleFactor),
+                                        Math.round(tile.height * 0.30),
+                                        Math.round(tile.width * 0.34)))
+                                    family: root.familyDesign ? FamilyStyle.fontMain : root.widgetNumbersFamily
+                                    weight: Font.Bold
+                                }
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                Layout.topMargin: -Math.round(tile.height * 0.03)
+                                visible: root.showLabels && tile.height >= 62
+                                text: tile.modelData.label
+                                font.weight: root.widgetLabelWeight
+                                color: ColorUtils.applyAlpha(tile.role.ink, 0.62)
+                                elide: Text.ElideRight
+                                font.pixelSize: Math.max(10, Math.min(
+                                    Math.round(Appearance.font.pixelSize.small * root.scaleFactor),
+                                    Math.round(tile.height * 0.14)))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: !root.familyFaced
+        sourceComponent: Item {
+            Column {
+                visible: !root.familyFaced && root._resourceModel.length === 0
+                anchors.centerIn: parent
+                spacing: Math.round((Appearance.sizes.spacingSmall ?? 8) / 2)
+
+                MaterialShape {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    implicitSize: Math.round(48 * root.scaleFactor)
+                    shape: MaterialShape.Shape.Ghostish
+                    color: ColorUtils.applyAlpha(root._metricNormal, 0.16)
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "monitor_heart"
+                        iconSize: Math.round(24 * root.scaleFactor)
+                        color: root._metricNormal
+                    }
+                }
+
+                StyledText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: Translation.tr("Select a metric")
+                    color: root._metricSubtext
+                    font.pixelSize: Math.round(Appearance.font.pixelSize.small * root.scaleFactor)
+                }
+            }
+        }
+    }
+}

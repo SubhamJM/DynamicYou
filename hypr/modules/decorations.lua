@@ -5,16 +5,16 @@
 -- Dynamic active-theme border colors loader with graceful M3 fallback
 local home = os.getenv("HOME") or "/home/kuro"
 local ok, theme_colors = pcall(dofile, home .. "/.config/active-theme/hypr-colors.lua")
-local active_border = (ok and type(theme_colors) == "table" and theme_colors.active_border) or "rgba(c084fcee)"
-local inactive_border = (ok and type(theme_colors) == "table" and theme_colors.inactive_border) or "rgba(231d3688)"
+local active_border = (ok and type(theme_colors) == "table" and theme_colors.active_border) or "rgba(00000000)"
+local inactive_border = (ok and type(theme_colors) == "table" and theme_colors.inactive_border) or "rgba(00000000)"
 
 hl.config({
     general = {
         -- Gaps and borders
         gaps_in = 6,
-        gaps_out = 10,
+        gaps_out = 12,
         gaps_workspaces = 20,
-        border_size = 2,
+        border_size = 0,
 
         col = {
             active_border = active_border,

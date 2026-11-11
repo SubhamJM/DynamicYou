@@ -1,0 +1,32 @@
+{
+  "name": "Image converter",
+  "group": "Image converter",
+  "main": "ImageConverterWidget.qml",
+  "icon": "transform",
+  "tint": "#30b0c7",
+  "category": "decor",
+  "keywords": "picture convert image",
+  "sizes": ["large", "medium"],
+  "freeShape": true,
+  "palette": true,
+  "defaultConfig": {
+    "enable": false,
+    "locked": false,
+    "placementStrategy": "free",
+    "selectedFormat": "webp",
+    "widgetScale": 100,
+    "widgetOpacity": 100,
+    "colorMode": "auto",
+    "dim": 0,
+    "useBlur": false,
+    "backgroundOpacity": 0.22,
+    "borderWidth": 1,
+    "borderOpacity": 0.22,
+    "cornerRadius": -1,
+    "x": 120,
+    "y": 360
+  },
+  "options": [
+    {"key":"selectedFormat","label":"Convert to","type":"choice","default":"webp","choices":[["png","PNG"],["jpg","JPG"],["webp","WEBP"],["avif","AVIF"],["bmp","BMP"],["tiff","TIFF"],["pdf","PDF"]]}
+  ]
+}

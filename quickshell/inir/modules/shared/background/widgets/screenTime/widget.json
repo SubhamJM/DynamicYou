@@ -1,0 +1,21 @@
+{
+  "name": "Screen Time",
+  "group": "Screen time",
+  "main": "ScreenTimeWidget.qml",
+  "icon": "hourglass_bottom",
+  "tint": "#5e5ce6",
+  "category": "system",
+  "keywords": "usage apps time tracker",
+  "sizes": ["medium", "small", "large"],
+  "lock": true,
+  "faceOnly": true,
+  "face": "screenTime",
+  "defaultConfig": {
+    "placementStrategy": "free",
+    "widgetScale": 100,
+    "cornerRadius": -1,
+    "x": 120,
+    "y": 240
+  },
+  "plate": false
+}

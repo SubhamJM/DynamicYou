@@ -1,0 +1,3 @@
+module qs.modules.shared.overlay.sidebarRight.volumeMixer
+VolumeDialogContent 1.0 VolumeDialogContent.qml
+VolumeMixerEntry 1.0 VolumeMixerEntry.qml
