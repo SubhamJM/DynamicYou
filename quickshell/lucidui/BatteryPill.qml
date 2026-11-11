@@ -1,8 +1,7 @@
 import QtQuick
 import qs
 
-// a horizontal battery with the percentage inside it. the number is drawn twice
-// and clipped at the fill edge, so it stays legible on either side of it
+// Material 3 / Android Expressive Battery Icon (Caelestia / Android 16 Style)
 Item {
     id: bp
 
@@ -10,109 +9,63 @@ Item {
     property bool charging: false
     property bool low: bp.percent <= 20 && !bp.charging
     property bool showText: true
-    // charging reads on the accent, only capped: a fill level with the grey one
-    // beside it out-shouts the whole bar, so a light accent is brought under it
-    // and a dark one is left alone
-    readonly property color chargeColor: {
-        const cap = Theme.toneOf(Theme.text) + (Theme.isLight ? 14 : -14);
-        const t = Theme.toneOf(Theme.accent);
-        return Theme.atTone(Theme.accent, Theme.isLight ? Math.max(t, cap) : Math.min(t, cap));
-    }
+
+    readonly property color chargeColor: "#34d399"
     readonly property color fillColor: bp.charging ? bp.chargeColor : (bp.low ? Theme.error : Theme.text)
-    readonly property color emptyColor: Theme.alpha(Theme.text, 0.28)
-    readonly property real level: Math.max(0, Math.min(1, bp.percent / 100))
 
-    implicitWidth: bp.showText ? Theme.dp(30) : Theme.dp(22)
-    implicitHeight: Theme.dp(15)
-
-    Item {
-        id: body
-
-        width: bp.width - Theme.dp(3)
-        height: bp.height
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 4.5
-            color: bp.emptyColor
+    function resolveBatteryIcon(level, isCharging) {
+        if (isCharging) {
+            if (level >= 95) return "battery_charging_full";
+            if (level >= 85) return "battery_charging_90";
+            if (level >= 75) return "battery_charging_80";
+            if (level >= 55) return "battery_charging_60";
+            if (level >= 45) return "battery_charging_50";
+            if (level >= 25) return "battery_charging_30";
+            return "battery_charging_20";
         }
-
-        Item {
-            id: fillClip
-
-            width: Math.round(body.width * bp.level)
-            height: body.height
-            clip: true
-
-            Rectangle {
-                width: body.width
-                height: body.height
-                radius: 4.5
-                color: bp.fillColor
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.durDefaultEffects
-                    }
-
-                }
-
-            }
-
-            LText {
-                visible: bp.showText
-                width: body.width
-                height: body.height
-                horizontalAlignment: Text.AlignHCenter
-                role: "labelSmall"
-                size: Theme.fs(10.5)
-                weight: 700
-                text: bp.percent
-                color: Theme.bgOpaque
-            }
-
-        }
-
-        Item {
-            x: fillClip.width
-            width: body.width - fillClip.width
-            height: body.height
-            clip: true
-
-            LText {
-                visible: bp.showText
-                x: -fillClip.width
-                width: body.width
-                height: body.height
-                horizontalAlignment: Text.AlignHCenter
-                role: "labelSmall"
-                size: Theme.fs(10.5)
-                weight: 700
-                text: bp.percent
-                color: Theme.text
-            }
-
-        }
-
+        if (level >= 93) return "battery_android_full";
+        if (level >= 78) return "battery_android_6";
+        if (level >= 64) return "battery_android_5";
+        if (level >= 50) return "battery_android_4";
+        if (level >= 35) return "battery_android_3";
+        if (level >= 21) return "battery_android_2";
+        if (level >= 7) return "battery_android_1";
+        return "battery_android_alert";
     }
 
-    Rectangle {
-        anchors.left: body.right
-        anchors.leftMargin: 1
-        anchors.verticalCenter: parent.verticalCenter
-        width: Theme.dp(2)
-        height: Theme.dp(6)
-        radius: 1
-        color: bp.level >= 0.99 ? bp.fillColor : bp.emptyColor
-    }
+    implicitWidth: row.implicitWidth
+    implicitHeight: Theme.dp(22)
 
-    Icon {
-        visible: bp.charging && !bp.showText
-        anchors.centerIn: body
-        name: "bolt"
-        size: Theme.dp(12)
-        fill: 1
-        color: Theme.bgOpaque
-    }
+    Row {
+        id: row
+        anchors.centerIn: parent
+        spacing: Theme.dp(5)
 
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: bp.resolveBatteryIcon(bp.percent, bp.charging)
+            font.family: Theme.fontFamilyIcon
+            font.pixelSize: Theme.dp(18)
+            font.variableAxes: ({ "FILL": 1 })
+            color: bp.fillColor
+
+            SequentialAnimation on opacity {
+                running: bp.charging
+                loops: Animation.Infinite
+                NumberAnimation { to: 0.5; duration: 900; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutSine }
+            }
+        }
+
+        Text {
+            visible: bp.showText
+            anchors.verticalCenter: parent.verticalCenter
+            text: bp.percent + "%"
+            color: bp.fillColor
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontLabel
+            font.weight: Font.DemiBold
+            renderType: Text.NativeRendering
+        }
+    }
 }
