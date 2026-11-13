@@ -66,6 +66,32 @@ const copies = [
     ["notifications.scaleOnHover", ["material.notifications.scaleOnHover", "waffles.notifications.scaleOnHover"]]
 ];
 
+// [path, file]: data that leaves config.json for a file of its own in the state folder's user/ (Config writes it there
+// first, under the path's last key, and drops it from config.json only once it is written). What grows with use or
+// changes while music plays is no setting: a long YT Music queue made config.json pass 300 KB, rewritten every few
+// seconds. No file: dropped (nothing read it).
+const departures = [
+    ["ytmusic.queue", "ytmusic.json"],
+    ["ytmusic.playlists", "ytmusic.json"],
+    ["ytmusic.liked", "ytmusic.json"],
+    ["ytmusic.lastLikedSync", "ytmusic.json"],
+    ["ytmusic.recentSearches", "ytmusic.json"],
+    ["ytmusic.profile", "ytmusic.json"],
+    ["ytmusic.resume", "ytmusic.json"],
+    ["ytmusic.cache", ""]
+];
+function departing(obj) {
+    const out = [];
+    for (const [path, file] of departures) {
+        const value = _get(obj, path);
+        if (value !== undefined) out.push({ path, file, key: path.split(".").pop(), value });
+    }
+    return out;
+}
+function drop(obj, path) {
+    _remove(obj, path);
+}
+
 function _isObject(v) {
     return v !== null && typeof v === "object" && !Array.isArray(v);
 }
@@ -266,6 +292,22 @@ function _factoryLook(obj) {
     return true;
 }
 
+// Material's factory values that moved, on iRiS's terms above: the old factory value alone changes, once.
+const materialFactoryLook = 1;
+const materialFactoryValues = [
+    // The left sidebar's widgets sat 8 px apart and read cramped (his 11-12).
+    [1, "material.sidebar.widgets.spacing", 8, 24],
+];
+function _materialFactoryLook(obj) {
+    if (!_isObject(_get(obj, "material"))) return false;
+    const at = Number(_get(obj, "material.factoryLook") ?? 0);
+    if (at >= materialFactoryLook) return false;
+    for (const [since, path, before, after] of materialFactoryValues)
+        if (since > at && _get(obj, path) === before) _set(obj, path, after);
+    _set(obj, "material.factoryLook", materialFactoryLook);
+    return true;
+}
+
 // The person's place has one switch, weather.hideLocation. The weather widget kept a second one that hid the city in
 // that widget alone while the Island, the lock screen and the sidebars kept printing it (11-04): a city hidden there
 // is hidden everywhere.
@@ -285,6 +327,37 @@ function _onePlace(obj) {
     return changed;
 }
 
+// A Hub widget's options were written into every screen's record instead of its base (`background.widgets.custom.<id>`),
+// where its Island and Waffle faces read them: those faces never saw a change (11-11). A value every screen holds alike
+// was set for all of them and goes to the base; where and how big it stands, and a value that differs, stay per screen.
+const _perScreen = ["x", "y", "freeWidth", "freeHeight", "sizeClass", "widgetScale", "placementStrategy", "enable", "locked"];
+function _customToBase(obj) {
+    const widgets = _get(obj, "background.widgets");
+    if (!_isObject(widgets) || !Array.isArray(widgets.outputOverrides)) return false;
+    const records = widgets.outputOverrides.map(record => record?.widgets).filter(_isObject);
+    const ids = new Set();
+    for (const record of records)
+        for (const key of Object.keys(record)) if (key.startsWith("custom.") && _isObject(record[key])) ids.add(key);
+    let changed = false;
+    for (const id of ids) {
+        const holders = records.filter(record => _isObject(record[id])).map(record => record[id]);
+        const keys = new Set();
+        for (const entry of holders) for (const key of Object.keys(entry)) keys.add(key);
+        for (const key of keys) {
+            if (_perScreen.includes(key)) continue;
+            const seen = holders.map(entry => JSON.stringify(entry[key]));
+            if (seen.includes(undefined) || seen.some(value => value !== seen[0])) continue;
+            if (!_isObject(widgets.custom)) widgets.custom = {};
+            const name = id.slice("custom.".length);
+            if (!_isObject(widgets.custom[name])) widgets.custom[name] = {};
+            _set(widgets.custom[name], key, holders[0][key]);
+            for (const entry of holders) delete entry[key];
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 // Choices withdrawn: a file still holding one takes its successor. [path, gone values, successor]
 // iRiS Settings' Pocket and Drawer layouts went (his 11-07, "no son óptimos").
 const withdrawn = [
@@ -297,13 +370,36 @@ function _withdrawn(obj) {
     return changed;
 }
 
+// A list some writes stored as {"0": ..., "1": ...} (a QML sequence kept as it came) becomes a list again where the
+// schema holds one, in index order, so the person's choice loads instead of the default. `isList(path)` asks the
+// schema; Config runs this once every schema, plugins' included, is in place.
+function listsBack(obj, isList, prefix) {
+    if (!_isObject(obj)) return false;
+    let changed = false;
+    for (const key of Object.keys(obj)) {
+        const path = prefix ? prefix + "." + key : key;
+        const value = obj[key];
+        if (!_isObject(value)) continue;
+        const indices = Object.keys(value);
+        if (indices.length > 0 && indices.every(index => /^\d+$/.test(index)) && isList(path)) {
+            obj[key] = indices.sort((a, b) => Number(a) - Number(b)).map(index => value[index]);
+            changed = true;
+        } else if (listsBack(value, isList, path)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 function migrate(obj) {
     if (!_isObject(obj)) return false;
     const fromV2 = Number(_get(obj, "iris.appearance.factoryLook") ?? 0) < 1;
     let changed = _factoryLook(obj);
+    changed = _materialFactoryLook(obj) || changed;
     changed = _widgetSizes(obj, fromV2) || changed;
     changed = _onePlace(obj) || changed;
     changed = _withdrawn(obj) || changed;
+    changed = _customToBase(obj) || changed;
     for (const [from, to] of moves) {
         const value = _get(obj, from);
         if (value === undefined) continue;

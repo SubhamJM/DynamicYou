@@ -494,9 +494,9 @@ Scope {
             return "widget layer order reset"
         }
 
-        /// Enable or disable a built-in desktop widget
+        /// Enable or disable a desktop widget: a built-in one by its key, a hub one as `custom.<id>`
         function setWidgetEnabled(widgetName: string, enabled: bool): string {
-            if (!DesktopWidgetRegistry.has(widgetName))
+            if (!DesktopWidgetRegistry.has(widgetName) && !DesktopWidgetRegistry.customEntry(widgetName))
                 return "unknown widget: " + widgetName;
             DesktopWidgetLayout.setGloballyEnabled(widgetName, enabled);
             return widgetName + (enabled ? " enabled" : " disabled");
@@ -539,11 +539,30 @@ Scope {
         // An iRiS texture filter (Afterglow's grade, Light leak's exposure) draws the container (and hides it): glass copies
         // what is seen. While awww shows the picture the container draws nothing, and a glass copying it was empty: the
         // wallpaper came through unblurred. Then there is no layer and the glass reads the picture itself.
-        readonly property Item wallpaperLayer: bgRoot.externalMainWallpaperActive ? null : textureLoader.item ?? wallpaperContainer
+        // The glyph wallpaper is what is seen whenever it is on: the glass copies it, never the picture under it.
+        readonly property Item wallpaperLayer: glyphsLoader.item
+            ?? (bgRoot.externalMainWallpaperActive ? null : textureLoader.item ?? wallpaperContainer)
         // Bumped whenever what the wallpaper layer shows can change (picture, parallax, Afterglow arriving): iRiS glass
         // copies the layer only after a bump instead of every frame the desktop redraws.
         property int wallpaperLayerRevision: 0
         readonly property bool wallpaperLayerAnimating: bgRoot.internalShaderTransitionRequested
+        // Counts new frames of the layer while it moves by itself (glyphs in motion, a playing video or GIF), at most
+        // four a second: glass copies and blurs again on each. Under a frost that wide the picture changes by a level
+        // or two between glyph frames, and re-blurring every widget fifteen times a second was most of what the
+        // desktop cost. It counts on the picture's own frames, never on a clock of its own: a copy on a timer of its
+        // own drew two more frames of the whole desktop each time (the copy, then Qt's pass for the layers it fed).
+        property int wallpaperLayerFrame: 0
+        property double _layerFrameAt: 0
+        function layerMoved(): void {
+            const now = Date.now()
+            if (now - bgRoot._layerFrameAt < 240) return
+            bgRoot._layerFrameAt = now
+            bgRoot.wallpaperLayerFrame++
+        }
+        Connections {
+            target: glyphsLoader.item
+            function onStepped(): void { bgRoot.layerMoved() }
+        }
         onWallpaperPathRawChanged: {
             bgRoot.wallpaperLayerRevision++
             const now = Date.now()
@@ -863,7 +882,11 @@ Scope {
         // stays drawn here until awww shows it.
         readonly property string irisTexture: (Config.options?.panelFamily ?? "ii") === "iris"
             ? String(Config.options?.iris?.appearance?.texture ?? "solid") : "solid"
-        readonly property bool textureWallpaperActive: (bgRoot.irisTexture === "afterglow"
+        readonly property bool textureWallpaperActive: bgRoot.irisTextureActive || bgRoot.glyphsActive
+        // Glyphs read whatever is drawn here, like a family's texture: the picture is drawn here, not by awww.
+        readonly property bool glyphsActive: Wallpapers.glyphs && bgRoot.wallpaperPathRaw.length > 0
+            && !bgRoot.webWallpaperActive && !bgRoot.wallpaperSafetyTriggered && !bgRoot.backdropActive
+        readonly property bool irisTextureActive: (bgRoot.irisTexture === "afterglow"
                 ? (Config.options?.iris?.appearance?.afterglow?.wallpaper ?? true)
                 : bgRoot.irisTexture === "leak" && (Number(Config.options?.iris?.appearance?.leak?.wallpaper ?? 50) > 0
                     || Config.options?.iris?.appearance?.leak?.backdrop === "light"))
@@ -1688,6 +1711,7 @@ Scope {
                         animation: NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                     }
                     cache: false
+                    onCurrentFrameChanged: if (!glyphsLoader.item) bgRoot.layerMoved()
                     playing: visible && bgRoot.enableAnimation && !GlobalStates.screenLocked && !Appearance._gameModeActive && !Wallpapers.batteryPauseActive
                         && Wallpapers.videoMotionAllowedOn(bgRoot.screenName)
                     asynchronous: true
@@ -1737,11 +1761,21 @@ Scope {
                     fillMode: Wallpapers.videoFillFor(bgRoot.fillMode)
                     enableTransitions: Config.options?.background?.transition?.enable ?? true
                     transitionBaseDuration: Config.options?.background?.transition?.duration ?? 800
+                    // Under the glyphs the video is only read, at the glyph grid's size and pace.
+                    decodeHeight: glyphsLoader.item?.readHeight ?? -1
+                    decodeFps: glyphsLoader.item ? glyphsLoader.item.readFps : 0
+                    reportFrames: true
+                    onFrameShown: {
+                        if (glyphsLoader.item) glyphsLoader.item.pictureFrame()
+                        else bgRoot.layerMoved()
+                    }
                     shouldPlay: bgRoot.enableAnimation && !GlobalStates.screenLocked
                         && !Appearance._gameModeActive && !Wallpapers.batteryPauseActive
                         && Wallpapers.videoMotionAllowedOn(bgRoot.screenName)
                         && bgRoot._familyOwnsScreen
                         && visible
+                        // Glyphs drawing a word or a subject of their own never read it.
+                        && !(glyphsLoader.item?.ownSubject ?? false)
 
                     layer.enabled: visible && Appearance.effectsEnabled
                         && (bgRoot.effectsOptions.enableAnimatedBlur ?? false)
@@ -1760,7 +1794,7 @@ Scope {
                 id: textureLoader
                 z: 0.5
                 anchors.fill: wallpaperContainer
-                when: bgRoot.textureWallpaperActive && bgRoot._familyOwnsScreen
+                when: bgRoot.irisTextureActive && bgRoot._familyOwnsScreen
                 readonly property bool leak: bgRoot.irisTexture === "leak"
                 part: leak ? "wallpaper.leak" : "wallpaper.afterglow"
                 // The light alone never shows the picture: a video under it needs no redraw.
@@ -1772,6 +1806,17 @@ Scope {
                     ignoreUnknownSignals: true
                     function onShown(): void { bgRoot.wallpaperLayerRevision++ }
                 }
+            }
+
+            WallpaperGlyphs {
+                id: glyphsLoader
+                z: 0.6
+                anchors.fill: wallpaperContainer
+                picture: bgRoot.glyphsActive ? (textureLoader.item ?? wallpaperContainer) : null
+                path: bgRoot.wallpaperPathRaw
+                output: bgRoot.monitorName
+                framed: bgRoot.wallpaperIsVideo && videoWallpaper.shouldPlay && textureLoader.item === null
+                onItemChanged: bgRoot.wallpaperLayerRevision++
             }
 
             // Blur behind windows. Reads what is actually drawn: the crossfader (QML or awww rendering), the
@@ -1794,7 +1839,7 @@ Scope {
 
                     GaussianBlur {
                         anchors.fill: parent
-                        source: textureLoader.item ?? (bgRoot.wallpaperIsVideo ? videoWallpaper
+                        source: glyphsLoader.item ?? textureLoader.item ?? (bgRoot.wallpaperIsVideo ? videoWallpaper
                             : bgRoot.wallpaperIsGif ? gifWallpaper : wallpaper)
                         radius: bgRoot.effectsOptions.blurRadius ?? 22
                         // See #159 — cap samples to bound fragment shader cost

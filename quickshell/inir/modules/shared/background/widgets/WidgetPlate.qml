@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects as GE
 import Quickshell
+import qs
 import qs.modules.common
 import qs.modules.common.functions
 import qs.services
@@ -16,8 +17,12 @@ Rectangle {
     readonly property real strength: Math.max(0, Math.min(1, Number(root.surface.surfaceOpacity) || 0))
     readonly property bool backed: root.strength > 0.001
 
-    // Below ~0.86 the wallpaper washes a container out.
-    property real plateAlpha: root.backed ? Math.min(0.96, 0.86 + root.strength * 0.6) : 0
+    // Below ~0.86 the wallpaper washes a container out (ink is picked against the plate as if it were opaque). Up to
+    // the usual 16 % strength the plate keeps the alpha it always had; past it the rest of the slider reaches solid,
+    // where before it stopped at 0.96 and everything over 17 % did nothing.
+    readonly property real solidAlpha: root.strength <= 0.16 ? 0.86 + root.strength * 0.6
+        : 0.956 + (root.strength - 0.16) / 0.84 * 0.044
+    property real plateAlpha: root.backed ? root.solidAlpha : 0
     // Keeps the generated hue with a predictable ink on it; accent belongs to live data, not the whole card.
     readonly property color plateDark: {
         const accent = Qt.color(root.surface.surfaceAccent)
@@ -43,7 +48,10 @@ Rectangle {
     // source pixels, so it's halved too.
     property bool glass: false
     property real glassSaturation: 0.15
+    // The widget's Blur strength scales what the family's style blurs by; the radius grows past 100 %.
     property real glassBlur: 0.8
+    readonly property real _glassAmount: Math.max(0, root.glassBlur * (root.surface.widget?.blurStrength ?? 1))
+    readonly property real _glassReach: Math.max(1, root._glassAmount)
     readonly property real _blurScale: 0.5
 
     property int moveDuration: FamilyStyle.revealDuration
@@ -85,8 +93,46 @@ Rectangle {
         }
     }
 
+    // On the desktop the glass copies the window's own wallpaper layer, what is really seen there (the glyph wallpaper,
+    // a playing video), and again on each of its frames while it moves; elsewhere (the lock) the picture itself.
+    readonly property var _host: root.QsWindow?.window ?? null
+    readonly property Item _layer: root._host?.wallpaperLayer ?? null
     Loader {
-        active: root.glass && root.visible
+        active: root.glass && root.visible && root._layer !== null
+        sourceComponent: ShaderEffectSource {
+            id: frosted
+            readonly property int revision: root._host?.wallpaperLayerRevision ?? 0
+            readonly property int frame: root._host?.wallpaperLayerFrame ?? 0
+            readonly property point at: {
+                void (root.surface.screenX + root.surface.screenY + root.width + root.height)
+                return root.mapToItem(root._layer, 0, 0)
+            }
+            // Wide enough for the blur to find picture all round, so the rim does not fade to nothing.
+            readonly property real margin: Math.round(40 * root._glassReach)
+            x: -margin
+            y: -margin
+            width: root.width + margin * 2
+            height: root.height + margin * 2
+            sourceItem: root._layer
+            live: GlobalStates.widgetEditMode
+            sourceRect: Qt.rect(at.x - margin, at.y - margin, width, height)
+            textureSize: Qt.size(Math.max(1, Math.round(width * root._blurScale)), Math.max(1, Math.round(height * root._blurScale)))
+            smooth: true
+            onRevisionChanged: scheduleUpdate()
+            onFrameChanged: scheduleUpdate()
+            onAtChanged: scheduleUpdate()
+            layer.enabled: root.surface.powerActive
+            layer.textureSize: frosted.textureSize
+            layer.effect: MultiEffect {
+                saturation: root.glassSaturation
+                blurEnabled: true
+                blurMax: Math.max(1, Math.round(64 * root._glassReach * root._blurScale))
+                blur: Math.min(1, root._glassAmount)
+            }
+        }
+    }
+    Loader {
+        active: root.glass && root.visible && root._layer === null
         sourceComponent: Image {
             id: blurredWallpaper
             x: -root.surface.screenX
@@ -109,8 +155,8 @@ Rectangle {
                 anchors.fill: source
                 saturation: root.glassSaturation
                 blurEnabled: true
-                blurMax: Math.max(1, Math.round(64 * root._blurScale))
-                blur: root.glassBlur
+                blurMax: Math.max(1, Math.round(64 * root._glassReach * root._blurScale))
+                blur: Math.min(1, root._glassAmount)
             }
         }
     }

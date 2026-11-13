@@ -946,7 +946,8 @@
         "code": "0;P;d;1;0l;10;0o;2;1b;0"
     },
     "display": {
-        "primaryMonitor": ""
+        "primaryMonitor": "",
+        "limitedRange": []
     },
     "hacks": {
         "arbitraryRaceConditionDelay": 20
@@ -1611,6 +1612,7 @@
             "legibleAlways": false,
             "design": "iris",
             "material": "glass",
+            "blur": 100,
             "weight": "regular",
             "rim": false,
             "outline": "auto",
@@ -1752,6 +1754,7 @@
             "themeColoursOnly": false,
             "settingsPanel": "prism",
             "settingsHost": "overlay",
+            "settingsRail": "auto",
             "settingsLayout": "classic",
             "settingsOriginal": false,
             "settingsHome": [
@@ -1973,6 +1976,7 @@
                 "settings"
             ],
             "design": "halo",
+            "designFace": true,
             "sunLight": true,
             "blockStyle": "plain",
             "scrollAction": "volume",
@@ -2137,6 +2141,7 @@
         },
         "bubbles": {
             "scale": 100,
+            "screenList": [],
             "left": {
                 "place": "island",
                 "fx": 0.5,
@@ -2895,36 +2900,9 @@
         "verbose": false,
         "shuffleMode": false,
         "repeatMode": 0,
-        "recentSearches": [],
-        "queue": [],
-        "playlists": [],
-        "liked": [],
-        "lastLikedSync": "",
         "upNextNotifications": true,
         "suppressUpNextInFullscreen": true,
-        "volume": 100,
-        "profile": {
-            "name": "",
-            "avatar": "",
-            "url": ""
-        },
-        "cache": {
-            "playlists": [],
-            "albums": [],
-            "liked": []
-        },
-        "resume": {
-            "videoId": "",
-            "title": "",
-            "artist": "",
-            "thumbnail": "",
-            "url": "",
-            "position": 0,
-            "wasPlaying": false,
-            "activePlaylist": [],
-            "currentIndex": -1,
-            "activePlaylistSource": ""
-        }
+        "volume": 100
     },
     "screenTime": {
         "enable": false,
@@ -2932,6 +2910,7 @@
         "retentionDays": 30
     },
     "material": {
+        "factoryLook": 1,
         "style": {
             "globalStyle": "material",
             "island": {
@@ -3479,7 +3458,7 @@
                     "crypto",
                     "worldclock"
                 ],
-                "spacing": 8,
+                "spacing": 24,
                 "crypto_settings": {
                     "refreshInterval": 300,
                     "coins": [

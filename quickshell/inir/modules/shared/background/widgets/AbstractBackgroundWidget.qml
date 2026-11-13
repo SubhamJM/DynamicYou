@@ -22,6 +22,8 @@ AbstractWidget {
     readonly property bool wearsFamily: DesktopWidgetDesign.faceDesign.length === 0 || root.familyDesign
     // How this family's widgets read: colours, type, shapes (its part `widgetLook`).
     readonly property var look: DesktopWidgetLook.look
+    // That look is the family's (or it has none): what the family draws over this widget may load.
+    readonly property bool lookIn: DesktopWidgetLook.holds(root.look)
     // The Background it sits on; a host with no desktop behind it (the lock) sets these itself.
     property var desktop: null
     property int screenWidth: root.desktop?.screen?.width ?? 0
@@ -165,9 +167,11 @@ AbstractWidget {
     readonly property bool bare: DesktopWidgetRegistry.entry(root.configEntryName)?.bare ?? false
     readonly property bool showBackground: root._readConfigKey("showBackground") ?? root.look.plateByDefault(root)
     readonly property bool useBlur: root._readConfigKey("useBlur") ?? false
+    // How much the glass frosts, 0-1 of what the family's style blurs by (100 % = the style's own).
+    readonly property real blurStrength: Math.max(0, Math.min(150, Number(root._readConfigKey("blurStrength") ?? 100))) / 100
     readonly property bool blurAvailable: root.look.blurAvailable(root)
     readonly property bool effectiveBlur: root.showBackground && root.useBlur && root.blurAvailable
-    readonly property bool showBorder: root._readConfigKey("showBorder") ?? !root.bare
+    readonly property bool showBorder: root._readConfigKey("showBorder") ?? (!root.bare || root.familyFaced)
     // Granular card controls — override booleans when present
     // Whether a plate can show at all: a widget that draws its own card in the base design has none to take away.
     readonly property bool plateOffered: root.familyFaced || DesktopWidgetRegistry.entry(root.configEntryName)?.plate !== false
@@ -689,6 +693,12 @@ AbstractWidget {
         updates["palette.tertiary"] = "tertiary"
         updates["palette.signal"] = "signal"
         updates["palette.surface"] = "surface"
+        // A person's widget: every option of its manifest too.
+        const custom = DesktopWidgetRegistry.customEntry(root.configEntryName)
+        for (const key in custom?.configKeys ?? {})
+            if (custom.configKeys[key].default !== undefined) updates[key] = custom.configKeys[key].default
+        for (const option of custom?.options ?? [])
+            if (option.key && option.default !== undefined && !option.shell) updates[option.key] = option.default
         Object.assign(updates, { sizeClass: root.sizes[0] ?? "", freeWidth: 0, freeHeight: 0 })
         Object.assign(updates, root.look.resetValues(root))
         root._setOutputValues(updates);
@@ -858,13 +868,15 @@ AbstractWidget {
         });
     }
 
-    // The family's face (`face` in the widget's manifest, a part `widgetFace.<face>`), or the worn Design's print of the
-    // widget (`printPart`) when the Design prints one for `printKey`.
+    // The family's face (`face` in the widget's manifest, a part `widgetFace.<face>`), a hub widget's own drawing for
+    // the family's face design (`desktop` in its manifest), or the worn Design's print of the widget (`printPart`) when
+    // the Design prints one for `printKey`.
     property string facePart: DesktopWidgetRegistry.entry(root.configEntryName)?.face ?? ""
     property string printPart: ""
     property string printKey: ""
     readonly property string familyFaceUrl: root.facePart.length > 0 ? Plugins.part(Plugins.active, "widgetFace." + root.facePart)
-        : root.printPart.length > 0 && FamilyStyle.facePrints[root.printKey] ? Plugins.part(Plugins.active, "designFace") : ""
+        : root.printPart.length > 0 && FamilyStyle.facePrints[root.printKey] ? Plugins.part(Plugins.active, "designFace")
+        : DesktopWidgetRegistry.customFace(root.configEntryName, DesktopWidgetDesign.faceDesign)
     readonly property bool hasFamilyFace: root.familyFaceUrl.length > 0
     // Which of the family's face designs draws it (its own, or one of `faces`: Prism in iRiS), and that design's face.
     readonly property string familyFaceDesign: root.familyDesign ? (root._designResolved.wear || DesktopWidgetDesign.faceDesign) : ""
@@ -1105,7 +1117,7 @@ AbstractWidget {
     Loader {
         id: faceLoader
         anchors.fill: parent
-        active: root.familyFaced && DesktopWidgetLook.ready
+        active: root.familyFaced && root.lookIn
         // A face answers to its own rows (Material, Opacity in iRiS Settings); Material's Opacity and Dimming are hidden
         // while a face is drawn, and a value left there from before faded it to a ghost with no row to undo it.
         opacity: 1

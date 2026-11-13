@@ -1523,6 +1523,49 @@ JsonAdapter {
             property bool enableAnimatedBlur: false // Enable blur for animated wallpapers (video/gif) - has performance impact
             property int dim: 30 // 0-100 percentage (base overlay)
             property int dynamicDim: 20 // Extra dim when there are windows on the current workspace (0-100)
+            // The wallpaper (still, GIF or video) drawn as glowing glyphs. Every key after `look` is an option of
+            // widgets/GlyphArt.js (percent where it says so); choosing a look writes the ones a look decides.
+            property JsonObject glyphs: JsonObject {
+                property bool enable: false
+                property string source: "wallpaper" // wallpaper, word, or a built-in subject (iris, planet, jelly, helix, knot, heart, crystal, amphora, mushroom)
+                property string word: ""
+                property string look: "signal"
+                property string charset: "signal" // signal, ascii, dense, dots, blocks, lines, digits, binary, custom
+                property string custom: " .oO0@#"
+                property int cell: 5 // a glyph's width in px, 5-28
+                property int strokes: 0
+                property int shimmer: 30
+                property int rain: 65
+                property bool outline: true
+                property string palette: "source" // source, theme, custom, or a palette of GlyphArt.js
+                property string c1: "#3a1c8f"
+                property string c2: "#ff5fd2"
+                property string c3: "#fff3b0"
+                property string back: "#020205"
+                property int sat: 150
+                property int contrast: 115
+                property int hue: 0 // degrees
+                property int rainbow: 0
+                property int drift: 0
+                property int glow: 60
+                property int scan: 0
+                property int grain: 30
+                property int fringe: 30
+                property int curve: 0
+                property int glitch: 0
+                property bool paper: false
+                property string mirror: "off" // off, two, four
+                property string subject: "auto" // the background: auto, none, dark, light
+                property int cut: 16
+                property bool invert: false
+                property bool motion: true // off, the picture is drawn once and nothing runs
+                property string intro: "type" // off, grow, scan, type, centre, dissolve
+                property int speed: 50
+                property bool sway: true
+                property bool camera: false
+                property bool pulse: true
+                property bool turn: true
+            }
             property JsonObject ripple: JsonObject {
                 property bool enable: false
                 property bool charging: true
@@ -1655,6 +1698,9 @@ JsonAdapter {
 
     property JsonObject display: JsonObject {
         property string primaryMonitor: ""
+        // Screens (as the compositor names them) that read every HDMI signal as limited range: Umbriel squeezes their
+        // full-range modes for them (CompositorConfig, the HDMI range).
+        property list<string> limitedRange: []
     }
 
 
@@ -2380,36 +2426,9 @@ JsonAdapter {
         property bool verbose: false
         property bool shuffleMode: false
         property int repeatMode: 0
-        property list<string> recentSearches: []
-        property list<var> queue: []
-        property list<var> playlists: []
-        property list<var> liked: []
-        property string lastLikedSync: ""
         property bool upNextNotifications: true
         property bool suppressUpNextInFullscreen: true
         property int volume: 100
-        property JsonObject profile: JsonObject {
-            property string name: ""
-            property string avatar: ""
-            property string url: ""
-        }
-        property JsonObject cache: JsonObject {
-            property list<var> playlists: []
-            property list<var> albums: []
-            property list<var> liked: []
-        }
-        property JsonObject resume: JsonObject {
-            property string videoId: ""
-            property string title: ""
-            property string artist: ""
-            property string thumbnail: ""
-            property string url: ""
-            property real position: 0
-            property bool wasPlaying: false
-            property list<var> activePlaylist: []
-            property int currentIndex: -1
-            property string activePlaylistSource: ""
-        }
     }
     property JsonObject screenTime: JsonObject {
         property bool enable: false

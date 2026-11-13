@@ -2,11 +2,13 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Dialogs
 import Quickshell
 import qs
 import qs.modules.common
 import qs.services
 import "japaneseTypography/JapaneseTypographyPresets.js" as JapanesePresets
+import "root:modules/common/widgets/GlyphArt.js" as Glyphs
 
 // Every desktop widget's options as rows: Settings and the edit sheets draw them. A widget lists its own in `options` of
 // its widget.json and a family its rows in `widgetOptions` of its plugin.json; this file adds what every widget carries
@@ -43,10 +45,18 @@ QtObject {
     }
     // Not the face (Material, iNstrument or Readout): the shared card and its plate.
     function plain(widget: string): bool { return root.on(widget) && !root.resolved(widget).face }
-    // What iNstrument or Readout lays over the widget's own keys: those rows have nothing to change while it does.
+    // What iNstrument or Readout lays over the widget's own keys, or the keys a face design draws its own way
+    // (`ignores` in its `faces` entry): those rows have nothing to change while it does.
     function overlay(widget: string): var {
         const design = root.resolved(widget)
-        return design.face ? ({}) : DesktopWidgetDesign.values(widget, design.design)
+        if (!design.face)
+            return DesktopWidgetDesign.values(widget, design.design)
+        const own = ({})
+        if (!root.faced.includes(widget))
+            return own
+        for (const key of DesktopWidgetDesign.faceDesignOf(design.wear)?.ignores ?? [])
+            own[key] = null
+        return own
     }
     function effective(widget: string, key: string, fallback: var): var {
         const over = root.overlay(widget)
@@ -77,12 +87,44 @@ QtObject {
         // `shell`: the row shows a shell key every surface reads (the weather's place), not one of the widget's own.
         if (spec.shell) spec.path = spec.shell
         const when = spec.when
-        spec.showIf = () => root.on(widget) && root.overlay(widget)[key] === undefined && (when === undefined || when())
+        // A Hub widget's own options are read by every face it has (Material's sidebars, the Island, Waffle), so they
+        // show while it is off the desktop too; its size, look and place stay with the desktop card.
+        const everyFace = widget.startsWith("custom.") && spec.page === "widget" && key !== "sizeClass"
+        spec.showIf = () => (everyFace || root.on(widget)) && root.overlay(widget)[key] === undefined && (when === undefined || when())
         delete spec.when
         return spec
     }
     function choices(list: var): var {
         return list.map(entry => ({ label: entry[1], value: entry[0], glyph: entry[2] }))
+    }
+    // The colours a `colour` row offers when its manifest lists none: nobody types a hex code.
+    readonly property var inks: Glyphs.INKS
+    // A `file` or `folder` row opens the system's chooser: nobody types a path.
+    property var _picking: null
+    readonly property FileDialog filePicker: FileDialog {
+        title: Translation.tr(String(root._picking?.label ?? ""))
+        fileMode: FileDialog.OpenFile
+        currentFolder: Directories.pictures
+        nameFilters: root._picking?.filters ?? [Translation.tr("Images and animations") + " (*.png *.jpg *.jpeg *.webp *.gif *.apng *.svg)",
+            Translation.tr("All files") + " (*)"]
+        onAccepted: if (root._picking) root.write(root._picking, root._path(selectedFile))
+    }
+    readonly property FolderDialog folderPicker: FolderDialog {
+        title: Translation.tr(String(root._picking?.label ?? ""))
+        currentFolder: Directories.pictures
+        onAccepted: if (root._picking) root.write(root._picking, root._path(selectedFolder))
+    }
+    function _path(url: var): string { return decodeURIComponent(String(url).replace(/^file:\/\//, "")) }
+    function pick(spec: var): void {
+        root._picking = spec
+        if (spec.picks === "folder") root.folderPicker.open()
+        else root.filePicker.open()
+    }
+    // What a row says under its name: a chooser's row names what was chosen.
+    function captionOf(spec: var): string {
+        if (!spec.picks) return String(spec.caption ?? "")
+        const chosen = String(root.read(spec) ?? "")
+        return chosen.length > 0 ? chosen.replace(/\/+$/, "").split("/").pop() : Translation.tr("Nothing chosen")
     }
 
     // What every widget carries: being on the desktop, its design, its plate and where it sits.
@@ -108,13 +150,14 @@ QtObject {
         ]
         out.push(...(root.familyOptions["*"] ?? []).map(option => root._row(widget, option)))
         const look = { page: "look" }
-        // A widget that draws its own card in Material (plate false) still wears the iRiS plate as a face.
-        const plated = () => root.on(widget) && (plate || root.face(widget))
+        // A widget that draws its own card in Material (plate false) still wears the family's plate under its face; one
+        // with no face of the family keeps drawing its own, and has no plate to set.
+        const plated = () => root.on(widget) && (plate || root.face(widget) && root.faced.includes(widget))
         out.push(
-            root.row(widget, "showBackground", "Background", "switch", root.plateDefault(widget), { page: "look", tune: false, when: plated,
+            root.row(widget, "showBackground", "Background", "switch", root.bareDefault(widget), { page: "look", tune: false, when: plated,
                 apply: next => root.plateValues(next, root.value(widget, "backgroundOpacity", 0.16)),
                 description: "The plate behind the widget.", keywords: ["background", "plate", "card", "surface", "fondo", "superficie"] }),
-            root.row(widget, "showBorder", "Outline", "switch", root.plateDefault(widget), { page: "look", when: plated,
+            root.row(widget, "showBorder", "Outline", "switch", root.bareDefault(widget), { page: "look", when: plated,
                 apply: next => Object.assign({ showBorder: next }, next && Number(root.value(widget, "borderOpacity", 0.08)) <= 0 ? { borderOpacity: 0.2 } : {},
                     next && Number(root.value(widget, "borderWidth", 1)) <= 0 ? { borderWidth: 1 } : {}),
                 keywords: ["outline", "border", "line", "borde"] }),
@@ -123,12 +166,18 @@ QtObject {
             root.row(widget, "borderWidth", "Outline width", "range", 1, { page: "look", tune: true, min: 0, max: 8, step: 1, unit: " px",
                 when: () => plated() && Boolean(root.value(widget, "showBorder", root.plateDefault(widget))) }))
         if (plate) out.push(
-            root.row(widget, "backgroundOpacity", "Background strength", "range", root.plateDefault(widget) ? 0.16 : 0, { page: "look", min: 0, max: 1, step: 0.02, scale: 100, unit: " %",
+            root.row(widget, "backgroundOpacity", "Background strength", "range", root.bareDefault(widget) ? 0.16 : 0, { page: "look", min: 0, max: 1, step: 0.02, scale: 100, unit: " %",
                 when: () => root.plain(widget) && Boolean(root.value(widget, "showBackground", root.plateDefault(widget))) }),
             // Settings kept these two; the edit sheet lost them when it took over the widget manager (his 10-30)
+            // A style without glass ignores the switch: no row rather than a dead one.
             root.row(widget, "useBlur", "Blur background", "switch", false, { page: "look", tune: true,
-                when: () => root.plain(widget) && Boolean(root.value(widget, "showBackground", root.plateDefault(widget))),
+                when: () => root.plain(widget) && Boolean(root.value(widget, "showBackground", root.plateDefault(widget)))
+                    && root.blurAvailable(widget),
                 keywords: ["blur", "frosted", "glass", "desenfoque"] }),
+            root.row(widget, "blurStrength", "Blur strength", "range", 100, { page: "look", tune: true, min: 0, max: 150, step: 5, unit: " %",
+                when: () => root.plain(widget) && Boolean(root.value(widget, "showBackground", root.plateDefault(widget)))
+                    && Boolean(root.value(widget, "useBlur", false)) && root.blurAvailable(widget),
+                keywords: ["blur", "frost", "glass", "strength", "desenfoque"] }),
             root.row(widget, "cornerRadius", "Corners", "range", -1, { page: "look", tune: true, min: -1, max: 48, step: 1, unit: " px", lowLabel: "Theme",
                 when: () => root.plain(widget) && (Boolean(root.value(widget, "showBackground", root.plateDefault(widget)))
                     || Boolean(root.value(widget, "showBorder", root.plateDefault(widget)))),
@@ -151,8 +200,14 @@ QtObject {
     function plateValues(on: bool, strength: var): var {
         return on && Number(strength) <= 0 ? { showBackground: true, backgroundOpacity: 0.16 } : { showBackground: on }
     }
+    // The rows are built once per registry: a fallback read there made every Settings row rebuild when the shared
+    // material changed (1.5 s frozen). Built with the bare default; `read` asks the material when it reads.
+    function bareDefault(widget: string): bool { return !(DesktopWidgetRegistry.byKey[widget]?.bare ?? false) }
+    function blurAvailable(widget: string): bool {
+        return DesktopWidgetLook.look.blurAvailable({ bare: DesktopWidgetRegistry.byKey[widget]?.bare ?? false, familyFaced: root.face(widget) })
+    }
     function plateDefault(widget: string): bool {
-        return DesktopWidgetLook.look.plateByDefault({ bare: DesktopWidgetRegistry.byKey[widget]?.bare ?? false })
+        return DesktopWidgetLook.look.plateByDefault({ bare: DesktopWidgetRegistry.byKey[widget]?.bare ?? false, familyFaced: root.face(widget) })
     }
     // Every widget at once, from its own row (so the plate still comes on with a visible strength). The state reads the
     // widgets on the desktop: one shared value, or "mixed". Background and outline mean one thing on every design.
@@ -198,15 +253,40 @@ QtObject {
         return root.opening(widget).concat([root.size(widget)], rows(root.familyOptions[widget]), rows(entry.options),
             root.closing(widget, entry.plate !== false))
     }
-    // A person's own widget: its `configKeys` as rows, the same as a manifest's options.
+    // A person's own widget: the `options` of its widget.json, the same rows a built-in widget lists (order, pages,
+    // conditions, choices, colours, choosers). One from before that only has `configKeys` gets a row per key.
     readonly property var customRows: CustomWidgets.widgets.reduce((all, entry) => all.concat(
-        Object.keys(entry.configKeys ?? {}).map(key => root._customRow("custom." + entry.id, key, entry.configKeys[key])),
-        root.closing("custom." + entry.id, true)), [])
+        root._customRows(entry), root.closing("custom." + entry.id, true)), [])
+    function _customRows(entry: var): var {
+        const widget = "custom." + entry.id
+        if ((entry.options ?? []).length > 0)
+            return [root.size(widget)].concat(entry.options.map(option => root._row(widget, Object.assign({ restorable: true }, option))), [
+                root.row(widget, "restoreDefaults", "Restore defaults", "action", undefined, { button: "Restore", page: "look",
+                    run: () => root.restore(widget), when: () => root.changed(widget),
+                    keywords: ["reset", "default", "restore", "restaurar", "predeterminado"] })])
+        return Object.keys(entry.configKeys ?? {}).map(key => root._customRow(widget, key, entry.configKeys[key]))
+    }
     function _customRow(widget: string, key: string, option: var): var {
         const number = option.type === "int" || option.type === "real"
         const ranged = number && option.min !== undefined && option.max !== undefined
-        return root.row(widget, key, option.label ?? key, option.type === "bool" ? "switch" : ranged ? "range" : "text", option.default,
-            ranged ? { min: option.min, max: option.max, step: option.step ?? (option.type === "int" ? 1 : 0.1) } : {})
+        const listed = option.type === "string" && Array.isArray(option.options) && option.options.length > 0
+        return root.row(widget, key, option.label ?? key, option.type === "bool" ? "switch" : ranged ? "range" : listed ? "choice" : "text", option.default,
+            Object.assign({ restorable: true }, ranged ? { min: option.min, max: option.max, step: option.step ?? (option.type === "int" ? 1 : 0.1) } : {},
+                listed ? { choices: option.options.map(one => typeof one === "object" ? { label: String(one.label ?? one.displayName ?? one.value), value: one.value ?? one.label }
+                    : { label: String(one), value: one }) } : {}))
+    }
+    // A person's widget back to what its manifest says, every option at once.
+    function _restorable(widget: string): var {
+        return root.customRows.filter(spec => spec.widget === widget && spec.restorable && spec.fallback !== undefined && !spec.shell)
+    }
+    function changed(widget: string): bool {
+        Config.revision
+        return root._restorable(widget).some(spec => String(root.read(spec)) !== String(spec.fallback))
+    }
+    function restore(widget: string): void {
+        const values = ({})
+        for (const spec of root._restorable(widget)) values[spec.key] = spec.fallback
+        DesktopWidgetLayout.setEverywhere(widget, values)
     }
     // A sheet's page of a widget's rows, minus the keys it draws itself.
     function sheetRows(widget: string, page: string, exclude: var): var {
@@ -220,6 +300,16 @@ QtObject {
             delete extra[field]
         if (option.choices)
             extra.choices = root.choices(option.choices)
+        // A colour is picked from swatches; a file or a folder from the system's chooser.
+        let kind = option.type
+        if (kind === "colour") {
+            kind = "choice"
+            extra.choices = (option.choices ?? root.inks).map(entry => ({ label: entry[1], value: entry[0], colour: entry[0], swatch: entry[0] }))
+        } else if (kind === "file" || kind === "folder") {
+            extra.picks = kind
+            extra.button = "Choose"
+            kind = "action"
+        }
         if (option.when !== undefined)
             extra.when = () => root.holds(widget, option.when)
         const writer = root.writers[option.write]
@@ -227,7 +317,9 @@ QtObject {
             extra.apply = next => writer(widget, option.key, next)
         else if (option.sets)
             extra.apply = next => root._sets(widget, option, next)
-        return root.row(widget, option.key, option.label, option.type, option.default, extra)
+        const spec = root.row(widget, option.key, option.label, kind, option.default, extra)
+        if (spec.picks) spec.run = () => root.pick(spec)
+        return spec
     }
     // A manifest's `when`: "face", "material", "plain", a name from its `conditions`, { key: value or values }, { key:
     // { above: n } }, { key: { is: value, otherwise: value while unset } }, a list (all of them), { any: [...] }, { not: ... },
@@ -241,14 +333,14 @@ QtObject {
             if (when === "face") return root.face(widget)
             if (when === "material") return root.material(widget)
             if (when === "plain") return root.plain(widget)
-            return root.holds(widget, DesktopWidgetRegistry.byKey[widget]?.conditions?.[when])
+            return root.holds(widget, (DesktopWidgetRegistry.byKey[widget] ?? DesktopWidgetRegistry.customEntry(widget))?.conditions?.[when])
         }
         if (when.any)
             return when.any.some(part => root.holds(widget, part))
         if (when.not !== undefined)
             return !root.holds(widget, when.not)
         if (when.wears !== undefined)
-            return root.face(widget) && [].concat(when.wears).includes(root.resolved(widget).wear)
+            return root.face(widget) && root.faced.includes(widget) && [].concat(when.wears).includes(root.resolved(widget).wear)
         if (when.widget !== undefined)
             return [].concat(when.widget).includes(widget)
         return Object.keys(when).every(key => {
@@ -271,6 +363,9 @@ QtObject {
             return DesktopWidgetRegistry.sizesOf(widget)[0]
         if (key === "showBackground" || key === "showBorder")
             return root.plateDefault(widget)
+        const custom = widget.startsWith("custom.") ? DesktopWidgetRegistry.customEntry(widget) : null
+        if (custom)
+            return (custom.options ?? []).find(row => row.key === key)?.default ?? custom.configKeys?.[key]?.default ?? custom.defaultConfig?.[key]
         const entry = DesktopWidgetRegistry.byKey[widget]
         const option = (entry?.options ?? []).concat(root.familyOptions[widget] ?? []).find(row => row.key === key)
         return option ? option.default : entry?.defaultConfig?.[key]
@@ -305,7 +400,9 @@ QtObject {
         if (spec.shell) return Config.getNestedValue(spec.shell, spec.fallback)
         if (spec.key === "sizeClass")
             return root.value(spec.widget, "sizeClass", undefined) ?? DesktopWidgetStacks.reported[spec.widget]?.size ?? spec.fallback
-        return root.value(spec.widget, spec.key, spec.key === "showBackground" ? root.plateDefault(spec.widget) : spec.fallback)
+        const plate = ["showBackground", "showBorder"].includes(spec.key) ? root.plateDefault(spec.widget)
+            : spec.key === "backgroundOpacity" ? (root.plateDefault(spec.widget) ? 0.16 : 0) : spec.fallback
+        return root.value(spec.widget, spec.key, plate)
     }
     function write(spec: var, next: var): void {
         if (spec.widgetEnable) { DesktopWidgetLayout.setGloballyEnabled(spec.widget, Boolean(next)); return }

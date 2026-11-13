@@ -65,7 +65,11 @@ Singleton {
     // Extra mascots are the mascot; a person's own widget says its sizes in its manifest, or keeps the size it draws.
     function defaultsOf(key: string): var { return root.byKey[root.baseKey(key)]?.defaultConfig ?? ({}) }
     function baseKey(key: string): string { return String(key).startsWith("mascotInstances.") ? "mascot" : key }
-    function sizesOf(key: string): var { return root.byKey[root.baseKey(key)]?.sizes ?? [] }
+    function sizesOf(key: string): var {
+        if (String(key).startsWith("custom."))
+            return root.customEntry(key)?.sizes ?? []
+        return root.byKey[root.baseKey(key)]?.sizes ?? []
+    }
 
     readonly property var keys: root.entries.map(entry => entry.key)
     readonly property var byKey: root.entries.reduce((all, entry) => { all[entry.key] = entry; return all }, ({}))
@@ -91,6 +95,10 @@ Singleton {
     function nameOf(key: string): string { return root.byKey[key]?.name ?? key }
     // What people call it, on every sheet, tag and shelf.
     function customEntry(key: string): var { return CustomWidgets.widgets.find(widget => "custom." + widget.id === key) ?? null }
+    // A hub widget's own drawing for one of the active family's widget designs (`desktop` in its manifest).
+    function customFace(key: string, design: string): string {
+        return design.length > 0 && String(key).startsWith("custom.") ? root.customEntry(key)?.faces?.[Plugins.active]?.desktop?.[design] ?? "" : ""
+    }
     function displayName(key: string): string {
         if (key.startsWith("custom."))
             return root.customEntry(key)?.name ?? key.slice(7)
@@ -102,5 +110,11 @@ Singleton {
     function glyph(key: string): string { return root.byKey[key]?.icon ?? "widgets" }
     function keywordsOf(key: string): string { return root.byKey[key]?.keywords ?? "" }
     function categoryOf(key: string): string { return root.byKey[key]?.category ?? "decor" }
+    // A hub widget's aisle from its manifest (the hub says "time" where the shelf says "today").
+    function customCategory(custom: var): string {
+        const said = String(custom?.category ?? "") === "time" ? "today" : String(custom?.category ?? "")
+        return root.categoryOrder.includes(said) ? said : "decor"
+    }
+    function customWords(custom: var): string { return ["hub", custom?.id ?? "", custom?.category ?? "", custom?.description ?? ""].join(" ") }
     function tint(key: string): string { return root.byKey[key]?.tint ?? (key.startsWith("custom.") ? root.customTint : root.fallbackTint) }
 }

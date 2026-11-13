@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generated from the /// comments on each QML IpcHandler; edit those, then run the IPC registry generator.
-# Targets: 79
+# Targets: 80
 
 declare -gA IPC_TARGET_DESC=(
   [ai]="Shared multi-provider AI service. It supports Gemini, OpenAI-compatible chat and Responses APIs, Mistral and Anthropic; live provider catalogs are normalized into capability-aware model records. Catalog visibility is separate from execution readiness, so public model lists remain browseable without pretending an API key exists. OpenCode Zen and Go resolve their current model lists and per-model API routes dynamically. Normal shell tools use typed actions and approval cards, while arbitrary commands are isolated in Advanced mode."
@@ -56,6 +56,7 @@ declare -gA IPC_TARGET_DESC=(
   [privacy]="Who is using the microphone, the camera or the screen (PipeWire links, V4L2, niri screencasts). \`simulate\` lets you see the marks without one."
   [recordingOsd]="Screen recording floating pill OSD. Shows elapsed time and stop button during active recording."
   [region]="Region selection tools. Screenshots, OCR, recording. Draw a box, get stuff done."
+  [scratchpad]="Umbriel's scratchpad: windows set aside, hidden until shown over whatever workspace is in front."
   [search]="Waffle start menu / search."
   [session]="Power menu. Logout, suspend, reboot, shutdown. The \"I'm done for today\" buttons."
   [settings]="Open or toggle the settings window. GUI config so you don't have to edit JSON by hand."
@@ -138,6 +139,7 @@ declare -gA IPC_TARGET_FAMILY=(
   [privacy]="shared"
   [recordingOsd]="shared"
   [region]="shared"
+  [scratchpad]="shared"
   [search]="shared"
   [session]="shared"
   [settings]="shared"
@@ -193,7 +195,7 @@ declare -gA IPC_TARGET_FUNCTIONS=(
   [globalActions]="run runWithArgs list search open"
   [globalStyle]="set get list"
   [hub]="refresh install remove update use openItem status changed"
-  [iris]="open page close shelf toggle card theme settings settingsClose bubble dock dockApp dockMove appBubble focus today controlCenter pin layout strip edge dockEdge zone barPiece arrange edit studio notch surround accent spotlight gallerySource orbit orbitCorner orbitClose spotlightClose bubbleCard tap bubbleMenu morph activity activities set adaptive tokens options preview proof palette preset icon control lock utility watch watchPick desktopAction desktopMenu menuClose watchSubs watchSeek watchSkip motion motioned status"
+  [iris]="open page togglePage close shelf toggle card theme settings settingsClose bubble dock dockApp dockMove appBubble focus today controlCenter pin layout strip edge dockEdge zone barPiece arrange edit studio notch surround accent spotlight gallerySource orbit orbitCorner orbitClose spotlightClose bubbleCard tap bubbleMenu morph activity activities set adaptive tokens options preview proof palette preset icon control lock utility watch watchPick desktopAction desktopMenu menuClose watchSubs watchSeek watchSkip motion motioned status"
   [irisDev]="dragSim dropBubble dropSim notice dockSlide"
   [keyboard]="switchLayout switchLayoutPrevious getCurrentLayout getLayouts"
   [livePins]="list supported frame pin remove clear place onTop move resize activate"
@@ -220,6 +222,7 @@ declare -gA IPC_TARGET_FUNCTIONS=(
   [privacy]="status simulate"
   [recordingOsd]="toggle show hide"
   [region]="screenshot search googleLens ocr record recordWithSound menu pin dismiss current"
+  [scratchpad]="toggle send restore list"
   [search]="toggle close open"
   [session]="toggle close open"
   [settings]="open toggle openOverlay openOverlayAt openWindowAt setOverlayStyle"
@@ -307,7 +310,7 @@ declare -gA IPC_FUNCTION_DESC=(
   ["background:arrangeWidget"]="Move a widget on the focused screen to x, y as a drop would place it: lined up with the widgets around and off any it would cover. With \`probe\` true it only reports where it would land, as JSON"
   ["background:promoteWidget"]="Move a desktop widget to the top of the persistent layer order"
   ["background:resetLayerOrder"]="Reset desktop widgets to their built-in stacking order"
-  ["background:setWidgetEnabled"]="Enable or disable a built-in desktop widget"
+  ["background:setWidgetEnabled"]="Enable or disable a desktop widget: a built-in one by its key, a hub one as \`custom.<id>\`"
   ["bar:mediaWidth"]="How wide the song title gets in the active family's bar, 120 to 640 px (the window title gives way); empty to read it"
   ["bar:toggle"]="Show/hide bar"
   ["bar:close"]="Hide bar"
@@ -391,6 +394,7 @@ declare -gA IPC_FUNCTION_DESC=(
   ["hub:changed"]="Something was installed outside the shell: reload \`widget\`, \`theme\`, \`iris-theme\`, \`webapp\` or \`all\`"
   ["iris:open"]="Expand the island on the focused output"
   ["iris:page"]="Expand the island on a page: \`media\`, \`activity\`, \`desktop\`, \`tray\` or \`tools\`, or step through its navigation with \`next\` / \`prev\` (the same path as scrolling over the navigation row)"
+  ["iris:togglePage"]="One key for a page: expand the island on it, or collapse the island when that page already shows \`\`\`kdl Mod+S { spawn \"inir\" \"iris\" \"togglePage\" \"desktop\"; } \`\`\`"
   ["iris:close"]="Collapse the island"
   ["iris:shelf"]="\`open\`, \`close\` or \`toggle\` the Island's Shelf page (open on another page counts as closed)"
   ["iris:toggle"]="Expand or collapse the island on the focused output"
@@ -580,6 +584,10 @@ declare -gA IPC_FUNCTION_DESC=(
   ["region:pin"]="Pin part of a window live: pick the window, drag over the part to keep (qs-rs on niri)"
   ["region:dismiss"]="Close the selector overlay"
   ["region:current"]="Return the selector state (open/action/mode) as JSON"
+  ["scratchpad:toggle"]="Show or hide the scratchpad"
+  ["scratchpad:send"]="Send the focused window to the scratchpad"
+  ["scratchpad:restore"]="Return a scratchpad window to the workspace it came from (0 for the focused one)"
+  ["scratchpad:list"]="The windows in the scratchpad (JSON array of id, app_id, title, scratchpad, visible)"
   ["search:toggle"]="Open/close start menu"
   ["search:close"]="Close start menu"
   ["search:open"]="Open start menu"
@@ -777,6 +785,7 @@ declare -gA IPC_FUNCTION_ARGS=(
   ["hub:openItem"]="<id>"
   ["hub:changed"]="<kind>"
   ["iris:page"]="<name>"
+  ["iris:togglePage"]="<name>"
   ["iris:shelf"]="<action>"
   ["iris:card"]="<action>"
   ["iris:theme"]="<action>"
@@ -865,6 +874,7 @@ declare -gA IPC_FUNCTION_ARGS=(
   ["pill:open"]="<surface>"
   ["pill:toggle"]="<surface>"
   ["privacy:simulate"]="<spec>"
+  ["scratchpad:restore"]="<windowId>"
   ["settings:openOverlayAt"]="<index>"
   ["settings:openWindowAt"]="<index>"
   ["settings:setOverlayStyle"]="<style> <index>"
@@ -915,6 +925,7 @@ declare -gA IPC_FUNCTION_VALUES=(
   ["background:sizeWidget"]="small medium large"
   ["background:widgetOptionSet"]="true"
   ["background:arrangeWidget"]="probe"
+  ["background:setWidgetEnabled"]="custom."
   ["battery:simulate"]="full off"
   ["bluetooth:simulate"]="off on none clear"
   ["colorMode:set"]="dark light toggle"
@@ -1025,6 +1036,7 @@ Mod+Alt+P { spawn "inir" "mpris" "previous"; }'
 Super+Shift+X { spawn "inir" "region" "ocr"; }
 Super+Shift+A { spawn "inir" "region" "search"; }
 Ctrl+Shift+S { spawn "inir" "region" "menu"; }'
+  [scratchpad]='Mod+Grave { spawn "inir" "scratchpad" "toggle"; }'
   [session]='Super+Shift+E { spawn "inir" "session" "toggle"; }'
   [settings]='Super+Comma { spawn "inir" "settings"; }'
   [shellLayout]='Super+W { spawn "inir" "shellLayout" "toggle"; }'
@@ -1037,8 +1049,8 @@ Ctrl+Alt+A { spawn "inir" "wallpaperSelector" "openLauncher" "animated"; }'
   [ytmusic]='Mod+M+Space { spawn "inir" "ytmusic" "playPause"; }'
 )
 
-IPC_ALL_TARGETS=(ai altSwitcher appCatalog audio autostart background bar battery bluetooth brightness cheatsheet clipboard cliphistService closeConfirm colorMode connections controlPanel coverflowSelector customWidgets dashboard dev equalizer gamemode globalActions globalStyle hub iris irisDev keyboard livePins lock loginScreen mascot mascotMood mediaControls memory minimize mpris network niriAnimations notifications orbit osd osdVolume osk overlay overview packageSearch panelFamily pill privacy recordingOsd region search session settings settingsNav shellLayout shellUpdate sidebarLeft sidebarRight taskview tiling timer undo voiceSearch vpn wactionCenter waffleAltSwitcher wallpaperLauncher wallpaperSelector wbar widgetStacks widgetpower wnotificationCenter workspaceStrip wwidgets ytmusic zoom)
-IPC_SHARED_TARGETS=(ai altSwitcher appCatalog audio autostart background bar battery bluetooth brightness cheatsheet clipboard cliphistService closeConfirm colorMode connections controlPanel coverflowSelector customWidgets dashboard dev gamemode globalActions globalStyle hub keyboard livePins lock loginScreen mascot mascotMood mediaControls memory minimize mpris network niriAnimations notifications orbit osd osdVolume osk overlay overview packageSearch panelFamily privacy recordingOsd region search session settings settingsNav shellLayout shellUpdate sidebarLeft sidebarRight taskview tiling timer undo voiceSearch vpn wallpaperLauncher wallpaperSelector widgetStacks widgetpower workspaceStrip ytmusic zoom)
+IPC_ALL_TARGETS=(ai altSwitcher appCatalog audio autostart background bar battery bluetooth brightness cheatsheet clipboard cliphistService closeConfirm colorMode connections controlPanel coverflowSelector customWidgets dashboard dev equalizer gamemode globalActions globalStyle hub iris irisDev keyboard livePins lock loginScreen mascot mascotMood mediaControls memory minimize mpris network niriAnimations notifications orbit osd osdVolume osk overlay overview packageSearch panelFamily pill privacy recordingOsd region scratchpad search session settings settingsNav shellLayout shellUpdate sidebarLeft sidebarRight taskview tiling timer undo voiceSearch vpn wactionCenter waffleAltSwitcher wallpaperLauncher wallpaperSelector wbar widgetStacks widgetpower wnotificationCenter workspaceStrip wwidgets ytmusic zoom)
+IPC_SHARED_TARGETS=(ai altSwitcher appCatalog audio autostart background bar battery bluetooth brightness cheatsheet clipboard cliphistService closeConfirm colorMode connections controlPanel coverflowSelector customWidgets dashboard dev gamemode globalActions globalStyle hub keyboard livePins lock loginScreen mascot mascotMood mediaControls memory minimize mpris network niriAnimations notifications orbit osd osdVolume osk overlay overview packageSearch panelFamily privacy recordingOsd region scratchpad search session settings settingsNav shellLayout shellUpdate sidebarLeft sidebarRight taskview tiling timer undo voiceSearch vpn wallpaperLauncher wallpaperSelector widgetStacks widgetpower workspaceStrip ytmusic zoom)
 IPC_II_TARGETS=(equalizer pill)
 IPC_WAFFLE_TARGETS=(wactionCenter waffleAltSwitcher wbar wnotificationCenter wwidgets)
 IPC_IRIS_TARGETS=(iris irisDev)

@@ -101,7 +101,8 @@ compositor_umbriel_session_start() {
 }
 
 # ── Umbriel's config ──────────────────────────────────────────────────────────────────────────────────────────────
-# Puts iNiR's Umbriel config (defaults/umbriel) in ~/.config/umbriel. A file of ours the person never changed is
+# Puts iNiR's Umbriel config (defaults/umbriel: config.toml and config.d; effects/ is read from the shell's own
+# folder, never installed) in ~/.config/umbriel. A file of ours the person never changed is
 # refreshed; one they changed is kept (`.inir-sums` remembers what we wrote); config.d/90-user-extra.toml is theirs
 # and only created. A config.toml that is not iNiR's is their own setup: nothing is touched. The one the early
 # iNiR-Umbriel port wrote ("# iNiR defaults for Umbriel") no longer loads in today's Umbriel: it is moved aside
@@ -149,7 +150,7 @@ compositor_install_umbriel_config() {
         cp -f "$src/$rel" "$dest/$rel" || return 1
         new_sums+="$want $rel"$'\n'
         changed=true
-    done < <(cd "$src" && find . -type f -name '*.toml' ! -name '90-user-extra.toml' | sed 's|^\./||' | sort)
+    done < <(cd "$src" && find config.toml config.d -type f -name '*.toml' ! -name '90-user-extra.toml' | sort)
     if [[ ! -f "$dest/config.d/90-user-extra.toml" && -f "$src/config.d/90-user-extra.toml" ]]; then
         cp "$src/config.d/90-user-extra.toml" "$dest/config.d/90-user-extra.toml" || return 1
     fi
@@ -184,7 +185,14 @@ compositor_install_umbriel_package() {
         echo "Umbriel is in the AUR (umbriel-git); install paru or yay, or see $guide" >&2
         return 1
     fi
-    if command -v dnf >/dev/null 2>&1 && dnf repolist 2>/dev/null | grep -qi terra; then
+    if command -v dnf >/dev/null 2>&1; then
+        # Umbriel's Fedora builds live in Terra (Fyra Labs); added the way Terra's docs say, its key checked
+        if ! dnf repolist 2>/dev/null | grep -qi terra; then
+            echo "Umbriel comes from Terra, Fyra Labs' repository: adding it" >&2
+            sudo dnf install -y --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' \
+                --setopt='terra.gpgkey=https://repos.fyralabs.com/terra$releasever/key.asc' terra-release \
+                || { echo "Could not add Terra; see $guide" >&2; return 1; }
+        fi
         sudo dnf install -y umbriel-nightly && return 0
         return 1
     fi

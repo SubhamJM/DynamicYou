@@ -24,9 +24,14 @@ Item {
     property int decodeHeight: -1
     readonly property int _decodeHeight: root.decodeHeight >= 0 ? root.decodeHeight
         : Math.ceil(root.height * (root.Window.window?.devicePixelRatio ?? 1))
+    // Decoded no faster than this; 0 keeps the copy's own rate.
+    property int decodeFps: 0
+    // On, `frameShown()` comes with every frame the shown slot gets, for a reader that keeps pace with the video.
+    property bool reportFrames: false
+    signal frameShown()
     // An auto-sized player waits for its size instead of opening the full file first.
     readonly property string playbackSource: !root.source || (root.decodeHeight < 0 && root.height <= 0) ? ""
-        : Wallpapers.videoPlaybackPath(root.source, root._decodeHeight)
+        : Wallpapers.videoPlaybackPath(root.source, root._decodeHeight, root.decodeFps)
     property int fillMode: VideoOutput.PreserveAspectCrop
     property bool shouldPlay: true
     property bool enableTransitions: true
@@ -34,6 +39,18 @@ Item {
 
     readonly property int effectiveDuration: (root.enableTransitions && Appearance.animationsEnabled)
         ? Appearance.calcEffectiveDuration(root.transitionBaseDuration) : 0
+
+    // A loop never cuts: a little before the end the same file starts again in the other slot and the two blend.
+    // Off, or for a clip too short to blend, the player loops by itself.
+    property bool seamlessLoop: true
+    readonly property int loopBlend: Appearance.animationsEnabled ? 1100 : 0
+    property bool _relapping: false
+    readonly property int _fade: root._relapping ? root.loopBlend : root.effectiveDuration
+    // While frames are reported and it plays, the blend steps with the shown slot's frames: an opacity animation ran
+    // at the display's rate (75 frames a second for every loop's blend) under glyphs that read it fifteen times a second.
+    readonly property bool _paced: root.reportFrames && root.shouldPlay && Appearance.animationsEnabled
+    property real _blend: 1
+    property double _swapAt: 0
 
     property int activeSlot: 0
     property string _loadingSource: ""
@@ -80,6 +97,7 @@ Item {
 
     function _applySource(): void {
         const next = root._normalized(root.playbackSource)
+        root._relapping = false
         if (!next) {
             root._cancelPendingLoad()
             playerA.source = ""
@@ -113,6 +131,28 @@ Item {
         root._syncPlayback()
     }
 
+    // The end is near: the same file opens in the hidden slot, and the usual swap blends into it.
+    function _relap(): void {
+        const active = root._activePlayer()
+        if (root._loadingSource || !String(active.source)) return
+        root._relapping = true
+        root._loadingSource = String(active.source)
+        root._inactivePlayer().source = root._loadingSource
+        root._syncPlayback()
+    }
+
+    // Two looks a second at where the film is, only while it plays; the lead covers opening the file.
+    Timer {
+        interval: 500
+        repeat: true
+        running: root.seamlessLoop && root.shouldPlay && root.loopBlend > 0 && root.hasFrame && root.visible
+        onTriggered: {
+            const active = root._activePlayer()
+            if (active.duration < 6000 || root._loadingSource || cleanupTimer.running) return
+            if (active.duration - active.position <= root.loopBlend + 900) root._relap()
+        }
+    }
+
     // Called by a slot once it can actually show a frame.
     function _slotReady(slotIndex: int, slotSource: string): void {
         if (!root._loadingSource || String(slotSource) !== root._loadingSource)
@@ -120,6 +160,8 @@ Item {
         if (slotIndex === root.activeSlot)
             return
         root._loadingSource = ""
+        root._swapAt = Date.now()
+        root._blend = root._fade > 0 ? 0 : 1
         root.activeSlot = slotIndex
         root._syncPlayback()
         cleanupTimer.restart()
@@ -160,12 +202,14 @@ Item {
     // Release the slot that finished fading out so it stops decoding.
     Timer {
         id: cleanupTimer
-        interval: Math.max(root.effectiveDuration, 1) + 80
+        interval: Math.max(root._fade, 1) + 80
         onTriggered: {
             const stale = root._inactivePlayer()
             if (root._loadingSource && String(stale.source) === root._loadingSource)
                 return
+            root._blend = 1
             stale.source = ""
+            root._relapping = false
         }
     }
 
@@ -174,11 +218,11 @@ Item {
         anchors.fill: parent
         fillMode: root.fillMode
         visible: opacity > 0
-        opacity: root.activeSlot === 0 ? 1 : 0
+        opacity: root.activeSlot === 0 ? (root._paced ? root._blend : 1) : (root._paced ? 1 - root._blend : 0)
         Behavior on opacity {
-            enabled: Appearance.animationsEnabled
+            enabled: Appearance.animationsEnabled && !root._paced
             NumberAnimation {
-                duration: root.effectiveDuration
+                duration: root._fade
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.standard
             }
@@ -190,11 +234,11 @@ Item {
         anchors.fill: parent
         fillMode: root.fillMode
         visible: opacity > 0
-        opacity: root.activeSlot === 1 ? 1 : 0
+        opacity: root.activeSlot === 1 ? (root._paced ? root._blend : 1) : (root._paced ? 1 - root._blend : 0)
         Behavior on opacity {
-            enabled: Appearance.animationsEnabled
+            enabled: Appearance.animationsEnabled && !root._paced
             NumberAnimation {
-                duration: root.effectiveDuration
+                duration: root._fade
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.standard
             }
@@ -218,6 +262,16 @@ Item {
             const size = outputB.videoSink.videoSize
             if (size.width > 0 && size.height > 0)
                 root._handleFrame(1, playerB)
+        }
+    }
+
+    Connections {
+        target: root.activeSlot === 0 ? outputA.videoSink : outputB.videoSink
+        enabled: root.reportFrames
+        function onVideoFrameChanged(): void {
+            if (root._blend < 1)
+                root._blend = Math.min(1, (Date.now() - root._swapAt) / Math.max(1, root._fade))
+            root.frameShown()
         }
     }
 

@@ -22,6 +22,16 @@ Singleton {
     property int _generation: 0
 
     Component.onCompleted: _scan()
+
+    // A widget's service (widget.json "service": its state and IPC) lives while the widget is installed, not only
+    // while one of its faces shows: a keybind reaches the radio with no face on screen.
+    Instantiator {
+        model: root.widgets.filter(w => w.servicePath.length > 0)
+        delegate: Loader {
+            required property var modelData
+            source: modelData.servicePath
+        }
+    }
     Connections {
         target: Config
         function onReadyChanged() {
@@ -93,13 +103,21 @@ Singleton {
                     console.warn("[CustomWidgets]", warnings.join("; "));
                 const qmlFile = m.main || (entry.id.charAt(0).toUpperCase() + entry.id.slice(1) + ".qml");
                 const load = entry.load || entry.dir;
-                // A face per family, under the family's id: { main, slots }.
+                // A face per family, under the family's id: { main, slots, desktop }, `main` or `desktop` at least. `desktop` names the widget's own
+                // drawing for each of that family's widget designs ({ "<design>": "File.qml" }): worn on the desktop
+                // in place of `main`'s card while the person has that design.
                 const faces = {};
                 for (const key of Object.keys(m)) {
                     const face = m[key];
                     const file = face && typeof face === "object" && typeof face.main === "string" ? face.main.trim() : "";
-                    if (file.length > 0)
-                        faces[key] = { path: `file://${load}/${file}`, slots: Array.isArray(face.slots) ? face.slots : [] };
+                    const desktop = {};
+                    const drawn = face && typeof face === "object" && !Array.isArray(face) && face.desktop && typeof face.desktop === "object" ? face.desktop : {};
+                    for (const design of Object.keys(drawn)) {
+                        if (typeof drawn[design] === "string" && drawn[design].trim().length > 0)
+                            desktop[design] = `file://${load}/${drawn[design].trim()}`;
+                    }
+                    if (file.length > 0 || Object.keys(desktop).length > 0)
+                        faces[key] = { path: file.length > 0 ? `file://${load}/${file}` : "", slots: Array.isArray(face.slots) ? face.slots : [], desktop: desktop };
                 }
                 result.push({
                     id: entry.id,
@@ -110,16 +128,23 @@ Singleton {
                     description: m.description || "",
                     category: m.category || "",
                     qmlPath: `file://${load}/${qmlFile}`,
+                    servicePath: typeof m.service === "string" && m.service.trim().length > 0 ? `file://${load}/${m.service.trim()}` : "",
                     faces: faces,
                     dirPath: entry.dir,
                     configKeys: m.configKeys || {},
+                    options: Array.isArray(m.options) ? m.options : [],
+                    conditions: m.conditions || {},
                     resizableAxes: m.resizableAxes || {},
                     defaultSize: m.defaultSize || { width: 200, height: 100 },
+                    sizes: Array.isArray(m.sizes) ? m.sizes : [],
                     defaultConfig: m.defaultConfig || {},
                     valid: warnings.length === 0,
                     warnings: warnings
                 });
             }
+            // Ready before the list: a widget's copy from the last load (a singleton holding its IPC) sees itself
+            // gone and steps aside before the new copy registers the same target.
+            root._scanDone = true;
             root.widgets = result;
         } catch (e) {
             console.warn("[CustomWidgets] Failed to parse manifests:", e);
@@ -174,6 +199,8 @@ Singleton {
         const configKeys = widget.configKeys || {};
         for (const key in configKeys)
             defaults[key] = root._defaultForSpec(configKeys[key]);
+        for (const option of widget.options || [])
+            if (option.key && option.default !== undefined && !option.shell) defaults[option.key] = option.default;
         return defaults;
     }
 

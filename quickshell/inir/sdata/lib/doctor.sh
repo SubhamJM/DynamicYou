@@ -908,7 +908,7 @@ _try_install_font_package() {
                 "https://raw.githubusercontent.com/google/material-design-icons/master/variablefont/MaterialSymbols${glyph_set}%5BFILL%2CGRAD%2Copsz%2Cwght%5D.ttf" 2>/dev/null
             ;;
         "JetBrainsMono Nerd Font")
-            local tmp_nf="/tmp/nerdfonts-$$"
+            local tmp_nf="${TMPDIR:-/tmp}/nerdfonts-$$"
             mkdir -p "$tmp_nf"
             if curl -fsSL -o "$tmp_nf/JetBrainsMono.zip" \
                 "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" 2>/dev/null; then
@@ -919,7 +919,7 @@ _try_install_font_package() {
             rm -rf "$tmp_nf"
             ;;
         "Roboto Flex")
-            local tmp="/tmp/roboto-flex-$$"
+            local tmp="${TMPDIR:-/tmp}/roboto-flex-$$"
             mkdir -p "$tmp"
             if curl -fsSL -o "$tmp/roboto-flex.zip" \
                 "https://github.com/googlefonts/roboto-flex/releases/download/3.200/roboto-flex-fonts.zip" 2>/dev/null; then
@@ -1461,7 +1461,7 @@ check_quickshell_loads() {
     echo -e "${STY_FAINT}Starting quickshell...${STY_RST}"
     
     # Start in background and capture initial output
-    local logfile="/tmp/qs-doctor-$$.log"
+    local logfile="${TMPDIR:-/tmp}/qs-doctor-$$.log"
     nohup "$qs_bin" -p "$target" >"$logfile" 2>&1 &
     local qs_pid=$!
     disown
@@ -1616,8 +1616,7 @@ check_conflicting_services() {
 }
 
 check_conflicting_shells() {
-    # Quickshell-based shells that conflict with iNiR at the package level.
-    # These provide/replace quickshell or own overlapping config paths.
+    # Other Quickshell-based shells.
     local shell_pkgs=(
         "cachyos-niri-noctalia"
         "noctalia-shell"
@@ -1644,11 +1643,11 @@ check_conflicting_shells() {
         return 0
     fi
 
+    # They can stay: iNiR runs on its own runtime and config; only two shells in one session clash.
     if [[ ${#found[@]} -gt 0 ]]; then
-        doctor_fail "Conflicting Quickshell shells installed: ${found[*]}"
-        echo -e "    ${STY_FAINT}These must be removed for iNiR to work. Run: ./setup install${STY_RST}"
+        doctor_pass "Other shells installed: ${found[*]} (fine; don't start them in iNiR's session)"
     else
-        doctor_pass "No conflicting Quickshell shells"
+        doctor_pass "No other Quickshell shells"
     fi
 }
 
@@ -2004,7 +2003,7 @@ run_doctor_with_fixes() {
     _doctor_run_step 18 $total_steps "Checking theme colors"         check_matugen_colors
     _doctor_run_step 19 $total_steps "Checking Qt theming"           check_qt_theming
     _doctor_run_step 20 $total_steps "Checking conflicting services" check_conflicting_services
-    _doctor_run_step 21 $total_steps "Checking conflicting shells"   check_conflicting_shells
+    _doctor_run_step 21 $total_steps "Checking other shells"         check_conflicting_shells
     _doctor_run_step 22 $total_steps "Checking wallpaper health"     check_wallpaper_health
     _doctor_run_step 23 $total_steps "Checking environment variables" check_environment_vars
     _doctor_run_step 24 $total_steps "Checking Niri config"          check_niri_config

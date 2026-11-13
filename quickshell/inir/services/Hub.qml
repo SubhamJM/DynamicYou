@@ -111,7 +111,9 @@ Singleton {
     }
     // Whether an item does something in the family that is showing it.
     function fits(item: var, family: string): bool {
-        return Array.from(item?.families ?? []).includes(family)
+        // None listed is every family (a component: the hub's check asks to leave it out).
+        const families = Array.from(item?.families ?? [])
+        return families.length === 0 || families.includes(family)
     }
 
     // What a page lists: one kind or all ("" ), a search over name, summary, tags and authors,
@@ -173,7 +175,8 @@ Singleton {
     }
     function familyNames(item: var): string {
         const names = { material: "Material", iris: "iRiS", waffle: "Waffle" }
-        return Array.from(item?.families ?? []).map(family => names[family] ?? family).join(" · ")
+        const families = Array.from(item?.families ?? [])
+        return (families.length > 0 ? families : Object.keys(names)).map(family => names[family] ?? family).join(" · ")
     }
     // Where it shows once installed, in the family that is looking.
     function whereText(item: var, family: string): string {
@@ -184,12 +187,16 @@ Singleton {
             return family === "iris" ? Translation.tr("Works in Material and Waffle") : Translation.tr("Colours the shell and your apps")
         if (item.kind === "iris-theme" || item.kind === "design")
             return family === "iris" ? Translation.tr("Redesigns iRiS") : Translation.tr("Works in iRiS")
+        if (item.kind === "component")
+            return Translation.tr("Works in Material, iRiS and Waffle")
         if (item.kind === "webapp")
             return family === "material" ? Translation.tr("Opens in the left sidebar") : Translation.tr("Works in Material")
         if (family === "iris" && surfaces.includes("island"))
             return Translation.tr("Shows on the Island")
         if (family === "waffle")
             return surfaces.includes("waffle-widgets") ? Translation.tr("Shows in the Widgets panel") : Translation.tr("Has no Waffle card yet")
+        if (family === "material" && surfaces.includes("sidebar"))
+            return surfaces.includes("desktop") ? Translation.tr("Shows on your desktop and in the sidebars") : Translation.tr("Shows in the sidebars")
         return Translation.tr("Shows on your desktop")
     }
     function votes(item: var): int {
@@ -466,7 +473,12 @@ Singleton {
             return
         root._current = root._queue[0]
         root._queue = root._queue.slice(1)
-        actionProcess.command = [root.launcher, "hub", root._current.verb, root._current.id, "--json"]
+        const command = [root.launcher, "hub", root._current.verb, root._current.id, "--json"]
+        // A plugin with its own choices undoes what they did before it goes (`run leave`: the person's files back).
+        const script = root._current.verb === "remove" ? Plugins.path(root._current.id, String(Plugins.manifests[root._current.id]?.choices?.run ?? "")) : ""
+        actionProcess.command = script.length > 0
+            ? ["bash", "-c", 'bash "$1" leave >/dev/null 2>&1; shift; exec "$@"', "inir-hub-leave", script].concat(command)
+            : command
         actionProcess.running = true
     }
     function _finish(job: var, reply: var): void {
@@ -523,7 +535,8 @@ Singleton {
     }
 
     // A plugin's own choices (plugin.json `choices`: { title, run }): its script prints them as [{ id, label, on }]
-    // (`run list`) and flips one (`run toggle <id>`); every family's Hub page draws them as chips under it.
+    // (`run list`) and flips one (`run toggle <id>`); every family's Hub page draws them as chips under it, one with
+    // `lead: true` as a switch with its `note`. `run leave` runs before the Hub removes the plugin.
     property var choices: ({})
     function choicesTitle(item: var): string {
         return item?.installed ? String(Plugins.manifests[item.id]?.choices?.title ?? "") : ""

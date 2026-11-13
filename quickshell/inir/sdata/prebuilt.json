@@ -2,34 +2,34 @@
   "manifest": "https://inir.space/releases/manifest.json",
   "fallback": "https://github.com/snowarch/{repo}/releases/download/v{version}/{file}",
   "cli": {
-    "version": "0.2.11",
+    "version": "0.2.13",
     "sha256": {
-      "amd64": "16352420424621b48e87f4095222917181d7f41f12dcf2f56a21eaf760ebc756",
-      "arm64": "07c8fc7bb0dd88dd32764672a0f71ba3021008e79dbb417f5427275f2119e110"
+      "amd64": "4e93b9e19621ef4215dcc0ac1a5a25862cbb0a3bf6b70479dfe36cfe6f488481",
+      "arm64": "10370fddd6fbb16fff1af2c2de140a5f869e6325e5a6204d916fc7b2cce82708"
     }
   },
   "parts": {
     "qs-rs": {
       "repo": "qs-rs",
       "dest": "runtime",
-      "version": "0.1.4",
-      "file": "qs-rs-0.1.4-x86_64.tar.gz",
-      "sha256": "8b124b74b234b63c110a9dcad78618db26fa24eaa9326af3ec4455d6346b0ceb"
+      "version": "0.1.6",
+      "file": "qs-rs-0.1.6-x86_64.tar.gz",
+      "sha256": "1df9fd0dfb2dce491715486445d903931d61f8bc9f9225d445ed279e9348e9d0"
     },
     "inir-accel": {
       "repo": "inir-accel",
       "dest": "accel",
-      "version": "0.1.1",
-      "file": "inir-accel-0.1.1-x86_64.tar.gz",
-      "sha256": "8757c66626381d6819ec5d5f433c699d5994c472ad78cf496f47dcf2edac9daa"
+      "version": "0.1.2",
+      "file": "inir-accel-0.1.2-x86_64.tar.gz",
+      "sha256": "ca39a66a424d05abb843bbf3ceb71621ec2a8eabc96903ba1b61143bb70519f9"
     },
     "inir-accel-aarch64": {
       "repo": "inir-accel",
       "dest": "accel",
       "arch": "aarch64",
-      "version": "0.1.1",
-      "file": "inir-accel-0.1.1-aarch64.tar.gz",
-      "sha256": "fad63a4737147e69290698d6b42ecfeffb93aca1e4135d9c1b311a3f79439ee3"
+      "version": "0.1.2",
+      "file": "inir-accel-0.1.2-aarch64.tar.gz",
+      "sha256": "372407a2bec28ddc98ce03c61182c9a9b71461fc34e7182cb1402a37929bcf26"
     },
     "qs-rs-webengine": {
       "repo": "qs-rs",
@@ -37,8 +37,8 @@
       "with": "qs-rs",
       "when": "material.sidebar.plugins.enable",
       "title": "Qt WebEngine for the Web Apps tab",
-      "file": "qs-rs-webengine-0.1.4-x86_64.tar.gz",
-      "sha256": "2a2c08a98d6c3b57a7913f29591e6021a872ee60250ab976d2cf99df4b1ca892"
+      "file": "qs-rs-webengine-0.1.6-x86_64.tar.gz",
+      "sha256": "0079a8e1272c0fb013b959468a2253b408e4da03bb99836abbbe8c9d92484513"
     }
   }
 }

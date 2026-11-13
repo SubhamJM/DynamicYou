@@ -16,7 +16,14 @@ QtObject {
     readonly property var spec: Plugins.manifests[Plugins.active]?.widgetDesign
         ?? ({ key: "design", shared: "background.widgets.design", plain: "individual", choices: ["individual"] })
     readonly property string faceDesign: root.spec.face ?? ""
+    // A design the active family wears over the person's shared pick while something of its own decides it (an iRiS
+    // Design that brings its widgets' faces): `{ family, design }`, set by that family. It counts only while that family
+    // is the active one, so nothing clears it on the way out (a write while a reload tore the shell down redrew every
+    // face over a look already gone). Their key is never written: taking the Design off gives their pick back.
+    property var worn: null
+    readonly property string wornDesign: root.worn?.family === Plugins.active ? String(root.worn?.design ?? "") : ""
     readonly property string shared: {
+        if (root.spec.choices.includes(root.wornDesign)) return root.wornDesign
         void Config.revision
         const own = String(Config.getNestedValue(root.spec.shared, ""))
         return root.spec.choices.includes(own) ? own : root.faceDesign || root.spec.plain
@@ -47,14 +54,16 @@ QtObject {
         todo: { style: "instrument", instrumentRules: false }
     })
 
-    // Other designs the family's own faces draw (`faces` in `widgetDesign`: value, label, glyph, part): each lists its
-    // faces as parts `<part>.<face>`; a widget it has no face for keeps the family's face.
+    // Other designs the family's own faces draw (`faces` in `widgetDesign`: value, label, glyph, part, ignores): each
+    // lists its faces as parts `<part>.<face>`; a widget it has no face for keeps the family's face. `ignores` names
+    // the widget keys it draws its own way, whose rows hide while it draws.
     readonly property var faceDesigns: Array.from(root.spec.faces ?? [])
     function faceDesignOf(design: string): var { return root.faceDesigns.find(entry => entry.value === design) ?? null }
     function partOf(widget: string, design: string): string {
         const entry = root.faceDesignOf(design)
         const face = DesktopWidgetRegistry.entry(widget)?.face ?? ""
-        return entry && face.length > 0 ? Plugins.part(Plugins.active, entry.part + "." + face) : ""
+        if (!entry) return ""
+        return face.length > 0 ? Plugins.part(Plugins.active, entry.part + "." + face) : DesktopWidgetRegistry.customFace(widget, design)
     }
     function drawsIn(widget: string, design: string): bool { return root.partOf(widget, design).length > 0 }
 

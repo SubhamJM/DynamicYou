@@ -50,10 +50,33 @@ Singleton {
 		root.knownLengths = next
 	}
 	function lengthOf(player): real {
-		if (!player) return 0
+		if (!player || root.isLive(player)) return 0
 		if (player.lengthSupported) return Number(player.length ?? 0)
 		const known = root.knownLengths[player.dbusName ?? ""]
 		return known && known.title === root.titleOf(player) ? known.length : 0
+	}
+
+	// A live stream (a radio through mpv, a live video) has no end, yet its player publishes a length that grows with
+	// the position (mpv: what it has buffered), so a timeline drawn from it slides back and forth. A length that grew
+	// twice under the same stream is live until it falls (another file) or the stream changes; it then has no length.
+	property var liveNames: ({})
+	property var _lengthTrail: ({})
+	function isLive(player): bool { return !!player && root.liveNames[player.dbusName ?? ""] === true }
+	function _noteLength(player): void {
+		const name = player?.dbusName ?? ""
+		if (!name.length) return
+		const key = String(player.metadata?.["xesam:url"] ?? "") || String(player.trackTitle ?? "")
+		const length = player.lengthSupported ? Number(player.length ?? 0) : 0
+		const was = root._lengthTrail[name]
+		const grew = !was || was.key !== key || length < was.length - 1 || length <= 0 ? 0
+			: length > was.length + 0.5 ? was.grew + 1 : was.grew
+		root._lengthTrail[name] = { key: key, length: length, grew: grew }
+		const live = grew >= 2
+		if (live === root.isLive(player)) return
+		const next = Object.assign({}, root.liveNames)
+		if (live) next[name] = true
+		else delete next[name]
+		root.liveNames = next
 	}
 
 	// YouTube plays the thumbnail a pointer rests on, and that preview sets the page's media session: the browser then
@@ -158,8 +181,37 @@ Singleton {
 		const held = root._heldTrack(player)
 		return held ? held.artist : String(player.trackArtist ?? "")
 	}
+	// A browser hands over YouTube's small thumbnail (Firefox: 336x188), which blurs on any cover larger than a chip.
+	// The page video's own 1280x720 is asked for once per video and, where it exists, is that track's art everywhere.
+	property var largeArt: ({})
+	property var _largeArtAsked: ({})
+	function _askLargeArt(id: string): void {
+		if (root._largeArtAsked[id]) return
+		root._largeArtAsked[id] = true
+		const url = `https://i.ytimg.com/vi/${id}/hq720.jpg`
+		const xhr = new XMLHttpRequest()
+		xhr.onreadystatechange = () => {
+			if (xhr.readyState !== XMLHttpRequest.DONE) return
+			if (xhr.status !== 200) {
+				// Offline is asked again on the next track change; a video with no large picture is not.
+				if (xhr.status === 0) delete root._largeArtAsked[id]
+				return
+			}
+			const known = Object.keys(root.largeArt).length < 64 ? Object.assign({}, root.largeArt) : {}
+			known[id] = url
+			root.largeArt = known
+		}
+		xhr.open("HEAD", url)
+		xhr.send()
+	}
 	function artUrlOf(player): string {
 		if (!player) return ""
+		const video = root._pageVideoId(player)
+		if (video.length > 0) {
+			const large = root.largeArt[video] ?? ""
+			if (large.length > 0) return large
+			Qt.callLater(root._askLargeArt, video)
+		}
 		const held = root._heldTrack(player)
 		return held ? held.art : String(player.trackArtUrl ?? "")
 	}
@@ -200,8 +252,8 @@ Singleton {
 	Connections {
 		target: root.activePlayer
 		function onPlaybackStateChanged(): void { root._setPositionOffset(root.activePlayer?.dbusName ?? "", 0) }
-		function onPostTrackChanged(): void { root._setPositionOffset(root.activePlayer?.dbusName ?? "", 0) }
-		function onLengthChanged(): void { root._rememberLength(root.activePlayer) }
+		function onPostTrackChanged(): void { root._setPositionOffset(root.activePlayer?.dbusName ?? "", 0); root._noteLength(root.activePlayer) }
+		function onLengthChanged(): void { root._noteLength(root.activePlayer); root._rememberLength(root.activePlayer) }
 		function onLengthSupportedChanged(): void { root._rememberLength(root.activePlayer) }
 	}
 	Process {
@@ -651,8 +703,10 @@ Singleton {
 		const mimeType = player.metadata?.["xesam:mimeType"] ?? "";
 		const trackLength = player.length ?? 0;
 		
-		// Filter very short media (< 5 seconds) - likely GIFs or ads
-		if (trackLength > 0 && trackLength < 5) return false;
+		// Filter very short media (< 5 seconds) - likely GIFs or ads. Never mpv: a live stream through it (a radio)
+		// starts with the length of what it has buffered, and nothing asks again once it has grown.
+		const isMpv = name.startsWith("org.mpris.MediaPlayer2.mpv");
+		if (trackLength > 0 && trackLength < 5 && !isMpv) return false;
 		// Block explicit image/gif mime types even if length unknown
 		const mimeLower = mimeType.toLowerCase();
 		if (mimeLower.includes("image/gif") || mimeLower.includes("image/webp")) return false;
@@ -1551,6 +1605,17 @@ Singleton {
 		return urlStr;
 	}
 
+	// A cover offered for a stream by what plays it (a hub radio offers its station's logo): keyed by xesam:url,
+	// used only while the player itself publishes no art.
+	property var offeredCovers: ({})
+	function offerCover(url: string, art: string): void {
+		if (!url.length || (root.offeredCovers[url] ?? "") === art) return
+		const next = Object.keys(root.offeredCovers).length < 32 ? Object.assign({}, root.offeredCovers) : {}
+		if (art.length > 0) next[url] = art
+		else delete next[url]
+		root.offeredCovers = next
+	}
+
 	// Streaming sites (Twitch, live TV, etc.) rarely publish mpris:artUrl —
 	// fall back to the site's favicon, same fetch-and-cache service already
 	// used for AI chat source chips (Favicon.qml).
@@ -1558,7 +1623,8 @@ Singleton {
 		const trackUrl = player?.metadata?.["xesam:url"] ?? "";
 		if (!trackUrl) return "";
 		const domain = StringUtils.getDomain(trackUrl);
-		if (!domain) return "";
+		// A bare address or a host with a port (a stream server) has no site, and so no icon worth a cover.
+		if (!domain || /:\d+$/.test(domain) || /^[\d.]+$/.test(domain) || domain.indexOf(".") < 0) return "";
 		return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
 	}
 
@@ -1567,6 +1633,8 @@ Singleton {
 	function effectiveArtUrl(player): string {
 		const direct = root.artUrlOf(player);
 		if (direct.length > 0) return direct;
+		const offered = root.offeredCovers[String(player?.metadata?.["xesam:url"] ?? "")] ?? "";
+		if (offered.length > 0) return offered;
 		// A player the family itself runs can know its cover better (iRiS's anime: verb `media.cover`).
 		const familyCover = GlobalStates.familyVerb("media", "cover")?.(player) ?? "";
 		if (familyCover.length > 0) return familyCover;

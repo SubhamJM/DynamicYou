@@ -14,24 +14,32 @@ install_inir_cli_binary() {
   esac
   # the tag this base was proved with, never "latest": a new cli reaches people with the base it was tested on
   local version base
-  version="$(jq -r '.cli.version // empty' "${REPO_ROOT:-.}/sdata/prebuilt.json" 2>/dev/null)"
-  [[ -n "$version" ]] || version="$(jq -r '.cli.version // empty' "$(dirname "${BASH_SOURCE[0]}")/../prebuilt.json" 2>/dev/null)"
+  # read without jq: a fresh system fetches this before any package is installed
+  local pin
+  for pin in "${REPO_ROOT:-.}/sdata/prebuilt.json" "$(dirname "${BASH_SOURCE[0]}")/../prebuilt.json"; do
+    [[ -n "$version" || ! -f "$pin" ]] && continue
+    version="$(sed -n '/"cli"/,/}/s/.*"version": *"\([^"]*\)".*/\1/p' "$pin" | head -n1)"
+  done
   base="${INIR_CLI_RELEASES:-https://github.com/snowarch/inir-cli/releases/download/v${version:-0.2.0}}"
   local dest="${XDG_DATA_HOME:-$HOME/.local/share}/inir/cli"
-  local name="inir_linux_${arch}.tar.gz" tmp rc=1 why=""
+  local name="inir_linux_${arch}.tar.gz" tmp out rc=1 why=""
   tmp="$(mktemp -d)" || return 1
-  # each step says what failed, on stderr: a quiet failure surfaced later as "could not get your families"
+  # each step says what failed, on stderr: a quiet failure surfaced later as "could not get your families".
+  # It is tried where it will run: a temp dir is often mounted noexec, and then nothing there runs.
   if ! curl -fsSL --retry 2 --max-time 60 -o "$tmp/$name" "$base/$name"; then
     why="could not download $base/$name"
   elif ! curl -fsSL --retry 2 --max-time 30 -o "$tmp/checksums.txt" "$base/checksums.txt"; then
     why="could not download $base/checksums.txt"
   elif ! (cd "$tmp" && grep -E "  ${name}\$" checksums.txt | sha256sum -c --status -); then
     why="$name does not match the release's checksums.txt"
-  elif ! tar -xzf "$tmp/$name" -C "$tmp" inir; then
+  elif ! tar -xzf "$tmp/$name" -C "$tmp" --no-same-owner inir; then
     why="$name could not be unpacked"
-  elif ! "$tmp/inir" cli version >/dev/null 2>&1; then
-    why="the downloaded inir does not run on this system"
-  elif ! { mkdir -p "$dest" && install -m 0755 "$tmp/inir" "$dest/inir.new" && mv -f "$dest/inir.new" "$dest/inir"; }; then
+  elif ! { mkdir -p "$dest" && install -m 0755 "$tmp/inir" "$dest/inir.new"; }; then
+    why="could not write $dest/inir"
+  elif ! out="$("$dest/inir.new" cli version 2>&1)"; then
+    why="the downloaded inir does not run on this system (${out%%$'\n'*})"
+    rm -f "$dest/inir.new"
+  elif ! mv -f "$dest/inir.new" "$dest/inir"; then
     why="could not write $dest/inir"
   else
     rc=0
