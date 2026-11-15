@@ -200,8 +200,12 @@ setup_target_dir() {
         echo -e "   Copying rice repository to ${BLUE}${TARGET_DIR}${RESET}..."
         mkdir -p "$TARGET_DIR"
         
-        # Copy everything cleanly
-        cp -a "${SCRIPT_DIR}/." "${TARGET_DIR}/"
+        # Synchronize cleanly (avoid Permission denied on read-only git objects)
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -a "${SCRIPT_DIR}/" "${TARGET_DIR}/"
+        else
+            cp --remove-destination -a "${SCRIPT_DIR}/." "${TARGET_DIR}/"
+        fi
         echo -e "   ${GREEN}✓ Setup synchronized at ${TARGET_DIR}${RESET}\n"
     else
         echo -e "   ${GREEN}✓ Installer running directly inside ${TARGET_DIR}${RESET}\n"
@@ -393,14 +397,29 @@ init_theme() {
 configure_shell() {
     if command -v fish >/dev/null 2>&1; then
         FISH_PATH=$(which fish)
-        if [ "$SHELL" != "$FISH_PATH" ]; then
+        CURRENT_SHELL=$(getent passwd "$USER" 2>/dev/null | cut -d: -f7)
+        CURRENT_SHELL="${CURRENT_SHELL:-$SHELL}"
+
+        if [ "$CURRENT_SHELL" != "$FISH_PATH" ]; then
             echo -e "${BOLD}${BLUE}🐚 Shell Configuration...${RESET}"
             read -r -p "   Set 'fish' as your default login shell? [Y/n] " shell_choice || shell_choice="N"
             shell_choice="${shell_choice:-Y}"
             if [[ "$shell_choice" =~ ^[Yy]$ ]]; then
-                chsh -s "$FISH_PATH" "$USER" 2>/dev/null || sudo chsh -s "$FISH_PATH" "$USER" || true
-                echo -e "   ${GREEN}✓ Default shell set to fish.${RESET}\n"
+                # Ensure fish is listed in /etc/shells
+                if ! grep -qxF "$FISH_PATH" /etc/shells 2>/dev/null; then
+                    echo "$FISH_PATH" | sudo tee -a /etc/shells >/dev/null 2>&1 || true
+                fi
+
+                # Set default shell with sudo (usermod or chsh) to prevent PAM authentication hangs
+                if sudo usermod -s "$FISH_PATH" "$USER" 2>/dev/null || sudo chsh -s "$FISH_PATH" "$USER"; then
+                    echo -e "   ${GREEN}✓ Default shell set to fish.${RESET}\n"
+                else
+                    echo -e "   ${YELLOW}! Could not automatically set default shell. You can run: chsh -s $FISH_PATH${RESET}\n"
+                fi
             fi
+        else
+            echo -e "${BOLD}${BLUE}🐚 Shell Configuration...${RESET}"
+            echo -e "   ${GREEN}✓ Default shell is already set to fish.${RESET}\n"
         fi
     fi
 }
