@@ -15,7 +15,7 @@ An expressive, modern Linux rice built on **Arch Linux**, **Hyprland**, and **Qu
 
 ## ✨ Features
 
-- 🎨 **Material You Dynamic Theming**: 10+ expressive tonal palettes (`Serenity`, `Astral`, `Solstice`, `Abyss`, `Cloudscape`, `Crimson`, `Cyber`, `Frost`, `Verdant`, `Afterglow`) with smooth wallpaper color-harmonized transitions.
+- 🎨 **Material You Dynamic Theming**: 6 distinct, curated aesthetic themes (`Crimson`, `Solstice`, `Verdant`, `Abyss`, `Afterglow`, `Frost`) with dedicated color harmonies, unique backgrounds, and smooth wallpaper transitions.
 - 🏝️ **Dynamic Notch QuickShell**: Fluid, animated notch expanding into:
   - 📝 **Zen Editorial Notepad & Todo list** (distraction-free, Material 3 rounded pill styling).
   - 📋 **Material You Clipboard History** (dynamic sizing, smooth arrow transitions, soft dim borders).
@@ -42,7 +42,7 @@ chmod +x install.sh
 2. **Installs All Dependencies**: Pacman & AUR dependencies (Hyprland ecosystem, QuickShell, Qt6 runtime, Kitty, Fish, Starship, media/audio utilities).
 3. **Dotfiles Symlinking**: Safely backs up existing configurations to `~/.config/dotfiles_backup_<date>` and symlinks modules from `~/git/DynamicYou` to `~/.config/`.
 4. **SDDM Rice Setup**: Installs the `ii-pixel` Material You SDDM theme and Niri Wayland compositor greeter.
-5. **Initializes Theme Engine**: Automatically applies the default `Serenity` theme and initializes wallpaper cache.
+5. **Initializes Theme Engine**: Automatically applies the default `Abyss` theme and initializes wallpaper cache.
 
 ---
 
@@ -88,8 +88,9 @@ DynamicYou/
 Switch themes on the fly from the terminal or using <kbd>Super</kbd> + <kbd>T</kbd>:
 
 ```bash
-apply-theme.sh Serenity
-apply-theme.sh Astral
+apply-theme.sh Abyss
+apply-theme.sh Crimson
+apply-theme.sh Solstice
 apply-theme.sh Solstice
 apply-theme.sh Abyss
 ```

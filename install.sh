@@ -388,8 +388,8 @@ setup_sddm() {
 init_theme() {
     echo -e "${BOLD}${BLUE}🎨 Initializing Dynamic Theme Engine...${RESET}"
     if [ -f "${TARGET_DIR}/scripts/apply-theme.sh" ]; then
-        bash "${TARGET_DIR}/scripts/apply-theme.sh" Serenity || true
-        echo -e "   ${GREEN}✓ Default theme applied: Serenity${RESET}\n"
+        bash "${TARGET_DIR}/scripts/apply-theme.sh" Abyss || true
+        echo -e "   ${GREEN}✓ Default theme applied: Abyss${RESET}\n"
     fi
 }
 
@@ -436,7 +436,7 @@ print_completion() {
     fi
     echo
     echo -e "   ${BOLD}Key Commands & Shortcuts:${RESET}"
-    echo -e "   • Switch Theme      : ${GREEN}apply-theme.sh <Theme>${RESET}  ${DIM}(e.g. Astral, Solstice, Abyss, Serenity)${RESET}"
+    echo -e "   • Switch Theme      : ${GREEN}apply-theme.sh <Theme>${RESET}  ${DIM}(e.g. Crimson, Solstice, Verdant, Abyss, Afterglow, Frost)${RESET}"
     echo -e "   • Reload Hyprland   : ${GREEN}hyprctl reload${RESET}"
     echo -e "   • Reload QuickShell : ${GREEN}~/.config/quickshell/reload.sh${RESET}"
     echo -e "   • Open Terminal     : ${GREEN}Super + Return${RESET}          ${DIM}(Kitty)${RESET}"

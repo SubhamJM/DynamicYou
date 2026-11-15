@@ -66,11 +66,11 @@ if [ -n "$WALLPAPER" ] && [ -f "$WALLPAPER" ]; then
         --transition-bezier "0.25,0.1,0.25,1.0"
 else
     # First boot or missing wallpaper: determine active theme and apply it
-    THEME="Serenity"
+    THEME="Abyss"
     if [ -f "$ACTIVE_DIR/theme-name.txt" ]; then
         THEME=$(cat "$ACTIVE_DIR/theme-name.txt" | tr -d '\n\r ')
     fi
-    [ -z "$THEME" ] && THEME="Serenity"
+    [ -z "$THEME" ] && THEME="Abyss"
 
     for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh"; do
         if [ -x "$s" ] || [ -f "$s" ]; then
