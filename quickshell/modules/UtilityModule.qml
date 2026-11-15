@@ -1347,7 +1347,7 @@ Item {
                     glyph: "lock"
                     onClicked: {
                         root.collapseToIdle();
-                        Quickshell.execDetached(["hyprlock"]);
+                        Quickshell.execDetached(["bash", (Quickshell.env("HOME") || "") + "/.local/bin/lock-screen.sh"]);
                     }
                 }
 

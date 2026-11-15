@@ -3,17 +3,18 @@ import Quickshell
 import Quickshell.Widgets
 import "../"
 
-// Universal modular icon element inspired by Matushell (MatusIcon + MatusMaskedImage + NotificationIcon)
+// Universal modular icon element inspired by Matushell & DMS
 // Seamlessly renders:
 // 1. Variable-font Material Symbols with optical sizing & dark OLED grade compensation
 // 2. JetBrainsMono Nerd Font glyphs
-// 3. Desktop application icon theme assets with GPU-constrained sourceSize (zero VRAM waste)
+// 3. Desktop application icon theme assets with IconImage
 // 4. Local image paths & URLs with graceful fallback symbol handling via IconResolver
 Item {
     id: root
 
     // --- Public API ---
     property string icon: ""               // Material symbol, app name, file path, or nerd glyph
+    property bool isApp: false             // Explicitly treat as desktop application icon
     property real iconSize: (typeof Theme !== "undefined" && Theme.iconSize) ? Theme.iconSize : 18
     property real fill: 0                  // 0 = outlined, 1 = filled
     property int grad: (typeof Theme !== "undefined" && Theme.fontIconGrad !== undefined) ? Theme.fontIconGrad : -25
@@ -26,6 +27,8 @@ Item {
 
     implicitWidth: iconSize
     implicitHeight: iconSize
+    width: iconSize
+    height: iconSize
 
     readonly property string rawIcon: (icon || "").toString().trim()
 
@@ -46,6 +49,14 @@ Item {
         return null;
     }
 
+    readonly property bool looksLikeAppName: root.isApp ||
+                                             (resolverEntry !== null && resolverEntry.displayName !== "") ||
+                                             rawIcon.indexOf(" ") !== -1 ||
+                                             rawIcon.indexOf("-") !== -1 ||
+                                             rawIcon.indexOf(".") !== -1 ||
+                                             rawIcon.indexOf("/") !== -1 ||
+                                             /[A-Z]/.test(rawIcon)
+
     // 3. Resolve Image URL
     readonly property string resolvedImageUrl: {
         if (!rawIcon || isNerd) return "";
@@ -53,20 +64,15 @@ Item {
             return rawIcon.startsWith("/") ? ("file://" + rawIcon) : rawIcon;
         }
 
-        // Try direct Quickshell.iconPath lookup
-        try {
-            var directPath = Quickshell.iconPath(rawIcon, true);
-            if (directPath && directPath.trim() !== "") {
-                if (directPath.startsWith("image://") || directPath.startsWith("file://")) {
-                    return directPath;
-                }
-                return directPath.startsWith("/") ? ("file://" + directPath) : ("file://" + directPath);
+        if (root.looksLikeAppName) {
+            if (resolverEntry && resolverEntry.iconPath && resolverEntry.iconPath !== "") {
+                return resolverEntry.iconPath;
             }
-        } catch (e) {}
-
-        // Try IconResolver mapping path
-        if (resolverEntry && resolverEntry.iconPath && resolverEntry.iconPath !== "") {
-            return resolverEntry.iconPath;
+            var lookupName = (resolverEntry && resolverEntry.iconName) ? resolverEntry.iconName : rawIcon;
+            try {
+                var p = Quickshell.iconPath(lookupName, "application-x-executable") || Quickshell.iconPath(lookupName);
+                if (p && p.trim() !== "") return p;
+            } catch (e) {}
         }
 
         return "";
@@ -79,65 +85,36 @@ Item {
         // A. Nerd font glyphs are returned directly
         if (isNerd) return rawIcon;
 
-        // B. When an image is ready, no text ligature is needed
-        if (isImageIcon && appImage.status === Image.Ready) return "";
+        // B. When an image is ready/loaded, no text ligature is needed
+        if (isImageIcon && appIconImage.status === Image.Ready) return "";
 
         // C. Empty icon string: fall back gracefully
         if (rawIcon === "") {
             return (root.fallbackSymbol && root.fallbackSymbol !== "") ? root.fallbackSymbol : "apps";
         }
 
-        // D. Image icon failed to load (Image.Error)
-        if (isImageIcon && appImage.status === Image.Error) {
+        // D. Application name or image that failed to load
+        if (root.looksLikeAppName || isImageIcon) {
             if (root.fallbackSymbol && root.fallbackSymbol !== "") return root.fallbackSymbol;
             if (resolverEntry && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") return resolverEntry.fallbackSymbol;
             return "apps";
         }
 
-        // E. Recognized application/process in IconResolver that mapped to a specific symbol
-        // (Only when rawIcon is an app like "zen", "firefox", "kitty", "obsidian" and no image was found on disk)
-        if (resolverEntry && resolverEntry.displayName && resolverEntry.displayName !== "" && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") {
-            return resolverEntry.fallbackSymbol;
-        }
-
-        // F. Detect if rawIcon is an application name, desktop file ID, or command line rather than a Material Symbol ligature.
-        // Material Symbol ligatures are strictly lowercase ascii words with underscores (e.g. "arrow_back", "wifi", "signal_wifi_4_bar").
-        // Desktop IDs, process names, and commands contain spaces, hyphens, dots, slashes, or uppercase characters.
-        var looksLikeAppName = rawIcon.indexOf(" ") !== -1 ||
-                               rawIcon.indexOf("-") !== -1 ||
-                               rawIcon.indexOf(".") !== -1 ||
-                               rawIcon.indexOf("/") !== -1 ||
-                               /[A-Z]/.test(rawIcon);
-
-        if (looksLikeAppName) {
-            if (root.fallbackSymbol && root.fallbackSymbol !== "") return root.fallbackSymbol;
-            if (resolverEntry && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") return resolverEntry.fallbackSymbol;
-            return "apps";
-        }
-
-        // G. Otherwise rawIcon is a direct Material Symbol ligature (e.g. "arrow_back", "refresh", "settings", "close", "wifi", "fast_rewind")
+        // E. Otherwise rawIcon is a direct Material Symbol ligature (e.g. "arrow_back", "refresh", "settings", "close", "wifi")
         return rawIcon;
     }
 
-    // Image branch with ClippingRectangle (MatusMaskedImage pattern)
-    ClippingRectangle {
-        id: imageClipper
+    // Native IconImage branch (handles freedesktop theme icons & images)
+    Item {
+        id: imageContainer
         anchors.fill: parent
-        radius: root.cornerRadius
-        color: "transparent"
-        visible: root.isImageIcon && appImage.status === Image.Ready
+        clip: root.cornerRadius > 0
+        visible: root.isImageIcon && appIconImage.status === Image.Ready
 
-        Image {
-            id: appImage
+        IconImage {
+            id: appIconImage
             anchors.fill: parent
             source: root.resolvedImageUrl
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            smooth: true
-            mipmap: true
-            // Strict Matushell guideline: Constrain sourceSize to prevent GPU buffer bloat
-            sourceSize.width: Math.max(16, Math.round(root.iconSize * (Screen.devicePixelRatio || 1)))
-            sourceSize.height: Math.max(16, Math.round(root.iconSize * (Screen.devicePixelRatio || 1)))
         }
     }
 
@@ -145,7 +122,7 @@ Item {
     MaterialSymbol {
         id: glyphText
         anchors.centerIn: parent
-        visible: !imageClipper.visible
+        visible: !imageContainer.visible
         text: root.resolvedGlyphText
         iconSize: root.iconSize
         fill: root.fill

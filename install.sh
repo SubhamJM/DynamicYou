@@ -216,6 +216,7 @@ setup_target_dir() {
     chmod +x "${TARGET_DIR}/hypr/scripts/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/lockscreen/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/sddm/install.sh" 2>/dev/null || true
     chmod +x "${TARGET_DIR}/install.sh" 2>/dev/null || true
 }
@@ -368,6 +369,16 @@ apply_symlinks() {
     symlink_module "${TARGET_DIR}/scripts/apply-theme.sh" "${HOME}/.local/bin/apply-theme.sh"
     symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
+
+    # Lockscreen setup
+    mkdir -p "${HOME}/.local/share"
+    mkdir -p "${HOME}/.config/qylock"
+    if [ ! -f "${HOME}/.config/qylock/theme" ]; then
+        echo "dog-samurai" > "${HOME}/.config/qylock/theme"
+    fi
+    symlink_module "${TARGET_DIR}/lockscreen" "${HOME}/.local/share/quickshell-lockscreen"
+    chmod +x "${TARGET_DIR}/lockscreen/lock.sh" 2>/dev/null || true
+    symlink_module "${TARGET_DIR}/lockscreen/lock.sh" "${HOME}/.local/bin/lock-screen.sh"
 
     echo
 }

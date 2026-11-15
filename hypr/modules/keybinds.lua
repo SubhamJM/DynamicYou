@@ -21,6 +21,8 @@ hl.bind(mainMod .. " + W", hl.dsp.global("quickshell:toggleWallpaperNotch"))
 hl.bind(mainMod .. " + ALT + W", hl.dsp.global("quickshell:toggleWallpaperEngineNotch"))
 hl.bind(mainMod .. " + CTRL + W", hl.dsp.global("quickshell:toggleWallpaperEngineNotch"))
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.global("quickshell:toggleTransitionNotch"))
+hl.bind(mainMod .. " + ALT + L", hl.dsp.global("quickshell:toggleLockscreenNotch"))
+hl.bind(mainMod .. " + SHIFT + L", hl.dsp.global("quickshell:toggleLockscreenNotch"))
 hl.bind(mainMod .. " + SHIFT + M", hl.dsp.global("quickshell:toggleMusicInfoNotch"))
 hl.bind(mainMod .. " + grave", hl.dsp.global("quickshell:resetNotchToIdle"))
 hl.bind(mainMod .. " + N", hl.dsp.global("quickshell:toggleNotificationsNotch"))
@@ -39,7 +41,7 @@ hl.bind("SHIFT + Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { releas
 hl.bind("Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
 hl.bind("Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
 hl.bind("Print", hl.dsp.exec_cmd('grimblast --notify copysave area'))
-hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("~/.local/bin/lock-screen.sh"))
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
 hl.bind(mainMod .. " + RETURN", hl.dsp.exec_cmd(terminal))

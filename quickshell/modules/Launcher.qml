@@ -100,7 +100,7 @@ ColumnLayout {
 
     // System actions dataset
     readonly property var actionsList: [
-        { name: "Lock Screen", cmd: "hyprlock", icon: "lock", action: "lock" },
+        { name: "Lock Screen", cmd: "~/.local/bin/lock-screen.sh", icon: "lock", action: "lock" },
         { name: "Suspend System", cmd: "systemctl suspend", icon: "bedtime", action: "suspend" },
         { name: "Restart Computer", cmd: "systemctl reboot", icon: "restart_alt", action: "restart" },
         { name: "Shut Down", cmd: "systemctl poweroff", icon: "power_settings_new", action: "shutdown" },

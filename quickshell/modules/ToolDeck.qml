@@ -231,6 +231,24 @@ Item {
             isActive: false,
             action: function() { root.switchMode("theme", false); }
         },
+        "wallpaper": {
+            id: "wallpaper",
+            name: "Wallpapers",
+            icon: "wallpaper",
+            desc: "Backgrounds",
+            color: "#7aa2f7",
+            isActive: false,
+            action: function() { root.switchMode("wallpaper", false); }
+        },
+        "lockscreen": {
+            id: "lockscreen",
+            name: "Lock Screen",
+            icon: "lock_clock",
+            desc: "Lock style",
+            color: "#e0af68",
+            isActive: false,
+            action: function() { root.switchMode("lockscreen", false); }
+        },
         "taskmgr": {
             id: "taskmgr",
             name: "Task Manager",
@@ -259,6 +277,8 @@ Item {
         "notes",
         "clipboard",
         "theme",
+        "wallpaper",
+        "lockscreen",
         "taskmgr"
     ]
 

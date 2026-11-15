@@ -20,7 +20,7 @@ FocusScope {
 
     function triggerSelected() {
         var cmds = [
-            "pidof hyprlock || hyprlock || swaylock || loginctl lock-session",
+            "~/.local/bin/lock-screen.sh || loginctl lock-session",
             "systemctl suspend",
             "hyprctl dispatch exit || loginctl terminate-user $USER",
             "systemctl reboot",
@@ -221,7 +221,7 @@ FocusScope {
                 btnIndex: 0
                 iconText: "lock"
                 label: "Lock"
-                actionCmd: "pidof hyprlock || hyprlock || swaylock || loginctl lock-session"
+                actionCmd: "~/.local/bin/lock-screen.sh || loginctl lock-session"
                 activeColor: Theme.colors.accent ?? "#7aa2f7"
             }
 

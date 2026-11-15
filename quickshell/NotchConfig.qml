@@ -47,8 +47,9 @@ QtObject {
 		"hover":         { width: 480, height: 44,  radius: 22 },
 		"switcher":      { width: 800, height: 420, radius: 14 },
         "launcher":      { width: 560, height: 246, radius: 22 },
-        "theme":         { width: 660, height: 200, radius: 14 },
-        "wallpaper":     { width: 760, height: 320, radius: 12 },
+        "theme":         { width: 760, height: 230, radius: 14 },
+        "wallpaper":     { width: 760, height: 320, radius: 14 },
+        "lockscreen":    { width: 760, height: 320, radius: 14 },
         "engine":        { width: 840, height: 480, radius: 14 },
         "transition":    { width: 440, height: 320, radius: 12 },
         "osd":           { width: 280, height: 40,  radius: 16 },
@@ -64,7 +65,7 @@ QtObject {
         "notes":         { width: 680, height: 480, radius: 14 },
         "cheatsheet":    { width: 800, height: 440, radius: 14 },
         "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 840, height: 560, radius: 26 }
+        "taskmanager":   { width: 880, height: 620, radius: 22 }
     })
 
     function calculateUtilityHeight(activeSection) {
@@ -135,11 +136,7 @@ QtObject {
     }
 
     function calculateTaskManagerHeight(activeTab, modelCount, listContentHeight) {
-        if (modelCount === 0) return 260;
-        var base = 170;
-        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 59);
-        var dynamicListHeight = Math.min(410, Math.max(70, effectiveList));
-        return Math.min(580, Math.max(260, base + dynamicListHeight));
+        return 620;
     }
 
     // ==========================================

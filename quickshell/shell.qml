@@ -619,8 +619,9 @@ for f in sorted_files:
     function getModuleSource(mode) {
         switch(mode) {
             case "launcher":      return Qt.resolvedUrl("modules/Launcher.qml");
-            case "theme":         return Qt.resolvedUrl("modules/ThemeSelector.qml");
-            case "wallpaper":     return Qt.resolvedUrl("modules/WallpaperSelector.qml");
+            case "theme":         return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
+            case "wallpaper":     return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
+            case "lockscreen":    return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
             case "engine":        return Qt.resolvedUrl("modules/EngineWallpaperSelector.qml");
             case "transition":    return Qt.resolvedUrl("modules/TransitionSelector.qml");
             case "bluetooth":     return Qt.resolvedUrl("modules/BluetoothModule.qml");
@@ -643,8 +644,9 @@ for f in sorted_files:
 
     // Dynamic Module Aliases (Null-safe; points to moduleLoader.item when active)
     readonly property var launcherMod:   (root.loadedExpandedMode === "launcher") ? moduleLoader.item : null
-    readonly property var themeMod:      (root.loadedExpandedMode === "theme") ? moduleLoader.item : null
-    readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper") ? moduleLoader.item : null
+    readonly property var themeMod:      (root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null
+    readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null
+    readonly property var lockMod:       (root.loadedExpandedMode === "lockscreen" || root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "theme") ? moduleLoader.item : null
     readonly property var engineMod:     (root.loadedExpandedMode === "engine") ? moduleLoader.item : null
     readonly property var transMod:      (root.loadedExpandedMode === "transition") ? moduleLoader.item : null
     readonly property var btMod:         (root.loadedExpandedMode === "bluetooth") ? moduleLoader.item : null
@@ -684,6 +686,7 @@ for f in sorted_files:
 		else if (activeMode === "switcher" && root.switcherMod) root.switcherMod.forceActiveFocus();
         else if (activeMode === "theme" && root.themeMod) root.themeMod.forceThemeFocus();
         else if (activeMode === "wallpaper" && root.wallMod) root.wallMod.wallpaperGrid.forceActiveFocus();
+        else if (activeMode === "lockscreen" && root.lockMod) root.lockMod.forceLockscreenFocus();
         else if (activeMode === "transition" && root.transMod) root.transMod.transitionGrid.forceActiveFocus();
         else if (activeMode === "clipboard" && root.clipMod) root.clipMod.searchInput.forceActiveFocus();
         else if (activeMode === "powermenu" && root.powerMod) root.powerMod.forceActiveFocus();
@@ -722,12 +725,14 @@ for f in sorted_files:
             if (root.launcherMod) root.launcherMod.onOpened();
         } else if (activeMode === "wallpaper") {
             if (root.cachedWallpapers.length === 0 && !globalWallpaperScanner.running) globalWallpaperScanner.running = true;
+        } else if (activeMode === "lockscreen") {
+            if (root.lockMod) root.lockMod.switchTab("lockscreen");
         }
 
         Qt.callLater(() => {
             root.regainFocus();
             if (activeMode !== "launcher" && root.launcherMod) root.launcherMod.searchInput.text = "";
-            if (activeMode !== "theme" && root.themeMod) root.themeMod.resetSearch();
+            if (activeMode !== "theme" && activeMode !== "wallpaper" && activeMode !== "lockscreen" && root.themeMod) root.themeMod.resetSearch();
             if (activeMode !== "clipboard" && root.clipMod) root.clipMod.searchInput.text = "";
             if (activeMode !== "taskmanager" && root.taskMgrMod) root.taskMgrMod.searchInput.text = "";
         });
@@ -956,6 +961,7 @@ for f in sorted_files:
     }
     GlobalShortcut { name: "toggleThemeNotch"; onPressed: root.switchMode("theme", true) }
     GlobalShortcut { name: "toggleWallpaperNotch"; onPressed: root.switchMode("wallpaper", true) }
+    GlobalShortcut { name: "toggleLockscreenNotch"; onPressed: root.switchMode("lockscreen", true) }
     GlobalShortcut { name: "toggleWallpaperEngineNotch"; onPressed: root.switchMode("engine", true) }
     GlobalShortcut { name: "toggleTransitionNotch"; onPressed: root.switchMode("transition", true) }
     GlobalShortcut { name: "resetNotchToIdle"; onPressed: root.collapseToIdle() }

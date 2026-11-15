@@ -168,6 +168,9 @@ def parse_hypr_lua(path):
             elif "quickshell:toggleWallpaperNotch" in clean_dsp:
                 desc = "Open Notch Wallpaper Selector"
                 cat = "Launchers"
+            elif "quickshell:toggleLockscreenNotch" in clean_dsp:
+                desc = "Open Notch Lockscreen Selector"
+                cat = "Launchers"
             elif "quickshell:toggleTransitionNotch" in clean_dsp:
                 desc = "Open Notch Transition Selector"
                 cat = "Launchers"
@@ -253,6 +256,9 @@ def parse_hypr_lua(path):
                 elif "playerctl play-pause" in clean_dsp:
                     desc = "Media: Play / Pause"
                     cat = "Media"
+                elif "lock-screen.sh" in clean_dsp or "hyprlock" in clean_dsp:
+                    desc = "Lock Screen (Quickshell)"
+                    cat = "System"
                 elif "reload.sh" in clean_dsp:
                     desc = "Reload Quickshell Dynamic Island"
                     cat = "System"
