@@ -1,0 +1,109 @@
+# ==============================================================================
+# Yazi Theme Configuration — DynamicYou / MyLinuxSetup
+# Cohesive Material Dark & Cyber Cyan aesthetic
+# ==============================================================================
+
+[mgr]
+cwd = { fg = "#00e5ff", bold = true, italic = true }
+
+# Hovered / Cursor
+hovered         = { bg = "#0e2246", fg = "#ffffff", bold = true }
+preview_hovered = { bg = "#08162e" }
+
+# Find
+find_keyword  = { fg = "#030a16", bg = "#00e5ff", bold = true }
+find_position = { fg = "#67e8f9", bg = "#163a70", bold = true }
+
+# Marker
+marker_copied   = { fg = "#a6e3a1", bg = "#a6e3a1" }
+marker_cut      = { fg = "#f38ba8", bg = "#f38ba8" }
+marker_marked   = { fg = "#cba6f7", bg = "#cba6f7" }
+marker_selected = { fg = "#00e5ff", bg = "#00e5ff" }
+
+# Count
+count_copied   = { fg = "#030a16", bg = "#a6e3a1" }
+count_cut      = { fg = "#030a16", bg = "#f38ba8" }
+count_selected = { fg = "#030a16", bg = "#00e5ff" }
+
+# Border
+border_symbol = "│"
+border_style  = { fg = "#163a70" }
+
+[status]
+separator_open  = ""
+separator_close = ""
+separator_style = { fg = "#163a70", bg = "#08162e" }
+
+# Mode
+[mode]
+normal_main = { fg = "#030a16", bg = "#00e5ff", bold = true }
+normal_alt  = { fg = "#00e5ff", bg = "#0e2246" }
+
+select_main = { fg = "#030a16", bg = "#cba6f7", bold = true }
+select_alt  = { fg = "#cba6f7", bg = "#0e2246" }
+
+unset_main  = { fg = "#030a16", bg = "#f38ba8", bold = true }
+unset_alt   = { fg = "#f38ba8", bg = "#0e2246" }
+
+[tabs]
+active   = { fg = "#030a16", bg = "#00e5ff", bold = true }
+inactive = { fg = "#67e8f9", bg = "#08162e" }
+
+[select]
+border   = { fg = "#00e5ff" }
+active   = { fg = "#00e5ff", bold = true }
+inactive = { fg = "#e0f8ff" }
+
+[input]
+border   = { fg = "#00e5ff" }
+title    = { fg = "#00e5ff" }
+value    = { fg = "#e0f8ff" }
+selected = { bg = "#163a70" }
+
+[completion]
+border   = { fg = "#00e5ff" }
+active   = { fg = "#030a16", bg = "#00e5ff" }
+inactive = { fg = "#e0f8ff" }
+
+[tasks]
+border  = { fg = "#00e5ff" }
+title   = { fg = "#00e5ff" }
+hovered = { fg = "#67e8f9", underline = true }
+
+[which]
+mask            = { bg = "#030a16" }
+cand            = { fg = "#00e5ff" }
+rest            = { fg = "#67e8f9" }
+desc            = { fg = "#e0f8ff" }
+separator       = " ➜ "
+separator_style = { fg = "#163a70" }
+
+[help]
+on      = { fg = "#00e5ff" }
+run     = { fg = "#67e8f9" }
+desc    = { fg = "#e0f8ff" }
+hovered = { bg = "#0e2246", bold = true }
+footer  = { fg = "#030a16", bg = "#00e5ff" }
+
+[notify]
+title_info  = { fg = "#00e5ff" }
+title_warn  = { fg = "#f9e2af" }
+title_error = { fg = "#f38ba8" }
+
+[filetype]
+rules = [
+	# Media
+	{ mime = "image/*", fg = "#a6e3a1" },
+	{ mime = "{audio,video}/*", fg = "#cba6f7" },
+	# Archives
+	{ mime = "application/*zip", fg = "#fab387" },
+	{ mime = "application/x-{tar,bzip*,7z-compressed,xz,rar}", fg = "#fab387" },
+	# Documents
+	{ mime = "application/pdf", fg = "#f38ba8" },
+	# Special files
+	{ url = "*", is = "orphan", bg = "#f38ba8" },
+	{ url = "*", is = "exec",   fg = "#a6e3a1" },
+	# Fallback
+	{ url = "*/", fg = "#00e5ff" },
+	{ url = "*",  fg = "#e0f8ff" },
+]

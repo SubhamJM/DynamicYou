@@ -26,23 +26,25 @@ An expressive, modern Linux rice built on **Arch Linux**, **Hyprland**, and **Qu
 
 ---
 
-## 🚀 Quick Installation
+## 🚀 Installation & Setup
 
-Clone and run the automated installer:
+### Option 1: Full Fresh Arch Installation (`install.sh`)
+For a fresh Arch Linux / EndeavourOS / CachyOS installation. This will detect/install an AUR helper, resolve all official and AUR dependencies, deploy SDDM with the Material You Wayland greeter, configure system services, set `fish` as your default shell, and deploy all dotfiles:
 
 ```bash
-git clone https://github.com/YourUsername/DynamicYou.git ~/git/DynamicYou
-cd ~/git/DynamicYou
-chmod +x install.sh
+git clone https://github.com/SubhamJM/MyLinuxSetup.git ~/git/MyLinuxSetup
+cd ~/git/MyLinuxSetup
+chmod +x install.sh setup.sh
 ./install.sh
 ```
 
-### What the installer does:
-1. **Checks Compatibility**: Verifies Arch Linux / Arch-derived environment, Wayland, and Hyprland readiness.
-2. **Installs All Dependencies**: Pacman & AUR dependencies (Hyprland ecosystem, QuickShell, Qt6 runtime, Kitty, Fish, Starship, media/audio utilities).
-3. **Dotfiles Symlinking**: Safely backs up existing configurations to `~/.config/dotfiles_backup_<date>` and symlinks modules from `~/git/DynamicYou` to `~/.config/`.
-4. **SDDM Rice Setup**: Installs the `ii-pixel` Material You SDDM theme and Niri Wayland compositor greeter.
-5. **Initializes Theme Engine**: Automatically applies the default `Abyss` theme and initializes wallpaper cache.
+### Option 2: Fast Dotfiles Setup (`setup.sh`)
+If packages are already installed and you just want to cleanly backup existing configs, deploy symlinks, set permissions, and initialize the theme engine:
+
+```bash
+./setup.sh
+```
+*(Tip: You can also run `./setup.sh --install` to trigger the full package installer).*
 
 ---
 
@@ -51,31 +53,42 @@ chmod +x install.sh
 | Keybinding | Action |
 | :--- | :--- |
 | <kbd>Super</kbd> + <kbd>Return</kbd> | Launch Terminal (**Kitty**) |
-| <kbd>Super</kbd> + <kbd>Space</kbd> | Toggle App Launcher |
+| <kbd>Super</kbd> + <kbd>E</kbd> | Launch File Manager (**Yazi**) |
+| <kbd>Super</kbd> + <kbd>B</kbd> | Launch Web Browser (**Zen Browser**) |
+| <kbd>Super</kbd> + <kbd>Space</kbd> | Toggle Dynamic Island App Launcher |
+| <kbd>Super</kbd> + <kbd>R</kbd> | Launch App Launcher (**Hyprlauncher**) |
 | <kbd>Super</kbd> + <kbd>T</kbd> | Dynamic Theme Switcher |
 | <kbd>Super</kbd> + <kbd>W</kbd> | Wallpaper Selector |
 | <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>W</kbd> | Wallpaper Transition Selector |
-| <kbd>Super</kbd> + <kbd>N</kbd> | Toggle Dynamic Notch |
+| <kbd>Super</kbd> + <kbd>N</kbd> | Toggle Notifications Notch |
+| <kbd>Super</kbd> + <kbd>V</kbd> | Clipboard History Notch |
+| <kbd>Super</kbd> + <kbd>P</kbd> | Power Menu Notch |
+| <kbd>Super</kbd> + <kbd>L</kbd> | Lock Screen (**QuickShell Lockscreen**) |
 | <kbd>Super</kbd> + <kbd>Q</kbd> | Close Active Window |
-| <kbd>Super</kbd> + <kbd>Print</kbd> | Screenshot Hub |
+| <kbd>Super</kbd> + <kbd>Print</kbd> | Screenshot Annotation Hub |
 
 ---
 
 ## 📂 Repository Structure
 
 ```text
-DynamicYou/
-├── install.sh              # Unified installer & system validator
+MyLinuxSetup/
+├── install.sh              # Full automated installer & dependency resolver
+├── setup.sh                # Fast dotfiles deployer & permission initializer
 ├── hypr/                   # Hyprland compositor configs, rules, animations & keybinds
 ├── quickshell/             # QuickShell QML notch, dock, and interactive modules
 │   ├── modules/            # Notes, Clipboard, Wi-Fi, Bluetooth, Launcher, Deck
 │   └── shell.qml           # Main QuickShell window controller
+├── lockscreen/             # QuickShell lockscreen (multiple animated themes)
 ├── sddm/                   # SDDM rice (ii-pixel Material You theme + Niri compositor)
-├── themes/                 # 10+ Material You color presets
+├── themes/                 # Curated Material You color presets
 ├── Wallpapers/             # Curated wallpapers organized by theme
 ├── scripts/                # Dynamic theme switcher (apply-theme.sh) & OSD controls
 ├── kitty/                  # Terminal configuration
-├── fish/                   # Fish shell configs & functions
+├── yazi/                   # Terminal file manager (Kitty image preview & zoxide jumps)
+├── eza/                    # Modern file listing theme configuration
+├── gtk/                    # GTK 3.0 & 4.0 dark theme and icon configurations
+├── fish/                   # Fish shell configs, aliases (eza, zoxide) & functions
 ├── fastfetch/              # Fastfetch configuration & ASCII art
 ├── starship/               # Starship cross-shell prompt
 └── nvim/                   # Neovim text editor setup

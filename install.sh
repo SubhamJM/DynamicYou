@@ -35,7 +35,13 @@ BLUE="\033[38;2;137;180;250m"
 SURFACE="\033[38;2;148;163;184m"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="${HOME}/git/DynamicYou"
+if [[ -z "${TARGET_DIR:-}" ]]; then
+    if [[ "$SCRIPT_DIR" == "$HOME"* ]]; then
+        TARGET_DIR="$SCRIPT_DIR"
+    else
+        TARGET_DIR="${HOME}/git/DynamicYou"
+    fi
+fi
 BACKUP_DIR="${HOME}/.config/dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
 # --- Banner Display ---
@@ -227,51 +233,83 @@ install_dependencies() {
 
     # Official Pacman packages
     PACMAN_DEPS=(
+        # Compositor & Display
         hyprland
         hyprlock
         hypridle
         hyprpicker
+        hyprlauncher
+        hyprpolkitagent
         xdg-desktop-portal-hyprland
         xdg-desktop-portal-gtk
+        xorg-xwayland
+        sddm
+        niri
+
+        # Wallpaper & Clipboard
+        awww
         wl-clipboard
         cliphist
         grim
         slurp
+
+        # Terminal, Shell & Navigation
         kitty
+        yazi
+        zoxide
+        eza
+        fzf
+        fd
+        ripgrep
+        ffmpegthumbnailer
+        poppler
+        7zip
+        imagemagick
         fish
         starship
         fastfetch
         neovim
+
+        # Audio & Media
         brightnessctl
         playerctl
         pamixer
+        cava
         wireplumber
         pipewire
         pipewire-audio
         pipewire-alsa
         pipewire-pulse
+
+        # Networking & Bluetooth
         networkmanager
         bluez
         bluez-utils
         blueman
+
+        # System Utilities & Runtimes
         jq
         socat
         libnotify
         inotify-tools
+        rsync
+        qt6-base
         qt6-declarative
         qt6-5compat
         qt6-svg
         qt6-multimedia
         qt6-multimedia-ffmpeg
-        sddm
-        niri
+        qt6-wayland
+        python
+        python-dbus
+
+        # Fonts & Icons
         noto-fonts
         noto-fonts-emoji
+        noto-fonts-cjk
         inter-font
         papirus-icon-theme
         ttf-jetbrains-mono-nerd
-        python
-        python-dbus
     )
 
     # Missing pacman packages check
@@ -296,6 +334,7 @@ install_dependencies() {
         grimblast-git
         krabby-bin
         ttf-material-symbols-variable-git
+        zen-browser-bin
     )
 
     MISSING_AUR=()
@@ -358,6 +397,17 @@ apply_symlinks() {
     symlink_module "${TARGET_DIR}/scripts" "${HOME}/.config/scripts"
     symlink_module "${TARGET_DIR}/themes" "${HOME}/.config/themes"
     symlink_module "${TARGET_DIR}/active-theme" "${HOME}/.config/active-theme"
+    symlink_module "${TARGET_DIR}/yazi" "${HOME}/.config/yazi"
+    symlink_module "${TARGET_DIR}/eza" "${HOME}/.config/eza"
+
+    # GTK settings
+    mkdir -p "${HOME}/.config/gtk-3.0" "${HOME}/.config/gtk-4.0"
+    if [ -f "${TARGET_DIR}/gtk/gtk-3.0/settings.ini" ]; then
+        symlink_module "${TARGET_DIR}/gtk/gtk-3.0/settings.ini" "${HOME}/.config/gtk-3.0/settings.ini"
+    fi
+    if [ -f "${TARGET_DIR}/gtk/gtk-4.0/settings.ini" ]; then
+        symlink_module "${TARGET_DIR}/gtk/gtk-4.0/settings.ini" "${HOME}/.config/gtk-4.0/settings.ini"
+    fi
 
     # Wallpapers
     mkdir -p "${HOME}/Pictures"
@@ -395,12 +445,29 @@ setup_sddm() {
     fi
 }
 
+# --- Core System Services ---
+enable_services() {
+    echo -e "${BOLD}${BLUE}⚙️ Enabling Core System Services...${RESET}"
+    sudo systemctl enable NetworkManager.service 2>/dev/null || true
+    sudo systemctl enable bluetooth.service 2>/dev/null || true
+    systemctl --user enable pipewire.service pipewire-pulse.service wireplumber.service 2>/dev/null || true
+    echo -e "   ${GREEN}✓ Essential services (NetworkManager, Bluetooth, PipeWire) enabled.${RESET}\n"
+}
+
 # --- Theme Initialization ---
 init_theme() {
     echo -e "${BOLD}${BLUE}🎨 Initializing Dynamic Theme Engine...${RESET}"
     if [ -f "${TARGET_DIR}/scripts/apply-theme.sh" ]; then
         bash "${TARGET_DIR}/scripts/apply-theme.sh" Abyss || true
         echo -e "   ${GREEN}✓ Default theme applied: Abyss${RESET}\n"
+    fi
+
+    # Set GTK defaults via GSettings
+    if command -v gsettings >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface icon-theme 'Papirus-Dark' 2>/dev/null || true
+        gsettings set org.gnome.desktop.interface cursor-theme 'Adwaita' 2>/dev/null || true
     fi
 }
 
@@ -466,6 +533,7 @@ main() {
     install_dependencies
     apply_symlinks
     setup_sddm
+    enable_services
     init_theme
     configure_shell
     print_completion

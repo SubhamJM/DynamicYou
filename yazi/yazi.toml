@@ -1,0 +1,47 @@
+# ==============================================================================
+# Yazi Configuration — DynamicYou / MyLinuxSetup
+# Blazing-fast terminal file manager with Kitty graphics and Neovim integration
+# ==============================================================================
+
+[mgr]
+ratio          = [ 1, 4, 3 ]
+sort_by        = "alphabetical"
+sort_sensitive = false
+sort_reverse   = false
+sort_dir_first = true
+linemode       = "size"
+show_hidden    = false
+show_symlink   = true
+scrolloff      = 5
+
+[preview]
+wrap            = "no"
+tab_size        = 2
+max_width       = 1000
+max_height      = 1200
+cache_dir       = ""
+image_filter    = "triangle"
+image_quality   = 85
+sixel_fraction  = 15
+
+[opener]
+edit = [
+	{ run = '${EDITOR:-nvim} "$@"', desc = "Edit", block = true, for = "unix" },
+]
+open = [
+	{ run = 'xdg-open "$@"', desc = "Open", for = "unix" },
+]
+reveal = [
+	{ run = 'xdg-open "$(dirname "$1")"', desc = "Reveal", for = "unix" },
+]
+
+[open]
+rules = [
+	{ mime = "folder/*", use = [ "edit", "open", "reveal" ] },
+	{ mime = "text/*", use = [ "edit", "reveal" ] },
+	{ mime = "image/*", use = [ "open", "reveal" ] },
+	{ mime = "{audio,video}/*", use = [ "open", "reveal" ] },
+	{ mime = "application/json", use = [ "edit", "reveal" ] },
+	{ mime = "application/{zip,rar,7z*,tar,gzip,xz,bzip2}", use = [ "open", "reveal" ] },
+	{ url = "*", use = [ "open", "reveal" ] },
+]

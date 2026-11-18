@@ -1,0 +1,63 @@
+# ==============================================================================
+# Yazi Keybindings — DynamicYou / MyLinuxSetup
+# Modern modal keybindings with Zoxide, FZF, and shell integration
+# ==============================================================================
+
+[manager]
+keymap = [
+	# Esc to cancel/exit
+	{ on = [ "<Esc>" ], run = "escape", desc = "Exit visual mode, clear selected, or cancel search" },
+	{ on = [ "q" ],     run = "quit",   desc = "Exit the process" },
+	{ on = [ "Q" ],     run = "quit --no-cwd-file", desc = "Exit the process without writing cwd-file" },
+
+	# Navigation
+	{ on = [ "k" ], run = "arrow -1", desc = "Move cursor up" },
+	{ on = [ "j" ], run = "arrow 1",  desc = "Move cursor down" },
+	{ on = [ "h" ], run = "leave",    desc = "Go back to parent directory" },
+	{ on = [ "l" ], run = "enter",    desc = "Enter child directory" },
+
+	{ on = [ "<Up>" ],    run = "arrow -1", desc = "Move cursor up" },
+	{ on = [ "<Down>" ],  run = "arrow 1",  desc = "Move cursor down" },
+	{ on = [ "<Left>" ],  run = "leave",    desc = "Go back to parent directory" },
+	{ on = [ "<Right>" ], run = "enter",    desc = "Enter child directory" },
+
+	# Goto / Zoxide / FZF
+	{ on = [ "z" ], run = "plugin zoxide", desc = "Jump to directory via zoxide" },
+	{ on = [ "Z" ], run = "plugin fzf",    desc = "Jump to file/directory via fzf" },
+
+	# Quick directory jumps
+	{ on = [ "g", "h" ], run = "cd ~",                  desc = "Go to home" },
+	{ on = [ "g", "c" ], run = "cd ~/.config",          desc = "Go to config" },
+	{ on = [ "g", "d" ], run = "cd ~/Downloads",        desc = "Go to downloads" },
+	{ on = [ "g", "p" ], run = "cd ~/Pictures",         desc = "Go to pictures" },
+	{ on = [ "g", "g" ], run = "cd ~/git",              desc = "Go to git projects" },
+	{ on = [ "g", "r" ], run = "cd ~/git/MyLinuxSetup", desc = "Go to rice setup" },
+
+	# Toggle hidden files
+	{ on = [ "." ], run = "hidden toggle", desc = "Toggle hidden files" },
+
+	# Open
+	{ on = [ "<Enter>" ], run = "open", desc = "Open selected files" },
+	{ on = [ "e" ],       run = "open", desc = "Open selected files" },
+
+	# Selection
+	{ on = [ "<Space>" ], run = [ "toggle", "arrow 1" ], desc = "Toggle selection" },
+	{ on = [ "v" ],       run = "visual_mode",           desc = "Enter visual mode" },
+	{ on = [ "V" ],       run = "visual_mode --unset",   desc = "Enter visual mode (unset)" },
+	{ on = [ "<C-a>" ],   run = "toggle_all --state=on", desc = "Select all files" },
+	{ on = [ "<C-r>" ],   run = "toggle_all",            desc = "Invert file selection" },
+
+	# File operations
+	{ on = [ "y" ], run = "yank",                desc = "Copy selected files" },
+	{ on = [ "x" ], run = "yank --cut",          desc = "Cut selected files" },
+	{ on = [ "p" ], run = "paste",               desc = "Paste files" },
+	{ on = [ "P" ], run = "paste --force",       desc = "Paste files (overwrite)" },
+	{ on = [ "d" ], run = "remove",              desc = "Move files to trash" },
+	{ on = [ "D" ], run = "remove --permanently", desc = "Permanently delete files" },
+	{ on = [ "a" ], run = "create",              desc = "Create a new file or directory (end with /)" },
+	{ on = [ "r" ], run = "rename --cursor=before_ext", desc = "Rename selected file" },
+
+	# Shell integration
+	{ on = [ ";" ], run = "shell --interactive",         desc = "Run shell command" },
+	{ on = [ ":" ], run = "shell --block --interactive", desc = "Run shell command (blocking)" },
+]

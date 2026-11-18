@@ -9,8 +9,21 @@ if status is-interactive
     command -v direnv >/dev/null 2>&1 && direnv hook fish | source
     command -v zoxide >/dev/null 2>&1 && zoxide init fish | source
 
-    # Better ls
-    command -v eza >/dev/null 2>&1 && alias ls='eza --icons --group-directories-first -1'
+    # Better ls (eza)
+    if command -v eza >/dev/null 2>&1
+        set -gx EZA_CONFIG_DIR "$HOME/.config/eza"
+        alias ls='eza --icons --group-directories-first -1'
+    end
+
+    # Yazi CWD wrapper function (yy)
+    function yy
+        set tmp (mktemp -t "yazi-cwd.XXXXXX")
+        yazi $argv --cwd-file="$tmp"
+        if set cwd (command cat -- "$tmp"); and [ -n "$cwd" ]; and [ "$cwd" != "$PWD" ]
+            builtin cd -- "$cwd"
+        end
+        rm -f -- "$tmp"
+    end
 
     # Abbrs
     abbr lg 'lazygit'
@@ -34,6 +47,8 @@ if status is-interactive
     abbr ll 'ls -l'
     abbr la 'ls -a'
     abbr lla 'ls -la'
+    abbr lt 'eza --tree --level=2 --icons'
+    abbr tree 'eza --tree --icons'
 
     abbr -a update "sudo pacman -Syu"
     abbr -a install "sudo pacman -S"

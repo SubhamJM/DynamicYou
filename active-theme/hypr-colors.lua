@@ -1,0 +1,1 @@
+/home/ricing/.config/themes/Abyss/hypr-colors.lua

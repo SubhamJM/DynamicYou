@@ -1,0 +1,37 @@
+# ==============================================================================
+# Eza Theme Configuration — DynamicYou / MyLinuxSetup
+# Modern color palette for enhanced file listings
+# ==============================================================================
+
+filekinds:
+  directory: { fg: "#00e5ff", bold: true }
+  executable: { fg: "#a6e3a1", bold: true }
+  symlink: { fg: "#cba6f7" }
+  broken_symlink: { fg: "#f38ba8", underline: true }
+
+perms:
+  read: { fg: "#a6e3a1" }
+  write: { fg: "#f9e2af" }
+  execute: { fg: "#f38ba8" }
+  special_user_file: { fg: "#fab387" }
+  other_special_user_file: { fg: "#fab387" }
+
+size:
+  number_byte: { fg: "#67e8f9" }
+  number_kilo: { fg: "#67e8f9" }
+  number_mega: { fg: "#00e5ff" }
+  number_giga: { fg: "#cba6f7", bold: true }
+  number_huge: { fg: "#f38ba8", bold: true }
+  unit_byte: { fg: "#163a70" }
+  unit_kilo: { fg: "#163a70" }
+  unit_mega: { fg: "#163a70" }
+  unit_giga: { fg: "#163a70" }
+  unit_huge: { fg: "#163a70" }
+
+git:
+  new: { fg: "#a6e3a1" }
+  modified: { fg: "#f9e2af" }
+  deleted: { fg: "#f38ba8" }
+  renamed: { fg: "#00e5ff" }
+  typechange: { fg: "#cba6f7" }
+  ignored: { fg: "#585b70" }
