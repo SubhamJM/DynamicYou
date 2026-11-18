@@ -400,7 +400,7 @@ if not icon_cache:
                     name, ext = os.path.splitext(f)
                     if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
                         icon_cache[name] = os.path.join(root, f)
-    for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
+    for theme in ['Papirus-Dark', 'Papirus', 'breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
         base = f'/usr/share/icons/{theme}'
         if os.path.exists(base):
             for root, dirs, files in os.walk(base):

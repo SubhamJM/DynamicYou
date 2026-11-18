@@ -20,6 +20,8 @@ from collections import defaultdict
 ICON_MAPPINGS = {
     'zen-bin': ('Zen Browser', 'zen-browser', 'language'),
     'zen': ('Zen Browser', 'zen-browser', 'language'),
+    'helium': ('Helium Browser', 'helium-browser', 'language'),
+    'helium-browser': ('Helium Browser', 'helium-browser', 'language'),
     'firefox': ('Firefox', 'firefox', 'language'),
     'chrome': ('Google Chrome', 'google-chrome', 'language'),
     'google-chrome': ('Google Chrome', 'google-chrome', 'language'),
@@ -75,62 +77,80 @@ ICON_MAPPINGS = {
 
     'et': ('WPS Spreadsheets', 'wps-office-et', 'description'),
     'wps': ('WPS Office', 'wps-office-wps', 'description'),
-    'wpp': ('WPS Presentation', 'wps-office-wpp', 'description'),
+    'wpp': ('WPS Presentation', '', 'description'),
     'libreoffice': ('LibreOffice', 'libreoffice-startcenter', 'description'),
     'soffice.bin': ('LibreOffice', 'libreoffice-startcenter', 'description'),
     'obsidian': ('Obsidian', 'obsidian', 'edit_note'),
-    'notion-app-electron': ('Notion', 'notion-app-electron', 'edit_note'),
+    'notion-app-electron': ('Notion', '', 'edit_note'),
 
-    'yazi': ('Yazi', 'utilities-terminal', 'folder'),
+    'yazi': ('Yazi', '', 'folder'),
     'thunar': ('Thunar', 'org.xfce.thunar', 'folder'),
     'nautilus': ('Files', 'org.gnome.Nautilus', 'folder'),
-    'dolphin': ('Dolphin', 'system-file-manager', 'folder'),
+    'dolphin': ('Dolphin', 'org.kde.dolphin', 'folder'),
     'nemo': ('Nemo', 'nemo', 'folder'),
 
-    'quickshell': ('Quickshell', 'quickshell', 'widgets'),
-    'qs': ('Quickshell', 'quickshell', 'widgets'),
-    'hyprland': ('Hyprland', 'hyprland', 'desktop_windows'),
-    'pipewire': ('PipeWire Audio', 'audio-card', 'volume_up'),
-    'wireplumber': ('WirePlumber', 'audio-card', 'volume_up'),
-    'pipewire-pulse': ('PipeWire Pulse', 'audio-card', 'volume_up'),
-    'networkmanager': ('NetworkManager', 'network-workgroup', 'wifi'),
-    'bluetoothd': ('Bluetooth Service', 'bluetooth', 'bluetooth'),
-    'systemd': ('systemd', 'system-run', 'settings'),
-    'warp-svc': ('Cloudflare WARP', 'network-vpn', 'vpn_key'),
-    'hypridle': ('Hypridle', 'preferences-system', 'bedtime'),
-    'hyprlock': ('Hyprlock', 'system-lock-screen', 'lock'),
-    'awww-daemon': ('Wallpaper Engine', 'preferences-desktop-wallpaper', 'palette'),
-    'swww-daemon': ('Wallpaper Engine', 'preferences-desktop-wallpaper', 'palette'),
+    'quickshell': ('Quickshell', '', 'widgets'),
+    'qs': ('Quickshell', '', 'widgets'),
+    'hyprland': ('Hyprland', '', 'desktop_windows'),
+    'pipewire': ('PipeWire Audio', '', 'volume_up'),
+    'wireplumber': ('WirePlumber', '', 'volume_up'),
+    'pipewire-pulse': ('PipeWire Pulse', '', 'volume_up'),
+    'networkmanager': ('NetworkManager', '', 'wifi'),
+    'bluetoothd': ('Bluetooth Service', '', 'bluetooth'),
+    'systemd': ('systemd', '', 'settings'),
+    'warp-svc': ('Cloudflare WARP', '', 'vpn_key'),
+    'hypridle': ('Hypridle', '', 'bedtime'),
+    'hyprlock': ('Hyprlock', '', 'lock'),
+    'awww-daemon': ('Wallpaper Engine', '', 'palette'),
+    'swww-daemon': ('Wallpaper Engine', '', 'palette'),
     'kdeconnectd': ('KDE Connect', 'kdeconnect', 'phonelink'),
-    'wlsunset': ('Blue Light Filter', 'preferences-system', 'nightlight'),
-    'hyprsunset': ('Blue Light Filter', 'preferences-system', 'nightlight'),
-    'gammastep': ('Blue Light Filter', 'preferences-system', 'nightlight'),
-    'hyprpolkitagent': ('Auth Agent', 'system-lock-screen', 'security'),
-    'polkit-kde-authentication-agent-1': ('Auth Agent', 'system-lock-screen', 'security'),
-    'polkit-gnome-authentication-agent-1': ('Auth Agent', 'system-lock-screen', 'security'),
-    'Xwayland': ('XWayland Server', 'xorg-server', 'display_settings'),
-    'xwayland': ('XWayland Server', 'xorg-server', 'display_settings'),
-    'wl-paste': ('Clipboard Daemon', 'edit-paste', 'content_paste'),
-    'cliphist': ('Clipboard History', 'edit-paste', 'history'),
-    'cava': ('CAVA Audio Visualizer', 'audio-card', 'equalizer'),
-    'python': ('Python', 'python', 'terminal'),
-    'python3': ('Python 3', 'python', 'terminal'),
-    'slurp': ('Slurp', 'camera-photo', 'crop'),
-    'grim': ('Grim Screenshot', 'camera-photo', 'screenshot_monitor'),
-    'grimblast': ('Grimblast Screenshot', 'camera-photo', 'screenshot_monitor'),
-    'hyprpicker': ('Hyprpicker', 'color-picker', 'colorize'),
-    'wf-recorder': ('Screen Recorder', 'camera-video', 'videocam'),
-    'isolated web co': ('Web Content', 'zen-browser', 'language'),
-    'isolated web content': ('Web Content', 'zen-browser', 'language'),
-    'privileged con': ('Privileged Content', 'zen-browser', 'language'),
-    'privileged content': ('Privileged Content', 'zen-browser', 'language'),
-    'socket process': ('Socket Process', 'zen-browser', 'language'),
-    'rdd process': ('Media Decoder', 'zen-browser', 'play_circle')
+    'wlsunset': ('Blue Light Filter', '', 'nightlight'),
+    'hyprsunset': ('Blue Light Filter', '', 'nightlight'),
+    'gammastep': ('Blue Light Filter', '', 'nightlight'),
+    'hyprpolkitagent': ('Auth Agent', '', 'security'),
+    'polkit-kde-authentication-agent-1': ('Auth Agent', '', 'security'),
+    'polkit-gnome-authentication-agent-1': ('Auth Agent', '', 'security'),
+    'Xwayland': ('XWayland Server', '', 'display_settings'),
+    'xwayland': ('XWayland Server', '', 'display_settings'),
+    'wl-paste': ('Clipboard Daemon', '', 'content_paste'),
+    'cliphist': ('Clipboard History', '', 'content_paste'),
+    'cava': ('CAVA Audio Visualizer', '', 'equalizer'),
+    'python': ('Python', '', 'terminal'),
+    'python3': ('Python 3', '', 'terminal'),
+    'slurp': ('Slurp', '', 'crop'),
+    'grim': ('Grim Screenshot', 'accessories-screenshot', 'screenshot_monitor'),
+    'grimblast': ('Grimblast Screenshot', 'accessories-screenshot', 'screenshot_monitor'),
+    'hyprpicker': ('Hyprpicker', '', 'colorize'),
+    'wf-recorder': ('Screen Recorder', '', 'videocam'),
+    'isolated web co': ('Web Content', '', 'language'),
+    'isolated web content': ('Web Content', '', 'language'),
+    'privileged con': ('Privileged Content', '', 'security'),
+    'privileged content': ('Privileged Content', '', 'security'),
+    'socket process': ('Socket Process', '', 'wifi'),
+    'rdd process': ('Media Decoder', '', 'play_circle')
 }
+
+VALID_ICON_NAMES = set()
+try:
+    for theme in ['Papirus-Dark', 'Papirus', 'hicolor']:
+        base = f'/usr/share/icons/{theme}'
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, _ = os.path.splitext(f)
+                    VALID_ICON_NAMES.add(name)
+    for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    name, _ = os.path.splitext(f)
+                    VALID_ICON_NAMES.add(name)
+except Exception:
+    pass
 
 USER_APP_KEYS = {
     'quickshell', 'qs', 'hyprland', 'waybar', 'rofi', 'wofi', 'fuzzel', 'tofi',
-    'zen-bin', 'zen', 'firefox', 'chrome', 'google-chrome', 'chromium', 'brave', 'brave-browser', 'opera', 'vivaldi', 'edge',
+    'zen-bin', 'zen', 'helium', 'helium-browser', 'firefox', 'chrome', 'google-chrome', 'chromium', 'brave', 'brave-browser', 'opera', 'vivaldi', 'edge',
     'kitty', 'alacritty', 'foot', 'wezterm', 'ghostty',
     'code', 'vscodium', 'cursor', 'cursor-bin', 'nvim', 'vim', 'sublime_text', 'zed',
     'vesktop', 'discord', 'webcord', 'telegram-desktop', 'telegram', 'slack', 'signal-desktop',
@@ -150,22 +170,63 @@ def token_matches(name, token):
         return bool(re.search(r'(^|[-_.])' + re.escape(t) + r'($|[-_.])', n))
     return t in n
 
+def categorize_process_symbol(name):
+    n = (name or '').lower()
+    if any(x in n for x in ['sh', 'bash', 'zsh', 'fish', 'python', 'node', 'perl', 'ruby', 'lua', 'term']):
+        return 'terminal'
+    if any(x in n for x in ['net', 'wifi', 'wlan', 'wire', 'vpn', 'dns', 'dhcp', 'ip', 'socket', 'conn']):
+        return 'lan'
+    if any(x in n for x in ['audio', 'sound', 'pipe', 'pulse', 'alsa', 'cava', 'volume']):
+        return 'volume_up'
+    if any(x in n for x in ['auth', 'polkit', 'key', 'crypt', 'pass', 'sec', 'lock', 'cert']):
+        return 'security'
+    if any(x in n for x in ['disk', 'mount', 'fs', 'fuse', 'part', 'drive', 'stor', 'btrfs']):
+        return 'hard_drive'
+    if any(x in n for x in ['dbus', 'broker', 'ipc', 'msg', 'rpc', 'sync']):
+        return 'hub'
+    if any(x in n for x in ['hypr', 'wayland', 'x11', 'xwayland', 'compositor', 'seat', 'input', 'screen', 'display']):
+        return 'desktop_windows'
+    if any(x in n for x in ['systemd', 'init', 'service', 'daemon', 'manager', 'ctl', 'worker']):
+        return 'settings'
+    if any(x in n for x in ['log', 'journal', 'audit', 'mon', 'stat', 'watch']):
+        return 'monitoring'
+    if any(x in n for x in ['agent', 'notify', 'dunst', 'mako', 'swaync', 'alert']):
+        return 'notifications'
+    if any(x in n for x in ['blue', 'bt']):
+        return 'bluetooth'
+    if any(x in n for x in ['shot', 'grim', 'slurp', 'picker', 'record']):
+        return 'screenshot_monitor'
+    return 'memory'
+
 def resolve_app_info(comm, p_class):
     c = (comm or '').lower()
     cl = (p_class or '').lower()
 
     if cl in ICON_MAPPINGS:
-        return ICON_MAPPINGS[cl]
+        disp, icon_candidate, symbol = ICON_MAPPINGS[cl]
+        icon_name = icon_candidate if (icon_candidate and icon_candidate in VALID_ICON_NAMES) else ''
+        return disp, icon_name, symbol
+
     if c in ICON_MAPPINGS:
-        return ICON_MAPPINGS[c]
+        disp, icon_candidate, symbol = ICON_MAPPINGS[c]
+        icon_name = icon_candidate if (icon_candidate and icon_candidate in VALID_ICON_NAMES) else ''
+        return disp, icon_name, symbol
 
     for k, v in ICON_MAPPINGS.items():
         if token_matches(cl, k) or token_matches(c, k):
-            return v
+            disp, icon_candidate, symbol = v
+            icon_name = icon_candidate if (icon_candidate and icon_candidate in VALID_ICON_NAMES) else ''
+            return disp, icon_name, symbol
 
     disp = p_class.capitalize() if p_class else comm
-    icon_name = cl if cl else c
-    return disp, icon_name, 'window' if p_class else 'memory'
+    # If it has a window class, it's an actual graphical window
+    if p_class:
+        icon_name = cl if cl in VALID_ICON_NAMES else ''
+        return disp, icon_name, 'window'
+    else:
+        # Background process / system daemon: categorize nicely with Material Symbols
+        symbol = categorize_process_symbol(c)
+        return disp, '', symbol
 
 def clean_child_info(comm, args):
     a = (args or '').strip()

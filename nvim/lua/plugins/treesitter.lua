@@ -6,7 +6,7 @@ vim.pack.add({
 
 require("nvim-treesitter").setup()
 
-require("nvim-treesitter").install({
+local ensure_installed = {
   -- Neovim
   "lua",
   "vim",
@@ -61,7 +61,22 @@ require("nvim-treesitter").install({
 
   -- Documentation
   "comment",
-})
+}
+
+-- Only attempt installation for parsers that are actually missing
+if vim.fn.executable("tree-sitter") == 1 then
+  local installed = require("nvim-treesitter.config").get_installed()
+  local missing = {}
+  for _, lang in ipairs(ensure_installed) do
+    if not vim.list_contains(installed, lang) then
+      table.insert(missing, lang)
+    end
+  end
+
+  if #missing > 0 then
+    require("nvim-treesitter").install(missing)
+  end
+end
 
 vim.api.nvim_create_autocmd("FileType", {
   callback = function()

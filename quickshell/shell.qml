@@ -694,7 +694,10 @@ for f in sorted_files:
         else if (activeMode === "cheatsheet" && root.cheatsheetMod) root.cheatsheetMod.forceSearchFocus();
         else if (activeMode === "taskmanager" && root.taskMgrMod) root.taskMgrMod.forceSearchFocus();
         else if (activeMode === "music" && root.musicMod) root.musicMod.forceActiveFocus();
-        else if (typeof moduleLoader !== "undefined" && moduleLoader.item) moduleLoader.item.forceActiveFocus();
+        else if (typeof moduleLoader !== "undefined" && moduleLoader.item) {
+            if (typeof panel !== "undefined" && panel.activeFocusItem && panel.activeFocusItem !== notchContainer) return;
+            moduleLoader.item.forceActiveFocus();
+        }
         else notchContainer.forceActiveFocus();
     }
 
@@ -1251,6 +1254,9 @@ for f in sorted_files:
         mask: Region {
             item: {
                 if (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") {
+                    if (root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned) {
+                        return notchContainer;
+                    }
                     return fullMaskArea;
                 }
                 if (root.notchHidden) {
@@ -1263,9 +1269,15 @@ for f in sorted_files:
             }
         }
 
-        WlrLayershell.keyboardFocus: (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd" && root.activeMode !== "switcher")
-            ? WlrKeyboardFocus.Exclusive
-            : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: {
+            if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd" || root.activeMode === "switcher") {
+                return WlrKeyboardFocus.None;
+            }
+            if (root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned) {
+                return WlrKeyboardFocus.OnDemand;
+            }
+            return WlrKeyboardFocus.Exclusive;
+        }
 
         // Top hover sensor mouse trigger for fullscreen mode
         MouseArea {
@@ -1316,7 +1328,7 @@ for f in sorted_files:
             id: outsideClickCatcher
             anchors.fill: parent
             z: 0
-            enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
+            enabled: root.activeMode !== "idle" && root.activeMode !== "osd" && !(root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned)
             onClicked: {
                 root.collapseToIdle();
                 if (root.isWindowFullscreen) {
@@ -1358,13 +1370,23 @@ for f in sorted_files:
                         root.fullscreenHoverRevealed = false;
                     }
                     event.accepted = true;
-                } else {
+                } else if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control ||
+                           event.key === Qt.Key_Alt || event.key === Qt.Key_Meta ||
+                           event.key === Qt.Key_CapsLock || event.key === Qt.Key_NumLock ||
+                           event.key === Qt.Key_ScrollLock) {
+                    event.accepted = true;
+                } else if (notchContainer.activeFocus) {
                     root.regainFocus();
                 }
             }
             Keys.onReleased: (event) => {
                 if (root.activeMode === "switcher" && (event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)) {
                     if (root.switcherMod) root.switcherMod.activateSelected();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control ||
+                           event.key === Qt.Key_Alt || event.key === Qt.Key_Meta ||
+                           event.key === Qt.Key_CapsLock || event.key === Qt.Key_NumLock ||
+                           event.key === Qt.Key_ScrollLock) {
                     event.accepted = true;
                 }
             }

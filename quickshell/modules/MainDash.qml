@@ -1386,56 +1386,69 @@ Item {
                     color: Qt.rgba(255, 255, 255, 0.15)
                 }
 
-                // Workspaces Pager (Scroll Wheel + Liquid Pill)
+                // Workspaces Pager (Pill-shaped indicator, identical to workspace switch peek)
                 Row {
-                    id: wsRow
-                    spacing: 3
+                    id: wsHoverRow
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 8
 
                     Repeater {
                         model: dash.workspaceIds
-                        delegate: Rectangle {
-                            id: wsCell
-                            width: 26; height: 26; radius: 8
+
+                        delegate: Item {
+                            id: wsIndicatorItem
                             property int wsId: modelData
                             property bool isFocused: typeof Hyprland !== "undefined" && Hyprland.focusedWorkspace && (wsId === Hyprland.focusedWorkspace.id)
-                            property int winCount: dash.getWorkspaceWindowCount(wsId)
 
-                            color: isFocused ? Theme.accent : (wsMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : "transparent")
-                            scale: isFocused ? 1.05 : (wsMouse.pressed ? 0.92 : (wsMouse.containsMouse ? 1.04 : 1.0))
+                            width: isFocused ? 26 : 8
+                            height: 8
+                            anchors.verticalCenter: parent.verticalCenter
 
-                            Behavior on color { ColorAnimation { duration: 160 } }
-                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 300
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 1
+                            Rectangle {
+                                id: wsPillShape
+                                anchors.fill: parent
+                                radius: 4
+                                color: wsIndicatorItem.isFocused
+                                    ? Theme.accent
+                                    : (wsDotMouse.containsMouse ? (Theme.colors.text_primary ?? "#c0caf5") : Qt.rgba(1, 1, 1, 0.28))
 
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: modelData
-                                    color: wsCell.isFocused ? "#000000" : (Theme.colors.text_primary ?? "#ffffff")
-                                    font.family: "Readex Pro"
-                                    font.pixelSize: 11
-                                    font.weight: wsCell.isFocused ? Font.Bold : Font.DemiBold
+                                Behavior on color {
+                                    ColorAnimation { duration: 240; easing.type: Easing.OutCubic }
                                 }
 
-                                // Window presence indicator dot
+                                // Soft glow ring for active workspace pill
                                 Rectangle {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    width: 3; height: 3; radius: 1.5
-                                    visible: wsCell.winCount > 0
-                                    color: wsCell.isFocused ? "#000000" : Theme.accent
-                                    opacity: wsCell.isFocused ? 0.8 : 0.6
+                                    anchors.fill: parent
+                                    anchors.margins: -2
+                                    radius: 5
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: Theme.accent
+                                    opacity: wsIndicatorItem.isFocused ? 0.35 : 0.0
+                                    visible: opacity > 0.01
+                                    Behavior on opacity {
+                                        NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                                    }
                                 }
                             }
 
                             MouseArea {
-                                id: wsMouse
+                                id: wsDotMouse
                                 anchors.fill: parent
-                                hoverEnabled: true
+                                anchors.margins: -8
                                 cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
                                 onClicked: {
-                                    if (typeof Hyprland !== "undefined") Hyprland.dispatch(`hl.dsp.focus({workspace = ${modelData}})`);
+                                    if (typeof Hyprland !== "undefined") {
+                                        Hyprland.dispatch("hl.dsp.focus({ workspace = " + wsIndicatorItem.wsId + " })");
+                                    }
                                 }
                             }
                         }

@@ -44,6 +44,33 @@ if [[ -z "${TARGET_DIR:-}" ]]; then
 fi
 BACKUP_DIR="${HOME}/.config/dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
+# --- Argument Parsing ---
+SELECTED_BROWSER_ID=""
+ARGS_COPY=("$@")
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --browser=*)
+            SELECTED_BROWSER_ID="${1#*=}"
+            shift
+            ;;
+        --browser|-b)
+            SELECTED_BROWSER_ID="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [options]"
+            echo "Options:"
+            echo "  -b, --browser <zen|helium>  Preselect default web browser (zen or helium)"
+            echo "  -h, --help                  Show this help message"
+            exit 0
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+set -- "${ARGS_COPY[@]}"
+
 # --- Banner Display ---
 print_banner() {
     clear 2>/dev/null || true
@@ -175,6 +202,50 @@ detect_aur_helper() {
     fi
 }
 
+# --- Web Browser Preference ---
+select_browser() {
+    echo -e "${BOLD}${BLUE}🌐 Web Browser Preference...${RESET}"
+    echo -e "   DynamicYou supports both Zen (Firefox-based) and Helium (Chromium-based)."
+
+    if [[ -z "${SELECTED_BROWSER_ID:-}" ]]; then
+        echo -e "   Please select your preferred default browser:"
+        echo -e "   ${BOLD}[1]${RESET} ${GREEN}Zen Browser${RESET}    ${DIM}(zen-browser-bin) - Firefox-based, vertical tabs, tiling optimized [Recommended]${RESET}"
+        echo -e "   ${BOLD}[2]${RESET} ${BLUE}Helium Browser${RESET} ${DIM}(helium-browser-bin) - Chromium-based, private, fast & honest${RESET}"
+        echo
+
+        local choice=""
+        if [ -t 0 ]; then
+            read -r -p "   Choose default browser [1/2] (default: 1): " choice || choice="1"
+        else
+            choice="1"
+        fi
+        choice="${choice:-1}"
+
+        case "$choice" in
+            2|[Hh]|[Hh][Ee][Ll][Ii][Uu][Mm])
+                SELECTED_BROWSER_ID="helium"
+                ;;
+            1|[Zz]|[Zz][Ee][Nn]|*)
+                SELECTED_BROWSER_ID="zen"
+                ;;
+        esac
+    fi
+
+    if [[ "$SELECTED_BROWSER_ID" =~ ^[2hH] ]]; then
+        SELECTED_BROWSER_NAME="Helium Browser"
+        SELECTED_BROWSER_BIN="helium-browser"
+        SELECTED_BROWSER_DESKTOP="helium.desktop"
+        SELECTED_BROWSER_PKG="helium-browser-bin"
+    else
+        SELECTED_BROWSER_NAME="Zen Browser"
+        SELECTED_BROWSER_BIN="zen-browser"
+        SELECTED_BROWSER_DESKTOP="zen.desktop"
+        SELECTED_BROWSER_PKG="zen-browser-bin"
+    fi
+
+    echo -e "   ${GREEN}✓ Selected: ${BOLD}${SELECTED_BROWSER_NAME}${RESET} (${SELECTED_BROWSER_BIN})\n"
+}
+
 # --- Confirmation Prompt ---
 prompt_user_confirmation() {
     echo -e "   ${SURFACE}╭────────────────────────────────────────────────────────╮${RESET}"
@@ -183,6 +254,7 @@ prompt_user_confirmation() {
     echo -e "   ${SURFACE}│${RESET}  • Rice Directory   : ${BLUE}${TARGET_DIR}${RESET}"
     echo -e "   ${SURFACE}│${RESET}  • Dotfile Targets  : ${BLUE}~/.config/{hypr,quickshell,kitty...}${RESET}"
     echo -e "   ${SURFACE}│${RESET}  • Wallpapers       : ${BLUE}~/Pictures/Wallpapers${RESET}"
+    echo -e "   ${SURFACE}│${RESET}  • Default Browser  : ${BLUE}${SELECTED_BROWSER_NAME} (${SELECTED_BROWSER_DESKTOP})${RESET}"
     echo -e "   ${SURFACE}│${RESET}  • Backups          : ${BLUE}${BACKUP_DIR}${RESET}"
     echo -e "   ${SURFACE}│${RESET}  • Greeter / SDDM   : ${BLUE}ii-pixel Material You + Niri Wayland${RESET}"
     echo -e "   ${SURFACE}╰────────────────────────────────────────────────────────╯${RESET}"
@@ -269,6 +341,7 @@ install_dependencies() {
         starship
         fastfetch
         neovim
+        tree-sitter-cli
 
         # Audio & Media
         brightnessctl
@@ -309,6 +382,7 @@ install_dependencies() {
         noto-fonts-cjk
         inter-font
         papirus-icon-theme
+        breeze-icons
         ttf-jetbrains-mono-nerd
     )
 
@@ -334,7 +408,7 @@ install_dependencies() {
         grimblast-git
         krabby-bin
         ttf-material-symbols-variable-git
-        zen-browser-bin
+        "${SELECTED_BROWSER_PKG:-zen-browser-bin}"
     )
 
     MISSING_AUR=()
@@ -413,9 +487,15 @@ apply_symlinks() {
     mkdir -p "${HOME}/Pictures"
     symlink_module "${TARGET_DIR}/Wallpapers" "${HOME}/Pictures/Wallpapers"
 
-    # Binaries in ~/.local/bin
-    mkdir -p "${HOME}/.local/bin"
-    chmod +x "${TARGET_DIR}/scripts/"*.sh "${TARGET_DIR}/quickshell/scripts/"*.sh 2>/dev/null || true
+    # Binaries & permissions
+    mkdir -p "${HOME}/.local/bin" "${HOME}/.cache/quickshell" "${HOME}/.local/share/quickshell"
+    chmod +x "${TARGET_DIR}/install.sh" "${TARGET_DIR}/setup.sh" 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/hypr/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/quickshell/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/quickshell/scripts/"*.sh "${TARGET_DIR}/quickshell/scripts/"*.py 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/lockscreen/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/sddm/install.sh" 2>/dev/null || true
     symlink_module "${TARGET_DIR}/scripts/apply-theme.sh" "${HOME}/.local/bin/apply-theme.sh"
     symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
@@ -427,7 +507,6 @@ apply_symlinks() {
         echo "dog-samurai" > "${HOME}/.config/qylock/theme"
     fi
     symlink_module "${TARGET_DIR}/lockscreen" "${HOME}/.local/share/quickshell-lockscreen"
-    chmod +x "${TARGET_DIR}/lockscreen/lock.sh" 2>/dev/null || true
     symlink_module "${TARGET_DIR}/lockscreen/lock.sh" "${HOME}/.local/bin/lock-screen.sh"
 
     echo
@@ -502,6 +581,102 @@ configure_shell() {
     fi
 }
 
+# --- Default Web Browser & XDG Configuration ---
+configure_browser() {
+    echo -e "${BOLD}${BLUE}🌐 Configuring Default Web Browser & XDG Associations...${RESET}"
+
+    local browser_name="${SELECTED_BROWSER_NAME:-Zen Browser}"
+    local browser_bin="${SELECTED_BROWSER_BIN:-zen-browser}"
+    local browser_desktop="${SELECTED_BROWSER_DESKTOP:-zen.desktop}"
+    local browser_pkg="${SELECTED_BROWSER_PKG:-zen-browser-bin}"
+
+    # 1. Update Hyprland keybinds & env
+    local keybinds_files=("${TARGET_DIR}/hypr/modules/keybinds.lua" "${HOME}/.config/hypr/modules/keybinds.lua")
+    for kf in "${keybinds_files[@]}"; do
+        if [ -f "$kf" ]; then
+            sed -i -E "s/local browser = \".*\"/local browser = \"${browser_bin}\"/" "$kf" 2>/dev/null || true
+        fi
+    done
+
+    local env_files=("${TARGET_DIR}/hypr/modules/env.lua" "${HOME}/.config/hypr/modules/env.lua")
+    for ef in "${env_files[@]}"; do
+        if [ -f "$ef" ]; then
+            if grep -q "BROWSER" "$ef" 2>/dev/null; then
+                sed -i -E "s/hl\.env\(\"BROWSER\", \".*\"\)/hl.env(\"BROWSER\", \"${browser_bin}\")/" "$ef" 2>/dev/null || true
+            else
+                echo "hl.env(\"BROWSER\", \"${browser_bin}\")" >> "$ef"
+            fi
+        fi
+    done
+    export BROWSER="${browser_bin}"
+
+    # 2. Configure XDG Default Settings
+    if [ ! -f "/usr/share/applications/${browser_desktop}" ] && [ ! -f "${HOME}/.local/share/applications/${browser_desktop}" ]; then
+        mkdir -p "${HOME}/.local/share/applications"
+        cat <<EOF > "${HOME}/.local/share/applications/${browser_desktop}"
+[Desktop Entry]
+Version=1.0
+Name=${browser_name}
+Comment=Default Web Browser
+Exec=${browser_bin} %u
+Icon=${browser_bin}
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+EOF
+    fi
+
+    if command -v xdg-settings >/dev/null 2>&1; then
+        xdg-settings set default-web-browser "${browser_desktop}" 2>/dev/null || true
+    fi
+
+    # 3. Configure XDG MIME Associations
+    if command -v xdg-mime >/dev/null 2>&1; then
+        local mime_types=(
+            "x-scheme-handler/http"
+            "x-scheme-handler/https"
+            "x-scheme-handler/about"
+            "x-scheme-handler/unknown"
+            "text/html"
+            "text/xml"
+            "application/xhtml+xml"
+            "application/xml"
+            "application/x-extension-htm"
+            "application/x-extension-html"
+            "application/x-extension-shtml"
+            "application/x-extension-xhtml"
+            "application/x-extension-xht"
+        )
+        for mime in "${mime_types[@]}"; do
+            xdg-mime default "${browser_desktop}" "$mime" 2>/dev/null || true
+        done
+        echo -e "   ${GREEN}✓ Configured XDG MIME associations for ${browser_desktop}${RESET}"
+    fi
+
+    # 4. Explicit fallback ensure in ~/.config/mimeapps.list
+    local mimeapps="${HOME}/.config/mimeapps.list"
+    if [ ! -f "$mimeapps" ]; then
+        mkdir -p "${HOME}/.config"
+        cat <<EOF > "$mimeapps"
+[Default Applications]
+text/html=${browser_desktop}
+x-scheme-handler/http=${browser_desktop}
+x-scheme-handler/https=${browser_desktop}
+x-scheme-handler/about=${browser_desktop}
+x-scheme-handler/unknown=${browser_desktop}
+application/xhtml+xml=${browser_desktop}
+EOF
+    else
+        sed -i -E "s/^(x-scheme-handler\/http)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(x-scheme-handler\/https)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(text\/html)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(application\/xhtml\+xml)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+    fi
+
+    echo -e "   ${GREEN}✓ Default web browser successfully set to ${BOLD}${browser_name}${RESET} (${browser_desktop})\n"
+}
+
 # --- Final Completion Screen ---
 print_completion() {
     echo -e "   ${C1}${BOLD}╭────────────────────────────────────────────────────────╮${RESET}"
@@ -518,6 +693,7 @@ print_completion() {
     echo -e "   • Reload Hyprland   : ${GREEN}hyprctl reload${RESET}"
     echo -e "   • Reload QuickShell : ${GREEN}~/.config/quickshell/reload.sh${RESET}"
     echo -e "   • Open Terminal     : ${GREEN}Super + Return${RESET}          ${DIM}(Kitty)${RESET}"
+    echo -e "   • Open Browser      : ${GREEN}Super + B${RESET}               ${DIM}(${SELECTED_BROWSER_NAME:-Browser})${RESET}"
     echo -e "   • Notch Launcher    : ${GREEN}Super + Space${RESET}           ${DIM}(QuickShell Apps)${RESET}"
     echo
     echo -e "   ${C5}${BOLD}To start the session, log out or reboot and select Hyprland in SDDM.${RESET}\n"
@@ -528,6 +704,7 @@ main() {
     print_banner
     check_compatibility
     detect_aur_helper
+    select_browser
     prompt_user_confirmation
     setup_target_dir
     install_dependencies
@@ -535,6 +712,7 @@ main() {
     setup_sddm
     enable_services
     init_theme
+    configure_browser
     configure_shell
     print_completion
 }

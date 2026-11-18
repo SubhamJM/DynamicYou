@@ -25,6 +25,7 @@ Item {
     // ==========================================
     property int activeTab: 0 // 0: Notepad, 1: Tasks
     property bool isWideMode: false
+    property bool isPinned: false
 
     // Material 3 Dynamic Tonal Palette (Pixel Aesthetic)
     readonly property color m3Primary: Theme.accent ?? "#89b4fa"
@@ -104,7 +105,7 @@ Item {
                 if (!this.text || this.text.trim() === "") return;
                 try {
                     var data = JSON.parse(this.text);
-                    if (data.scratchpad !== undefined && !notepadArea.activeFocus) {
+                    if (data.scratchpad !== undefined && !notepadArea.activeFocus && !notesRoot.isSaving) {
                         notesRoot.scratchpadContent = data.scratchpad;
                         notepadArea.text = data.scratchpad;
                     }
@@ -598,6 +599,31 @@ Item {
                         onClicked: notesRoot.isWideMode = !notesRoot.isWideMode
                     }
                 }
+
+                // 5. Pin / Persistent Mode Pill Button
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 30
+                    radius: 15
+                    color: notesRoot.isPinned ? notesRoot.m3PrimaryContainer : (pinMouse.containsMouse ? notesRoot.m3SurfaceContainerHighest : notesRoot.m3SurfaceContainer)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: notesRoot.isPinned ? "󰤱" : "󰤰"
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 13
+                        color: notesRoot.isPinned ? notesRoot.m3Primary : notesRoot.m3TextPrimary
+                    }
+
+                    MouseArea {
+                        id: pinMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: notesRoot.isPinned = !notesRoot.isPinned
+                    }
+                }
             }
         }
 
@@ -851,6 +877,10 @@ Item {
                             wrapMode: TextEdit.Wrap
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 13
+                            leftPadding: 6
+                            rightPadding: 6
+                            topPadding: 4
+                            bottomPadding: 6
                             color: notesRoot.m3TextPrimary
                             placeholderText: "Jot notes, scratch ideas, terminal snippets, or thoughts here...\nAuto-saved automatically in real time."
                             placeholderTextColor: notesRoot.m3TextMuted

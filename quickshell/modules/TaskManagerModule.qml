@@ -1526,7 +1526,7 @@ FocusScope {
                                     IrisIcon {
                                         anchors.centerIn: parent
                                         icon: (model.icon_name && model.icon_name !== "") ? model.icon_name : (model.icon || "memory")
-                                        isApp: true
+                                        isApp: Boolean(model.icon_name && model.icon_name !== "")
                                         iconSize: 20
                                         fill: model.category === "app" ? 1 : 0
                                         color: model.category === "app" ? taskManagerRoot.colAccent : taskManagerRoot.colSubtext

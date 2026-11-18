@@ -31,20 +31,34 @@ print_banner() {
 }
 
 # --- Check arguments ---
-for arg in "$@"; do
-    case "$arg" in
+SELECTED_BROWSER_ID=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --install|-i)
             if [ -f "${SCRIPT_DIR}/install.sh" ]; then
                 echo -e "${BLUE}${BOLD}🚀 Launching full system installer...${RESET}\n"
-                exec bash "${SCRIPT_DIR}/install.sh"
+                shift
+                exec bash "${SCRIPT_DIR}/install.sh" "$@"
             fi
+            ;;
+        --browser=*)
+            SELECTED_BROWSER_ID="${1#*=}"
+            shift
+            ;;
+        --browser|-b)
+            SELECTED_BROWSER_ID="$2"
+            shift 2
             ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo "Options:"
-            echo "  -i, --install    Run full package installation via install.sh"
-            echo "  -h, --help       Show this help message"
+            echo "  -i, --install               Run full package installation via install.sh"
+            echo "  -b, --browser <zen|helium>  Preselect default web browser (zen or helium)"
+            echo "  -h, --help                  Show this help message"
             exit 0
+            ;;
+        *)
+            shift
             ;;
     esac
 done
@@ -122,6 +136,9 @@ deploy_symlinks() {
     symlink_module "${TARGET_DIR}/lockscreen" "${HOME}/.local/share/quickshell-lockscreen"
     symlink_module "${TARGET_DIR}/lockscreen/lock.sh" "${HOME}/.local/bin/lock-screen.sh"
 
+    # Runtime directories
+    mkdir -p "${HOME}/.cache/quickshell" "${HOME}/.local/share/quickshell"
+
     echo
 }
 
@@ -153,11 +170,153 @@ init_theme_environment() {
     fi
 }
 
+configure_browser() {
+    echo -e "${BOLD}${BLUE}🌐 Configuring Default Web Browser & XDG Associations...${RESET}"
+
+    # Prompt user for browser choice if not pre-specified
+    if [[ -z "${SELECTED_BROWSER_ID:-}" ]]; then
+        echo -e "   Please select your preferred default browser:"
+        echo -e "   ${BOLD}[1]${RESET} ${GREEN}Zen Browser${RESET}    ${DIM}(zen.desktop / zen-browser) - Firefox-based, vertical tabs [Default]${RESET}"
+        echo -e "   ${BOLD}[2]${RESET} ${BLUE}Helium Browser${RESET} ${DIM}(helium.desktop / helium-browser) - Chromium-based, fast & private${RESET}"
+
+        local choice=""
+        if [ -t 0 ]; then
+            read -r -p "   Select browser [1/2] (default: 1): " choice || choice="1"
+        else
+            choice="1"
+        fi
+        choice="${choice:-1}"
+
+        case "$choice" in
+            2|[Hh]|[Hh][Ee][Ll][Ii][Uu][Mm])
+                SELECTED_BROWSER_ID="helium"
+                ;;
+            1|[Zz]|[Zz][Ee][Nn]|*)
+                SELECTED_BROWSER_ID="zen"
+                ;;
+        esac
+    fi
+
+    local browser_name="Zen Browser"
+    local browser_bin="zen-browser"
+    local browser_desktop="zen.desktop"
+    local browser_pkg="zen-browser-bin"
+
+    if [[ "$SELECTED_BROWSER_ID" =~ ^[2hH] ]]; then
+        browser_name="Helium Browser"
+        browser_bin="helium-browser"
+        browser_desktop="helium.desktop"
+        browser_pkg="helium-browser-bin"
+    fi
+
+    # 1. Update Hyprland configuration (keybinds.lua & env.lua)
+    local keybinds_files=("${TARGET_DIR}/hypr/modules/keybinds.lua" "${HOME}/.config/hypr/modules/keybinds.lua")
+    for kf in "${keybinds_files[@]}"; do
+        if [ -f "$kf" ]; then
+            sed -i -E "s/local browser = \".*\"/local browser = \"${browser_bin}\"/" "$kf" 2>/dev/null || true
+        fi
+    done
+
+    local env_files=("${TARGET_DIR}/hypr/modules/env.lua" "${HOME}/.config/hypr/modules/env.lua")
+    for ef in "${env_files[@]}"; do
+        if [ -f "$ef" ]; then
+            if grep -q "BROWSER" "$ef" 2>/dev/null; then
+                sed -i -E "s/hl\.env\(\"BROWSER\", \".*\"\)/hl.env(\"BROWSER\", \"${browser_bin}\")/" "$ef" 2>/dev/null || true
+            else
+                echo "hl.env(\"BROWSER\", \"${browser_bin}\")" >> "$ef"
+            fi
+        fi
+    done
+    export BROWSER="${browser_bin}"
+
+    # 2. Configure XDG Default Settings
+    if [ ! -f "/usr/share/applications/${browser_desktop}" ] && [ ! -f "${HOME}/.local/share/applications/${browser_desktop}" ]; then
+        mkdir -p "${HOME}/.local/share/applications"
+        cat <<EOF > "${HOME}/.local/share/applications/${browser_desktop}"
+[Desktop Entry]
+Version=1.0
+Name=${browser_name}
+Comment=Default Web Browser
+Exec=${browser_bin} %u
+Icon=${browser_bin}
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+EOF
+    fi
+
+    if command -v xdg-settings >/dev/null 2>&1; then
+        xdg-settings set default-web-browser "${browser_desktop}" 2>/dev/null || true
+    fi
+
+    # 3. Configure XDG MIME Associations
+    if command -v xdg-mime >/dev/null 2>&1; then
+        local mime_types=(
+            "x-scheme-handler/http"
+            "x-scheme-handler/https"
+            "x-scheme-handler/about"
+            "x-scheme-handler/unknown"
+            "text/html"
+            "text/xml"
+            "application/xhtml+xml"
+            "application/xml"
+            "application/x-extension-htm"
+            "application/x-extension-html"
+            "application/x-extension-shtml"
+            "application/x-extension-xhtml"
+            "application/x-extension-xht"
+        )
+        for mime in "${mime_types[@]}"; do
+            xdg-mime default "${browser_desktop}" "$mime" 2>/dev/null || true
+        done
+    fi
+
+    # 4. Explicitly ensure ~/.config/mimeapps.list is synchronized
+    local mimeapps="${HOME}/.config/mimeapps.list"
+    if [ ! -f "$mimeapps" ]; then
+        mkdir -p "${HOME}/.config"
+        cat <<EOF > "$mimeapps"
+[Default Applications]
+text/html=${browser_desktop}
+x-scheme-handler/http=${browser_desktop}
+x-scheme-handler/https=${browser_desktop}
+x-scheme-handler/about=${browser_desktop}
+x-scheme-handler/unknown=${browser_desktop}
+application/xhtml+xml=${browser_desktop}
+EOF
+    else
+        sed -i -E "s/^(x-scheme-handler\/http)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(x-scheme-handler\/https)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(text\/html)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+        sed -i -E "s/^(application\/xhtml\+xml)=.*/\1=${browser_desktop}/" "$mimeapps" 2>/dev/null || true
+    fi
+
+    echo -e "   ${GREEN}✓ XDG default web browser configured:${RESET} ${BOLD}${browser_name}${RESET} (${browser_desktop})"
+
+    # Check installation status
+    if command -v "$browser_bin" >/dev/null 2>&1; then
+        echo -e "   ${GREEN}✓ Binary detected:${RESET} $(command -v "$browser_bin")"
+    else
+        echo -e "   ${YELLOW}! Note: '${browser_bin}' is not currently installed.${RESET}"
+        echo -e "     You can install it with: ${BOLD}yay -S ${browser_pkg}${RESET}"
+    fi
+
+    # Reload Hyprland keybinds if active
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null 2>&1 || true
+        echo -e "   ${GREEN}✓ Hyprland keybinds reloaded (Super + B -> ${browser_bin})${RESET}"
+    fi
+
+    echo
+}
+
 main() {
     print_banner
     deploy_symlinks
     set_permissions
     init_theme_environment
+    configure_browser
 
     echo -e "${GREEN}${BOLD}🎉 Setup Complete!${RESET}"
     if [ -d "$BACKUP_DIR" ]; then

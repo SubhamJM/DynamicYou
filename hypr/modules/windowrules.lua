@@ -181,7 +181,7 @@ end
 -- --- Tags ---
 apply_window_rule({
   name = "tag-browser",
-  match = { class = "^([Ff]irefox|org.mozilla.firefox|[Ff]irefox-esr|[Ff]irefox-bin|[Gg]oogle-chrome(-beta|-dev|-unstable)?|chrome-.+-Default|[Cc]hromium|[Mm]icrosoft-edge(-stable|-beta|-dev|-unstable)|[Bb]rave-browser(-beta|-dev|-unstable)?|[Tt]horium-browser|[Cc]achy-browser|zen-alpha|zen)$" },
+  match = { class = "^([Ff]irefox|org.mozilla.firefox|[Ff]irefox-esr|[Ff]irefox-bin|[Gg]oogle-chrome(-beta|-dev|-unstable)?|chrome-.+-Default|[Cc]hromium|[Mm]icrosoft-edge(-stable|-beta|-dev|-unstable)|[Bb]rave-browser(-beta|-dev|-unstable)?|[Tt]horium-browser|[Cc]achy-browser|zen-alpha|zen|[Hh]elium|[Hh]elium-browser)$" },
   tag = "+browser"
 })
 

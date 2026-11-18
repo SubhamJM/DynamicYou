@@ -62,7 +62,7 @@ def migrate_data(data):
         })
 
         scratch = data.get("scratchpad", "")
-        if not scratch or scratch.strip() == ".,":
+        if scratch is None or (isinstance(scratch, str) and scratch.strip() == ".,"):
             scratch = "# Scratchpad\n\nJot down quick thoughts, code snippets, or ideas here.\nSupports markdown formatting and auto-saves in real time."
 
         notes.append({
@@ -95,9 +95,11 @@ def save_data(data):
         if "notes" in data and isinstance(data["notes"], list):
             for n in data["notes"]:
                 if n.get("type") == "tasks" or n.get("id") == "tasks":
-                    data["todos"] = n.get("todos", [])
+                    if "todos" in data:
+                        n["todos"] = data["todos"]
                 if n.get("type") == "note" or n.get("id") == "scratchpad":
-                    data["scratchpad"] = n.get("content", "")
+                    if "scratchpad" in data:
+                        n["content"] = data["scratchpad"]
 
         temp_file = NOTES_FILE + ".tmp"
         with open(temp_file, "w", encoding="utf-8") as f:
@@ -137,13 +139,24 @@ def main():
         content = urllib.parse.unquote(sys.argv[2])
         data = load_data()
         data["scratchpad"] = content
-        # Sync to scratchpad or active note
-        active_id = data.get("activeNoteId", "scratchpad")
+        found = False
         for n in data.get("notes", []):
-            if n.get("id") == active_id or n.get("id") == "scratchpad":
+            if n.get("id") == "scratchpad" or n.get("type") == "note":
                 n["content"] = content
                 n["updated_at"] = int(time.time())
+                found = True
                 break
+        if not found:
+            if "notes" not in data or not isinstance(data["notes"], list):
+                data["notes"] = []
+            data["notes"].append({
+                "id": "scratchpad",
+                "type": "note",
+                "title": "Scratchpad",
+                "content": content,
+                "todos": [],
+                "updated_at": int(time.time())
+            })
         save_data(data)
         print("OK")
 

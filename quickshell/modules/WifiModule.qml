@@ -1125,7 +1125,11 @@ ColumnLayout {
 
                             TextField {
                                 id: passField
-                                Layout.fillWidth: true; Layout.preferredHeight: 38
+                                Layout.fillWidth: true; Layout.preferredHeight: 40
+                                leftPadding: 16
+                                rightPadding: 16
+                                topPadding: 0
+                                bottomPadding: 0
                                 placeholderText: "Enter Wi-Fi password…"
                                 placeholderTextColor: wifiMaster.colMuted
                                 echoMode: TextInput.Password
@@ -1142,15 +1146,30 @@ ColumnLayout {
                                 Keys.onReturnPressed: joinBtn.submit()
                                 Keys.onEnterPressed: joinBtn.submit()
                                 Keys.onEscapePressed: (event) => {
-                                    row.isExpanded = false;
+                                    wifiModel.setProperty(index, "isExpanded", false);
+                                    wifiModel.setProperty(index, "showPassword", false);
                                     event.accepted = true;
+                                }
+                                Keys.onPressed: (event) => {
+                                    if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                        event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                        event.key === Qt.Key_Meta) {
+                                        event.accepted = true;
+                                    }
+                                }
+                                Keys.onReleased: (event) => {
+                                    if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                        event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                        event.key === Qt.Key_Meta) {
+                                        event.accepted = true;
+                                    }
                                 }
                             }
 
                             Rectangle {
                                 id: joinBtn
                                 Layout.preferredWidth: isCurrentlyConnecting ? 84 : 58
-                                Layout.preferredHeight: 38
+                                Layout.preferredHeight: 40
                                 radius: 12
                                 color: isCurrentlyConnecting ? wifiMaster.colCardHover : (joinArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
                                 border.width: 0
@@ -1171,7 +1190,7 @@ ColumnLayout {
                             }
 
                             Rectangle {
-                                Layout.preferredWidth: 38; Layout.preferredHeight: 38; radius: 12
+                                Layout.preferredWidth: 40; Layout.preferredHeight: 40; radius: 12
                                 color: cancelArea.containsMouse ? wifiMaster.colCardHover : "transparent"
                                 enabled: !isCurrentlyConnecting
                                 MaterialSymbol { 
@@ -1302,7 +1321,11 @@ ColumnLayout {
                     }
                     TextField {
                         id: hotspotSsidField
-                        Layout.fillWidth: true; Layout.preferredHeight: 34
+                        Layout.fillWidth: true; Layout.preferredHeight: 38
+                        leftPadding: 14
+                        rightPadding: 14
+                        topPadding: 0
+                        bottomPadding: 0
                         text: wifiMaster.hotspotSsid
                         color: wifiMaster.colText
                         font.family: "Noto Sans"
@@ -1313,6 +1336,20 @@ ColumnLayout {
                         background: Rectangle { 
                             color: wifiMaster.colChipBg
                             radius: 10
+                        }
+                        Keys.onPressed: (event) => {
+                            if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                event.key === Qt.Key_Meta) {
+                                event.accepted = true;
+                            }
+                        }
+                        Keys.onReleased: (event) => {
+                            if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                event.key === Qt.Key_Meta) {
+                                event.accepted = true;
+                            }
                         }
                     }
                 }
@@ -1331,7 +1368,11 @@ ColumnLayout {
                         Layout.fillWidth: true; spacing: 8
                         TextField {
                             id: hotspotPassField
-                            Layout.fillWidth: true; Layout.preferredHeight: 34
+                            Layout.fillWidth: true; Layout.preferredHeight: 38
+                            leftPadding: 14
+                            rightPadding: 14
+                            topPadding: 0
+                            bottomPadding: 0
                             text: wifiMaster.hotspotPass
                             echoMode: wifiMaster.hotspotShowPassword ? TextInput.Normal : TextInput.Password
                             color: wifiMaster.colText
@@ -1344,9 +1385,23 @@ ColumnLayout {
                                 color: wifiMaster.colChipBg
                                 radius: 10
                             }
+                            Keys.onPressed: (event) => {
+                                if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                    event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                    event.key === Qt.Key_Meta) {
+                                    event.accepted = true;
+                                }
+                            }
+                            Keys.onReleased: (event) => {
+                                if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
+                                    event.key === Qt.Key_Control || event.key === Qt.Key_Alt ||
+                                    event.key === Qt.Key_Meta) {
+                                    event.accepted = true;
+                                }
+                            }
                         }
                         Rectangle {
-                            Layout.preferredWidth: 34; Layout.preferredHeight: 34; radius: 10
+                            Layout.preferredWidth: 38; Layout.preferredHeight: 38; radius: 10
                             color: eyeArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg
                             MaterialSymbol { 
                                 anchors.centerIn: parent

@@ -1,1 +1,1 @@
-/home/ricing/.config/themes/Abyss/theme-name.txt
+/home/subham/.config/themes/Abyss/theme-name.txt
