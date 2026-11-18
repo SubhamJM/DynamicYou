@@ -375,6 +375,8 @@ install_dependencies() {
         qt6-wayland
         python
         python-dbus
+        python-pillow
+        zenity
 
         # Fonts & Icons
         noto-fonts
@@ -499,6 +501,7 @@ apply_symlinks() {
     symlink_module "${TARGET_DIR}/scripts/apply-theme.sh" "${HOME}/.local/bin/apply-theme.sh"
     symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
+    symlink_module "${TARGET_DIR}/scripts/screenshot.sh" "${HOME}/.local/bin/screenshot.sh"
 
     # Lockscreen setup
     mkdir -p "${HOME}/.local/share"

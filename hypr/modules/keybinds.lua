@@ -40,7 +40,8 @@ hl.bind("SHIFT + Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { releas
 hl.bind("SHIFT + Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
 hl.bind("Alt_L", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
 hl.bind("Alt_R", hl.dsp.global("quickshell:confirmAltRelease"), { release = true, dont_inhibit = true })
-hl.bind("Print", hl.dsp.exec_cmd('grimblast --notify copysave area'))
+hl.bind("Print", hl.dsp.exec_cmd(os.getenv("HOME") .. '/.local/bin/screenshot.sh area'))
+hl.bind("SHIFT + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. '/.local/bin/screenshot.sh screen'))
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("~/.local/bin/lock-screen.sh"))
 
 -- Example binds, see https://wiki.hypr.land/Configuring/Basics/Binds/ for more
@@ -110,10 +111,10 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 
 
 -- 2. Screenshot Annotation Hub (Area crop + Dynamic Island action hub)
-hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.config/quickshell/scripts/screenshot_hub.sh"))
+hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/screenshot.sh hub"))
 
 -- 3. Active Window
-hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd([[sh -c 'hyprctl activewindow -j | jq -r "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" | grim -g - - | wl-copy && notify-send "Screenshot" "Window copied to clipboard"']]))
+hl.bind(mainMod .. " + CTRL + Print", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/screenshot.sh active"))
 
 hl.bind("SUPER + M", hl.dsp.workspace.toggle_special("music"))
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("extra"))

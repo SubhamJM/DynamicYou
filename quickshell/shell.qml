@@ -638,11 +638,13 @@ for f in sorted_files:
             case "notes":         return Qt.resolvedUrl("modules/NotesModule.qml");
             case "cheatsheet":    return Qt.resolvedUrl("modules/KeybindsModule.qml");
             case "taskmanager":   return Qt.resolvedUrl("modules/TaskManagerModule.qml");
+            case "wallsort":      return Qt.resolvedUrl("modules/WallpaperSorterModule.qml");
             default:              return "";
         }
     }
 
     // Dynamic Module Aliases (Null-safe; points to moduleLoader.item when active)
+    readonly property var wallSortMod:   (root.loadedExpandedMode === "wallsort") ? moduleLoader.item : null
     readonly property var launcherMod:   (root.loadedExpandedMode === "launcher") ? moduleLoader.item : null
     readonly property var themeMod:      (root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null
     readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null

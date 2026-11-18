@@ -1312,7 +1312,7 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            // Quick Shortcut Badges & System Actions (Notes, Clipboard, Theme, Tasks, Lock, Power)
+            // Quick Shortcut Badges & System Actions (Notes, Clipboard, Wallpaper Sorter, Tasks, Power)
             RowLayout {
                 spacing: 6
                 Layout.alignment: Qt.AlignRight
@@ -1330,10 +1330,10 @@ Item {
                     onClicked: root.switchMode("clipboard", false)
                 }
 
-                // 3. Theme Selector
+                // 3. Wallpaper Sorter
                 HeaderQuickBtn {
-                    glyph: "palette"
-                    onClicked: root.switchMode("theme", false)
+                    glyph: "auto_awesome_mosaic"
+                    onClicked: root.switchMode("wallsort", false)
                 }
 
                 // 4. Task Manager
@@ -1342,16 +1342,7 @@ Item {
                     onClicked: root.switchMode("taskmanager", false)
                 }
 
-                // 5. Screen Lock
-                HeaderQuickBtn {
-                    glyph: "lock"
-                    onClicked: {
-                        root.collapseToIdle();
-                        Quickshell.execDetached(["bash", (Quickshell.env("HOME") || "") + "/.local/bin/lock-screen.sh"]);
-                    }
-                }
-
-                // 6. Power Menu
+                // 5. Power Menu
                 HeaderQuickBtn {
                     glyph: "power_settings_new"
                     iconColor: "#ff453a"
