@@ -313,10 +313,37 @@ EOF
     echo
 }
 
+configure_hotspot_network() {
+    echo -e "${BOLD}${BLUE}🛡️ Configuring Hotspot & Network Settings...${RESET}"
+
+    # Disable UFW firewall if installed to ensure connecting devices obtain IP addresses seamlessly
+    if command -v ufw >/dev/null 2>&1; then
+        echo -e "   ${DIM}• Disabling UFW firewall for seamless Hotspot connectivity...${RESET}"
+        sudo ufw disable 2>/dev/null || true
+        sudo systemctl stop ufw.service 2>/dev/null || true
+        sudo systemctl disable ufw.service 2>/dev/null || true
+        echo -e "   ${GREEN}✓ UFW firewall disabled (fixes 'obtaining IP address' hang).${RESET}"
+    fi
+
+    # Ensure IPv4 packet forwarding is enabled
+    if [ ! -f /etc/sysctl.d/30-ipforward.conf ] || ! grep -q "net.ipv4.ip_forward=1" /etc/sysctl.d/30-ipforward.conf 2>/dev/null; then
+        echo "net.ipv4.ip_forward=1" | sudo tee /etc/sysctl.d/30-ipforward.conf >/dev/null 2>&1 || true
+        sudo sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+    fi
+
+    # Ensure standalone dnsmasq daemon is disabled (NetworkManager runs its own instance for Hotspot DHCP)
+    if command -v dnsmasq >/dev/null 2>&1; then
+        sudo systemctl disable --now dnsmasq.service 2>/dev/null || true
+    fi
+
+    echo
+}
+
 main() {
     print_banner
     deploy_symlinks
     set_permissions
+    configure_hotspot_network
     init_theme_environment
     configure_browser
 

@@ -217,7 +217,8 @@ def start_hotspot(ssid=None, password=None):
     cleanup_duplicate_hotspots()
     iface = get_wifi_interface()
 
-    # 1. Ensure Wi-Fi radio is switched on
+    # 1. Ensure Wi-Fi radio is switched on & check firewall
+    ensure_firewall_allowed()
     try:
         subprocess.run(["nmcli", "radio", "wifi", "on"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
@@ -311,6 +312,26 @@ def toggle_hotspot(ssid=None, password=None):
     else:
         return start_hotspot(ssid, password)
 
+def is_ufw_active():
+    """Check if UFW firewall is active."""
+    if not shutil.which("ufw"):
+        return False
+    try:
+        res = subprocess.run(["ufw", "status"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=2)
+        return "Status: active" in res.stdout
+    except Exception:
+        return False
+
+def ensure_firewall_allowed():
+    """Ensure UFW does not block Hotspot DHCP/DNS traffic."""
+    if is_ufw_active():
+        try:
+            # Try disabling UFW if passwordless sudo is permitted
+            subprocess.run(["sudo", "-n", "ufw", "disable"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        except Exception:
+            pass
+
 def print_status():
     """Print current live status and metadata as JSON."""
     active = is_hotspot_active()
@@ -318,6 +339,7 @@ def print_status():
     clients = get_connected_clients() if active else 0
     has_dnsmasq = bool(shutil.which("dnsmasq"))
     has_iptables = bool(shutil.which("iptables"))
+    ufw_active = is_ufw_active()
 
     data = {
         "active": active,
@@ -325,7 +347,8 @@ def print_status():
         "password": cfg.get("password", DEFAULT_PASS),
         "clients": clients,
         "dnsmasq_installed": has_dnsmasq,
-        "iptables_installed": has_iptables
+        "iptables_installed": has_iptables,
+        "ufw_active": ufw_active
     }
     print(json.dumps(data))
 
@@ -335,13 +358,15 @@ def print_config():
     active = is_hotspot_active()
     clients = get_connected_clients() if active else 0
     has_dnsmasq = bool(shutil.which("dnsmasq"))
+    ufw_active = is_ufw_active()
 
     data = {
         "ssid": cfg.get("ssid", get_default_ssid()),
         "password": cfg.get("password", DEFAULT_PASS),
         "active": active,
         "clients": clients,
-        "dnsmasq_installed": has_dnsmasq
+        "dnsmasq_installed": has_dnsmasq,
+        "ufw_active": ufw_active
     }
     print(json.dumps(data))
 

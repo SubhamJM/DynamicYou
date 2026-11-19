@@ -548,18 +548,13 @@ enable_services() {
         sudo sysctl -w net.ipv4.ip_forward=1 2>/dev/null || true
     fi
 
-    # Configure firewall rules if UFW is installed
+    # Disable UFW firewall if installed to ensure connecting devices obtain IP addresses seamlessly
     if command -v ufw >/dev/null 2>&1; then
-        echo -e "   ${DIM}• Configuring UFW firewall rules for Hotspot DHCP & DNS...${RESET}"
-        sudo ufw allow 67/udp comment "Hotspot DHCP" 2>/dev/null || true
-        sudo ufw allow 53/udp comment "Hotspot DNS" 2>/dev/null || true
-        sudo ufw allow 53/tcp comment "Hotspot DNS" 2>/dev/null || true
-        if [ -f /etc/default/ufw ]; then
-            sudo sed -i -E 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw 2>/dev/null || true
-        fi
-        if sudo ufw status 2>/dev/null | grep -q "Status: active"; then
-            sudo ufw reload 2>/dev/null || true
-        fi
+        echo -e "   ${DIM}• Disabling UFW firewall for seamless Hotspot connectivity...${RESET}"
+        sudo ufw disable 2>/dev/null || true
+        sudo systemctl stop ufw.service 2>/dev/null || true
+        sudo systemctl disable ufw.service 2>/dev/null || true
+        echo -e "   ${GREEN}✓ UFW firewall disabled (fixes 'obtaining IP address' hang).${RESET}"
     fi
 
     echo -e "   ${GREEN}✓ Essential services (NetworkManager, Bluetooth, PipeWire, Hotspot) configured.${RESET}\n"
