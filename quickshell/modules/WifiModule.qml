@@ -39,6 +39,8 @@ ColumnLayout {
     property string hotspotPass: "12345678"
     property bool hotspotShowPassword: false
     property int hotspotClients: 0
+    property bool hotspotLoaded: false
+    property bool hotspotSaveSuccess: false
 
     // Sleek Frosted Glass & Material 3 Palette
     readonly property color colSurface: "#000000"
@@ -380,10 +382,17 @@ ColumnLayout {
                 try {
                     var data = JSON.parse(this.text.trim());
                     if (data) {
-                        if (wifiMaster.hotspotSsid === "" && data.ssid) wifiMaster.hotspotSsid = data.ssid;
-                        if ((wifiMaster.hotspotPass === "" || wifiMaster.hotspotPass === "12345678") && data.password) wifiMaster.hotspotPass = data.password;
                         if (data.active !== undefined) wifiMaster.hotspotActive = !!data.active;
                         if (data.clients !== undefined) wifiMaster.hotspotClients = data.clients;
+                        if (!wifiMaster.hotspotLoaded) {
+                            var s = data.ssid || "";
+                            var p = data.password || "";
+                            wifiMaster.hotspotSsid = s;
+                            wifiMaster.hotspotPass = p;
+                            hotspotSsidField.text = s;
+                            hotspotPassField.text = p;
+                            wifiMaster.hotspotLoaded = true;
+                        }
                     }
                 } catch(e) {}
             }
@@ -400,8 +409,15 @@ ColumnLayout {
                     if (data) {
                         wifiMaster.hotspotActive = !!data.active;
                         if (data.clients !== undefined) wifiMaster.hotspotClients = data.clients;
-                        if (wifiMaster.hotspotSsid === "" && data.ssid) wifiMaster.hotspotSsid = data.ssid;
-                        if ((wifiMaster.hotspotPass === "" || wifiMaster.hotspotPass === "12345678") && data.password) wifiMaster.hotspotPass = data.password;
+                        if (!wifiMaster.hotspotLoaded && data.ssid) {
+                            var s = data.ssid || "";
+                            var p = data.password || "";
+                            wifiMaster.hotspotSsid = s;
+                            wifiMaster.hotspotPass = p;
+                            hotspotSsidField.text = s;
+                            hotspotPassField.text = p;
+                            wifiMaster.hotspotLoaded = true;
+                        }
                     }
                 } catch(e) {
                     wifiMaster.hotspotActive = (this.text.indexOf('"active": true') !== -1);
@@ -411,24 +427,30 @@ ColumnLayout {
     }
 
     Timer {
-        id: hotspotSaveTimer
-        interval: 500
+        id: saveSuccessResetTimer
+        interval: 2200
         repeat: false
-        onTriggered: {
-            if (wifiMaster.hotspotSsid !== "" && wifiMaster.hotspotPass.length >= 8) {
-                Quickshell.execDetached([
-                    "python3",
-                    Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""),
-                    "set-config",
-                    wifiMaster.hotspotSsid,
-                    wifiMaster.hotspotPass
-                ]);
-            }
-        }
+        onTriggered: wifiMaster.hotspotSaveSuccess = false
     }
 
-    function saveHotspotConfig() {
-        hotspotSaveTimer.restart();
+    function saveHotspotCredentials() {
+        var newSsid = hotspotSsidField.text.trim();
+        var newPass = hotspotPassField.text;
+        if (newSsid.length === 0 || newPass.length < 8) return;
+
+        wifiMaster.hotspotSsid = newSsid;
+        wifiMaster.hotspotPass = newPass;
+
+        Quickshell.execDetached([
+            "python3",
+            Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""),
+            "set-config",
+            newSsid,
+            newPass
+        ]);
+
+        wifiMaster.hotspotSaveSuccess = true;
+        saveSuccessResetTimer.restart();
     }
 
     Process {
@@ -444,6 +466,12 @@ ColumnLayout {
     function toggleHotspot(enable) {
         var scriptPath = Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", "");
         if (enable) {
+            var currentSsid = hotspotSsidField.text.trim();
+            var currentPass = hotspotPassField.text;
+            if (currentSsid.length > 0 && currentPass.length >= 8) {
+                wifiMaster.hotspotSsid = currentSsid;
+                wifiMaster.hotspotPass = currentPass;
+            }
             hotspotRunner.command = ["python3", scriptPath, "start", wifiMaster.hotspotSsid, wifiMaster.hotspotPass];
         } else {
             hotspotRunner.command = ["python3", scriptPath, "stop"];
@@ -1382,13 +1410,12 @@ ColumnLayout {
                         font.pixelSize: 12
                         verticalAlignment: TextInput.AlignVCenter
                         selectByMouse: true
-                        onTextEdited: {
-                            wifiMaster.hotspotSsid = text;
-                            wifiMaster.saveHotspotConfig();
-                        }
+                        onAccepted: wifiMaster.saveHotspotCredentials()
                         background: Rectangle { 
                             color: wifiMaster.colChipBg
                             radius: 10
+                            border.width: hotspotSsidField.activeFocus ? 1 : 0
+                            border.color: wifiMaster.colAccent
                         }
                         Keys.onPressed: (event) => {
                             if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
@@ -1433,13 +1460,12 @@ ColumnLayout {
                             font.pixelSize: 12
                             verticalAlignment: TextInput.AlignVCenter
                             selectByMouse: true
-                            onTextEdited: {
-                                wifiMaster.hotspotPass = text;
-                                wifiMaster.saveHotspotConfig();
-                            }
+                            onAccepted: wifiMaster.saveHotspotCredentials()
                             background: Rectangle { 
                                 color: wifiMaster.colChipBg
                                 radius: 10
+                                border.width: hotspotPassField.activeFocus ? 1 : 0
+                                border.color: wifiMaster.colAccent
                             }
                             Keys.onPressed: (event) => {
                                 if (event.key === Qt.Key_Shift || event.key === Qt.Key_CapsLock ||
@@ -1468,34 +1494,116 @@ ColumnLayout {
                             MouseArea { id: eyeArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.hotspotShowPassword = !wifiMaster.hotspotShowPassword }
                         }
                     }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 2
+                        visible: hotspotPassField.text.length > 0 && hotspotPassField.text.length < 8
+                        text: "Password must be at least 8 characters (" + hotspotPassField.text.length + "/8)"
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        color: wifiMaster.colYellow
+                        renderType: Text.NativeRendering
+                    }
                 }
 
                 Item { Layout.fillHeight: true }
 
-                Rectangle {
-                    Layout.fillWidth: true; Layout.preferredHeight: 38; radius: 12
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
                     Layout.bottomMargin: 2
-                    color: wifiMaster.hotspotActive ? (startArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)) : (startArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
-                    border.width: 0
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    spacing: 8
 
-                    RowLayout {
-                        anchors.centerIn: parent; spacing: 8
-                        MaterialSymbol { 
-                            text: wifiMaster.hotspotActive ? "power_settings_new" : "wifi_tethering"
-                            iconSize: 16
-                            color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
+                    // 1. Save Changes Button
+                    Rectangle {
+                        id: saveBtn
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        radius: 12
+
+                        readonly property bool canSave: hotspotPassField.text.length >= 8 && hotspotSsidField.text.trim().length > 0
+                        readonly property bool hasChanges: (hotspotSsidField.text !== wifiMaster.hotspotSsid || hotspotPassField.text !== wifiMaster.hotspotPass)
+
+                        color: wifiMaster.hotspotSaveSuccess 
+                             ? Qt.alpha(wifiMaster.colGreen, 0.22)
+                             : (hasChanges && canSave 
+                                 ? (saveArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.32) : Qt.alpha(wifiMaster.colAccent, 0.20))
+                                 : (saveArea.containsMouse ? wifiMaster.colCardHover : wifiMaster.colChipBg))
+
+                        border.width: (hasChanges && canSave) ? 1 : 0
+                        border.color: (hasChanges && canSave) ? Qt.alpha(wifiMaster.colAccent, 0.5) : "transparent"
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            MaterialSymbol {
+                                text: wifiMaster.hotspotSaveSuccess ? "check_circle" : (saveBtn.hasChanges ? "save" : "check")
+                                iconSize: 16
+                                color: wifiMaster.hotspotSaveSuccess ? wifiMaster.colGreen
+                                     : (saveBtn.hasChanges && saveBtn.canSave ? wifiMaster.colAccent : wifiMaster.colMuted)
+                            }
+                            Text {
+                                text: wifiMaster.hotspotSaveSuccess ? "Saved ✓" : (saveBtn.hasChanges ? "Save Changes" : "Saved")
+                                font.family: "Noto Sans"
+                                font.weight: Font.DemiBold
+                                font.pixelSize: 12
+                                color: wifiMaster.hotspotSaveSuccess ? wifiMaster.colGreen
+                                     : (saveBtn.hasChanges && saveBtn.canSave ? wifiMaster.colAccent : wifiMaster.colMuted)
+                                renderType: Text.NativeRendering
+                            }
                         }
-                        Text { 
-                            text: wifiMaster.hotspotActive ? "Stop Hotspot" : "Start Hotspot"
-                            font.family: "Noto Sans"
-                            font.weight: Font.DemiBold
-                            font.pixelSize: 12
-                            color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
-                            renderType: Text.NativeRendering
+
+                        MouseArea {
+                            id: saveArea
+                            anchors.fill: parent
+                            cursorShape: (saveBtn.hasChanges && saveBtn.canSave) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            hoverEnabled: true
+                            onClicked: {
+                                if (saveBtn.canSave && saveBtn.hasChanges) {
+                                    wifiMaster.saveHotspotCredentials();
+                                }
+                            }
                         }
                     }
-                    MouseArea { id: startArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; hoverEnabled: true; onClicked: wifiMaster.toggleHotspot(!wifiMaster.hotspotActive) }
+
+                    // 2. Start / Stop Hotspot Button
+                    Rectangle {
+                        id: startBtn
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        radius: 12
+                        color: wifiMaster.hotspotActive 
+                             ? (startArea.containsMouse ? Qt.alpha(wifiMaster.colRed, 0.25) : Qt.alpha(wifiMaster.colRed, 0.16)) 
+                             : (startArea.containsMouse ? Qt.alpha(wifiMaster.colAccent, 0.25) : Qt.alpha(wifiMaster.colAccent, 0.16))
+                        border.width: 0
+                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            MaterialSymbol { 
+                                text: wifiMaster.hotspotActive ? "power_settings_new" : "wifi_tethering"
+                                iconSize: 16
+                                color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
+                            }
+                            Text { 
+                                text: wifiMaster.hotspotActive ? "Stop Hotspot" : "Start Hotspot"
+                                font.family: "Noto Sans"
+                                font.weight: Font.DemiBold
+                                font.pixelSize: 12
+                                color: wifiMaster.hotspotActive ? wifiMaster.colRed : wifiMaster.colAccent
+                                renderType: Text.NativeRendering
+                            }
+                        }
+                        MouseArea {
+                            id: startArea
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onClicked: wifiMaster.toggleHotspot(!wifiMaster.hotspotActive)
+                        }
+                    }
                 }
             }
         }

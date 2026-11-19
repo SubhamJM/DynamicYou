@@ -127,7 +127,7 @@ QtObject {
     }
 
     function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight) {
-        if (activeTab === "hotspot") return 390;
+        if (activeTab === "hotspot") return 405;
         if (!wifiEnabled) return 240;
         if (modelCount === 0) return 260;
         var base = 192;
