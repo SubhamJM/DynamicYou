@@ -128,6 +128,7 @@ deploy_symlinks() {
     symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
     symlink_module "${TARGET_DIR}/scripts/screenshot.sh" "${HOME}/.local/bin/screenshot.sh"
+    symlink_module "${TARGET_DIR}/scripts/hotspot.sh" "${HOME}/.local/bin/hotspot"
 
     # Lockscreen setup
     mkdir -p "${HOME}/.local/share" "${HOME}/.config/qylock"
@@ -146,7 +147,7 @@ deploy_symlinks() {
 set_permissions() {
     echo -e "${BOLD}${BLUE}🔧 Setting Executable Permissions...${RESET}"
     chmod +x "${TARGET_DIR}/install.sh" "${TARGET_DIR}/setup.sh" 2>/dev/null || true
-    chmod +x "${TARGET_DIR}/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/scripts/"*.sh "${TARGET_DIR}/scripts/"*.py 2>/dev/null || true
     chmod +x "${TARGET_DIR}/hypr/scripts/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/scripts/"*.sh "${TARGET_DIR}/quickshell/scripts/"*.py 2>/dev/null || true

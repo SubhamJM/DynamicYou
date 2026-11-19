@@ -118,19 +118,26 @@ Item {
     Process {
         id: checkHotspotStatus
         running: true
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -iE '^(802-11-wireless|wifi).*:.*hotspot' || true"]
+        command: ["python3", Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""), "status"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var isActive = (this.text.trim().length > 0);
-                utilModule.hotspotActive = isActive;
-                if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    var isActive = !!data.active;
+                    utilModule.hotspotActive = isActive;
+                    if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
+                } catch(e) {
+                    var fallback = (this.text.indexOf('"active": true') !== -1);
+                    utilModule.hotspotActive = fallback;
+                    if (root.wifiMod) root.wifiMod.hotspotActive = fallback;
+                }
             }
         }
     }
 
     Timer {
         id: hotspotSettleTimer
-        interval: 400
+        interval: 500
         repeat: false
         onTriggered: {
             checkHotspotStatus.running = true;
@@ -150,13 +157,13 @@ Item {
     function toggleHotspot() {
         var targetState = !utilModule.hotspotActive;
         utilModule.hotspotActive = targetState;
-        if (targetState) {
-            utilHotspotRunner.command = ["sh", "-c", "nmcli radio wifi on && sleep 0.4 && (nmcli connection up Hotspot 2>/dev/null || nmcli device wifi hotspot 2>/dev/null || nmcli device wifi hotspot ssid 'SubhamLaptop' password '000000001')"];
+        if (root.wifiMod) {
+            root.wifiMod.toggleHotspot(targetState);
         } else {
-            utilHotspotRunner.command = ["sh", "-c", "for uuid in $(nmcli -t -f UUID,TYPE,NAME con show --active | grep -iE ':(wifi|802-11-wireless):.*hotspot' | cut -d: -f1); do nmcli con down uuid \"$uuid\" 2>/dev/null; done; nmcli connection down Hotspot 2>/dev/null || true"];
+            var scriptPath = Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", "");
+            utilHotspotRunner.command = ["python3", scriptPath, targetState ? "start" : "stop"];
+            utilHotspotRunner.running = true;
         }
-        utilHotspotRunner.running = true;
-        if (root.wifiMod) root.wifiMod.toggleHotspot(targetState);
         hotspotSettleTimer.restart();
     }
 

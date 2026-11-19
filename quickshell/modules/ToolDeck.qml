@@ -369,12 +369,19 @@ Item {
     Process {
         id: checkHotspotStatus
         running: root.activeMode === "tooldeck"
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '^802-11-wireless.*:Hotspot|^wifi.*:Hotspot' || true"]
+        command: ["python3", Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""), "status"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var isActive = (this.text.trim().length > 0);
-                toolDeckRoot.hotspotActive = isActive;
-                if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    var isActive = !!data.active;
+                    toolDeckRoot.hotspotActive = isActive;
+                    if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
+                } catch(e) {
+                    var fallback = (this.text.indexOf('"active": true') !== -1);
+                    toolDeckRoot.hotspotActive = fallback;
+                    if (root.wifiMod) root.wifiMod.hotspotActive = fallback;
+                }
             }
         }
     }
@@ -382,11 +389,11 @@ Item {
     function toggleHotspot() {
         var targetState = !toolDeckRoot.hotspotActive;
         toolDeckRoot.hotspotActive = targetState;
-        if (root.wifiMod) root.wifiMod.hotspotActive = targetState;
-        if (targetState) {
-            Quickshell.execDetached(["sh", "-c", "nmcli con up Hotspot 2>/dev/null || nmcli dev wifi hotspot 2>/dev/null"]);
+        if (root.wifiMod) {
+            root.wifiMod.toggleHotspot(targetState);
         } else {
-            Quickshell.execDetached(["nmcli", "con", "down", "Hotspot"]);
+            var scriptPath = Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", "");
+            Quickshell.execDetached(["python3", scriptPath, targetState ? "start" : "stop"]);
         }
         checkHotspotStatus.running = true;
     }

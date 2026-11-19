@@ -290,7 +290,7 @@ setup_target_dir() {
     fi
 
     # Ensure executable permissions on all scripts
-    chmod +x "${TARGET_DIR}/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/scripts/"*.sh "${TARGET_DIR}/scripts/"*.py 2>/dev/null || true
     chmod +x "${TARGET_DIR}/hypr/scripts/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/scripts/"*.sh 2>/dev/null || true
@@ -354,8 +354,12 @@ install_dependencies() {
         pipewire-alsa
         pipewire-pulse
 
-        # Networking & Bluetooth
+        # Networking, Hotspot & Bluetooth
         networkmanager
+        dnsmasq
+        iptables
+        iproute2
+        iw
         bluez
         bluez-utils
         blueman
@@ -492,7 +496,7 @@ apply_symlinks() {
     # Binaries & permissions
     mkdir -p "${HOME}/.local/bin" "${HOME}/.cache/quickshell" "${HOME}/.local/share/quickshell"
     chmod +x "${TARGET_DIR}/install.sh" "${TARGET_DIR}/setup.sh" 2>/dev/null || true
-    chmod +x "${TARGET_DIR}/scripts/"*.sh 2>/dev/null || true
+    chmod +x "${TARGET_DIR}/scripts/"*.sh "${TARGET_DIR}/scripts/"*.py 2>/dev/null || true
     chmod +x "${TARGET_DIR}/hypr/scripts/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/"*.sh 2>/dev/null || true
     chmod +x "${TARGET_DIR}/quickshell/scripts/"*.sh "${TARGET_DIR}/quickshell/scripts/"*.py 2>/dev/null || true
@@ -502,6 +506,7 @@ apply_symlinks() {
     symlink_module "${TARGET_DIR}/scripts/init-wallpaper.sh" "${HOME}/.local/bin/init-wallpaper.sh"
     symlink_module "${TARGET_DIR}/scripts/osd-control.sh" "${HOME}/.local/bin/osd-control.sh"
     symlink_module "${TARGET_DIR}/scripts/screenshot.sh" "${HOME}/.local/bin/screenshot.sh"
+    symlink_module "${TARGET_DIR}/scripts/hotspot.sh" "${HOME}/.local/bin/hotspot"
 
     # Lockscreen setup
     mkdir -p "${HOME}/.local/share"
@@ -529,11 +534,35 @@ setup_sddm() {
 
 # --- Core System Services ---
 enable_services() {
-    echo -e "${BOLD}${BLUE}⚙️ Enabling Core System Services...${RESET}"
+    echo -e "${BOLD}${BLUE}⚙️ Enabling Core System Services & Hotspot Stack...${RESET}"
     sudo systemctl enable NetworkManager.service 2>/dev/null || true
     sudo systemctl enable bluetooth.service 2>/dev/null || true
     systemctl --user enable pipewire.service pipewire-pulse.service wireplumber.service 2>/dev/null || true
-    echo -e "   ${GREEN}✓ Essential services (NetworkManager, Bluetooth, PipeWire) enabled.${RESET}\n"
+
+    # Disable standalone dnsmasq service so NetworkManager can spawn its own instance for Hotspot DHCP
+    sudo systemctl disable --now dnsmasq.service 2>/dev/null || true
+
+    # Enable IPv4 packet forwarding for Wi-Fi hotspot sharing
+    if [ ! -f /etc/sysctl.d/30-ipforward.conf ] || ! grep -q "net.ipv4.ip_forward=1" /etc/sysctl.d/30-ipforward.conf 2>/dev/null; then
+        echo "net.ipv4.ip_forward=1" | sudo tee /etc/sysctl.d/30-ipforward.conf >/dev/null 2>&1 || true
+        sudo sysctl -w net.ipv4.ip_forward=1 2>/dev/null || true
+    fi
+
+    # Configure firewall rules if UFW is installed
+    if command -v ufw >/dev/null 2>&1; then
+        echo -e "   ${DIM}• Configuring UFW firewall rules for Hotspot DHCP & DNS...${RESET}"
+        sudo ufw allow 67/udp comment "Hotspot DHCP" 2>/dev/null || true
+        sudo ufw allow 53/udp comment "Hotspot DNS" 2>/dev/null || true
+        sudo ufw allow 53/tcp comment "Hotspot DNS" 2>/dev/null || true
+        if [ -f /etc/default/ufw ]; then
+            sudo sed -i -E 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw 2>/dev/null || true
+        fi
+        if sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+            sudo ufw reload 2>/dev/null || true
+        fi
+    fi
+
+    echo -e "   ${GREEN}✓ Essential services (NetworkManager, Bluetooth, PipeWire, Hotspot) configured.${RESET}\n"
 }
 
 # --- Theme Initialization ---

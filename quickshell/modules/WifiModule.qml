@@ -35,9 +35,10 @@ ColumnLayout {
     property string netSpeed: ""
     property string netWarp: ""
 
-    property string hotspotSsid: "SubhamLaptop"
-    property string hotspotPass: "000000001"
+    property string hotspotSsid: ""
+    property string hotspotPass: "12345678"
     property bool hotspotShowPassword: false
+    property int hotspotClients: 0
 
     // Sleek Frosted Glass & Material 3 Palette
     readonly property color colSurface: "#000000"
@@ -372,11 +373,62 @@ ColumnLayout {
     }
 
     Process {
-        id: hotspotStatusChecker
-        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '^802-11-wireless.*:Hotspot|^wifi.*:Hotspot' || true"]
+        id: hotspotConfigLoader
+        command: ["python3", Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""), "config"]
         stdout: StdioCollector {
-            onStreamFinished: wifiMaster.hotspotActive = (this.text.trim().length > 0)
+            onStreamFinished: {
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    if (data) {
+                        if (wifiMaster.hotspotSsid === "" && data.ssid) wifiMaster.hotspotSsid = data.ssid;
+                        if ((wifiMaster.hotspotPass === "" || wifiMaster.hotspotPass === "12345678") && data.password) wifiMaster.hotspotPass = data.password;
+                        if (data.active !== undefined) wifiMaster.hotspotActive = !!data.active;
+                        if (data.clients !== undefined) wifiMaster.hotspotClients = data.clients;
+                    }
+                } catch(e) {}
+            }
         }
+    }
+
+    Process {
+        id: hotspotStatusChecker
+        command: ["python3", Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""), "status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    if (data) {
+                        wifiMaster.hotspotActive = !!data.active;
+                        if (data.clients !== undefined) wifiMaster.hotspotClients = data.clients;
+                        if (wifiMaster.hotspotSsid === "" && data.ssid) wifiMaster.hotspotSsid = data.ssid;
+                        if ((wifiMaster.hotspotPass === "" || wifiMaster.hotspotPass === "12345678") && data.password) wifiMaster.hotspotPass = data.password;
+                    }
+                } catch(e) {
+                    wifiMaster.hotspotActive = (this.text.indexOf('"active": true') !== -1);
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: hotspotSaveTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (wifiMaster.hotspotSsid !== "" && wifiMaster.hotspotPass.length >= 8) {
+                Quickshell.execDetached([
+                    "python3",
+                    Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""),
+                    "set-config",
+                    wifiMaster.hotspotSsid,
+                    wifiMaster.hotspotPass
+                ]);
+            }
+        }
+    }
+
+    function saveHotspotConfig() {
+        hotspotSaveTimer.restart();
     }
 
     Process {
@@ -390,22 +442,20 @@ ColumnLayout {
     }
 
     function toggleHotspot(enable) {
+        var scriptPath = Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", "");
         if (enable) {
-            var safeSsid = hotspotSsid.replace(/'/g, "'\\x27'");
-            var safePass = hotspotPass.replace(/'/g, "'\\x27'");
-            var cmd = "nmcli radio wifi on && sleep 0.5 && nmcli device wifi hotspot ssid '" + safeSsid + "' password '" + safePass + "'";
-            hotspotRunner.command = ["sh", "-c", cmd];
-            hotspotRunner.running = true;
+            hotspotRunner.command = ["python3", scriptPath, "start", wifiMaster.hotspotSsid, wifiMaster.hotspotPass];
         } else {
-            hotspotRunner.command = ["sh", "-c", "for uuid in $(nmcli -t -f UUID,TYPE,NAME con show --active | grep -iE ':(wifi|802-11-wireless):.*hotspot' | cut -d: -f1); do nmcli con down uuid \"$uuid\" 2>/dev/null; done; nmcli connection down Hotspot 2>/dev/null || true"];
-            hotspotRunner.running = true;
+            hotspotRunner.command = ["python3", scriptPath, "stop"];
         }
+        hotspotRunner.running = true;
     }
 
     function refreshStatus() {
         wifiStatusChecker.running = true;
         wifiSavedChecker.running = true;
         hotspotStatusChecker.running = true;
+        hotspotConfigLoader.running = true;
         netInfoChecker.running = true;
     }
 
@@ -1296,7 +1346,7 @@ ColumnLayout {
                             renderType: Text.NativeRendering
                         }
                         Text { 
-                            text: wifiMaster.hotspotActive ? "Broadcasting live" : "Inactive"
+                            text: wifiMaster.hotspotActive ? (wifiMaster.hotspotClients > 0 ? ("Broadcasting • " + wifiMaster.hotspotClients + (wifiMaster.hotspotClients === 1 ? " device" : " devices")) : "Broadcasting live") : "Inactive"
                             font.family: "Noto Sans"
                             font.pixelSize: 10
                             color: wifiMaster.hotspotActive ? wifiMaster.colAccent : wifiMaster.colMuted
@@ -1332,7 +1382,10 @@ ColumnLayout {
                         font.pixelSize: 12
                         verticalAlignment: TextInput.AlignVCenter
                         selectByMouse: true
-                        onTextChanged: wifiMaster.hotspotSsid = text
+                        onTextEdited: {
+                            wifiMaster.hotspotSsid = text;
+                            wifiMaster.saveHotspotConfig();
+                        }
                         background: Rectangle { 
                             color: wifiMaster.colChipBg
                             radius: 10
@@ -1380,7 +1433,10 @@ ColumnLayout {
                             font.pixelSize: 12
                             verticalAlignment: TextInput.AlignVCenter
                             selectByMouse: true
-                            onTextChanged: wifiMaster.hotspotPass = text
+                            onTextEdited: {
+                                wifiMaster.hotspotPass = text;
+                                wifiMaster.saveHotspotConfig();
+                            }
                             background: Rectangle { 
                                 color: wifiMaster.colChipBg
                                 radius: 10

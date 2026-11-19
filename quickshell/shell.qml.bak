@@ -527,8 +527,8 @@ for f in sorted(list(set(files))):
     property var savedConnections: ({})
     property string connectingSsid: ""
 
-    property string hotspotSsid: "SubhamLaptop"
-    property string hotspotPass: "000000001"
+    property string hotspotSsid: ""
+    property string hotspotPass: "12345678"
     property bool hotspotShowPassword: false
 
     function isAnyWifiExpanded() {
