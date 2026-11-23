@@ -1,0 +1,14 @@
+singleton Theme 1.0 Theme.qml
+singleton Net 1.0 Net.qml
+singleton I18n 1.0 I18n.qml
+Icon 1.0 Icon.qml
+IconButton 1.0 IconButton.qml
+Jelly 1.0 Jelly.qml
+LoadingIndicator 1.0 LoadingIndicator.qml
+LText 1.0 LText.qml
+M3Button 1.0 M3Button.qml
+M3IconButton 1.0 M3IconButton.qml
+StateLayer 1.0 StateLayer.qml
+Switch 1.0 Switch.qml
+WifiPanel 1.0 WifiPanel.qml
+WifiShare 1.0 WifiShare.qml

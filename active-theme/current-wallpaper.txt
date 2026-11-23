@@ -1,1 +1,1 @@
-/home/subham/Pictures/Wallpapers/Verdant/0670.jpg
+../Wallpapers/Verdant/0670.jpg

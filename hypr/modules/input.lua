@@ -67,28 +67,3 @@ hl.device({
     name        = "epic-mouse-v1",
     sensitivity = -0.5,
 })
-
-
--- 3 finger swipe left/right → switch workspaces
-hl.gesture({
-    fingers = 3,
-    direction = "vertical",
-    action = "workspace",
-    scale = 1.8 -- INCREASE THIS if the swipe still feels laggy/heavy
-})
-
--- 4 finger swipe up → fullscreen
-hl.gesture({
-    fingers = 4,
-    direction = "up",
-    action = "fullscreen",
-    scale = 1.5
-})
-
-hl.gesture({
-    fingers = 3,
-    direction = "horizontal",
-    action = "scroll_move"
-})
-
-

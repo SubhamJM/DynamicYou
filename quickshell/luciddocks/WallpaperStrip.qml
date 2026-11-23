@@ -1,0 +1,513 @@
+import QtQuick
+import QtQuick.Window
+import Quickshell.Widgets
+import qs
+import qs.lucidui
+import qs.luciddocks
+
+Item {
+    id: strip
+
+    property var model: null
+    property int heroW: Theme.dp(340)
+    property int heroH: Theme.dp(211)
+    property int midW: Theme.dp(238)
+    property int midH: Theme.dp(148)
+    property int smallW: Theme.dp(150)
+    property int smallH: Theme.dp(93)
+    property int tinyW: Theme.dp(100)
+    property int tinyH: Theme.dp(62)
+    property int itemGap: Theme.dp(10)
+    property int hoveredIndex: -1
+    readonly property int hoverGrow: Theme.dp(6)
+    property alias currentIndex: view.currentIndex
+    // the wallpaper actually in use
+    property string appliedPath: ""
+    // the Live tab: the same picker over the videos
+    property bool live: false
+    property real stableHeight: height
+    readonly property real rowHeight: strip.heroH + Theme.dp(62)
+    // the hero card at the screen's own density: every tier is drawn from it
+    readonly property real dpr: (typeof Screen !== "undefined" && Screen && Screen.devicePixelRatio > 0) ? Screen.devicePixelRatio : 1.0
+    readonly property size decodeSize: Qt.size(Math.max(300, Math.ceil(strip.heroW * strip.dpr)), Math.max(180, Math.ceil(strip.heroH * strip.dpr)))
+    // Settings -> Theme -> Strip: neighbours shown on each side
+    readonly property int sides: Prefs.wallpaperStripSides === 3 ? 3 : 2
+
+    property int previewInterval: 300
+    property string pendingPreviewPath: ""
+    property bool syncing: false
+    property int pendingCenterIndex: -1
+
+    // where the card the user picked sits, as fractions of the window (-1 when
+    // it is not known); the "from the chosen card" transition grows from there
+    property real originX: -1
+    property real originY: -1
+
+    signal chosen(string path)
+    signal previewed(string path)
+
+    function noteOrigin(card) {
+        if (!card || strip.Window.width <= 0 || strip.Window.height <= 0) {
+            strip.originX = -1;
+            strip.originY = -1;
+            return;
+        }
+        var p = card.mapToItem(null, card.width / 2, card.height / 2);
+        strip.originX = p.x / strip.Window.width;
+        strip.originY = p.y / strip.Window.height;
+    }
+
+    // arrow keys: one card along, and (for the styles laid out in rows) one row over
+    function step(d) {
+        if (strip.model)
+            view.currentIndex = Math.max(0, Math.min(strip.model.count - 1, view.currentIndex + d));
+    }
+
+    function stepVertical(d) {
+    }
+
+    function activateCurrent() {
+        if (view.currentIndex < 0 || !strip.model)
+            return;
+
+        var item = strip.model.get(view.currentIndex);
+        if (item) {
+            strip.noteOrigin(view.currentItem);
+            strip.chosen(item.path);
+        }
+    }
+
+    function setIndexImmediate(i) {
+        strip.syncing = true;
+        previewThrottle.stop();
+        strip.pendingPreviewPath = "";
+        view.highlightMoveDuration = 0;
+        view.currentIndex = i;
+        strip.pendingCenterIndex = i;
+        centerTimer.restart();
+        restoreAnim.restart();
+    }
+
+    Timer {
+        id: centerTimer
+        interval: 35
+        onTriggered: {
+            if (strip.pendingCenterIndex >= 0) {
+                view.positionViewAtIndex(strip.pendingCenterIndex, ListView.Center);
+                view.currentIndex = strip.pendingCenterIndex;
+                strip.pendingCenterIndex = -1;
+                strip.relayout();
+            }
+        }
+    }
+
+    // deferred — straight from a delegate handler this crashes mid-incubation
+    function relayout() {
+        if (view.width >= strip.heroW) {
+            view.forceLayout();
+        }
+    }
+
+    function centerPending() {
+        if (strip.pendingCenterIndex < 0)
+            return;
+
+        view.positionViewAtIndex(strip.pendingCenterIndex, ListView.Center);
+        strip.pendingCenterIndex = -1;
+    }
+
+    function emitPreview() {
+        if (strip.pendingPreviewPath === "")
+            return;
+
+        // the transition can grow from the card being previewed
+        strip.noteOrigin(view.currentItem);
+        strip.previewed(strip.pendingPreviewPath);
+        strip.pendingPreviewPath = "";
+    }
+
+    Timer {
+        id: restoreAnim
+
+        interval: 120
+        onTriggered: {
+            view.highlightMoveDuration = Theme.ms(260);
+            strip.syncing = false;
+        }
+    }
+
+    Timer {
+        id: previewThrottle
+
+        interval: strip.previewInterval
+        onTriggered: strip.emitPreview()
+    }
+
+    ListView {
+        id: view
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        width: 880
+        height: strip.heroH + Theme.dp(24)
+        orientation: ListView.Horizontal
+        spacing: strip.itemGap
+        clip: true
+        interactive: true
+        boundsBehavior: Flickable.StopAtBounds
+        model: strip.model
+        highlightRangeMode: ListView.StrictlyEnforceRange
+        preferredHighlightBegin: 280
+        preferredHighlightEnd: 600
+        highlightMoveDuration: Theme.ms(260)
+        flickDeceleration: 3000
+        visible: count > 0
+        cacheBuffer: strip.heroW * 6
+
+        onCurrentIndexChanged: {
+            Qt.callLater(strip.relayout);
+            if (strip.syncing || view.currentIndex < 0 || !strip.model)
+                return;
+
+            var item = strip.model.get(view.currentIndex);
+            if (!item)
+                return;
+
+            strip.pendingPreviewPath = item.path;
+            previewThrottle.restart();
+        }
+
+        add: Transition {
+            NumberAnimation {
+                properties: "scale"
+                from: 0.6
+                duration: Theme.durEnter
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.4
+            }
+
+            NumberAnimation {
+                properties: "opacity"
+                from: 0
+                duration: Theme.ms(200)
+            }
+
+        }
+
+        delegate: Item {
+            id: slot
+
+            required property string path
+            required property string name
+            required property string thumb
+            required property bool temp
+            required property int index
+
+            readonly property bool isCurrent: view.currentIndex === slot.index
+            readonly property bool isApplied: strip.appliedPath !== "" && strip.appliedPath === slot.path
+            readonly property bool hovered: cardHover.hovered && stripHover.hovered
+            readonly property bool pressed: cardTap.pressed && slot.hovered
+
+            onHoveredChanged: {
+                if (slot.hovered)
+                    strip.hoveredIndex = slot.index;
+                else if (strip.hoveredIndex === slot.index)
+                    strip.hoveredIndex = -1;
+            }
+
+            readonly property int tier: Math.min(strip.sides, Math.abs(slot.index - view.currentIndex))
+            readonly property int targetW: slot.tier === 0 ? strip.heroW : (slot.tier === 1 ? strip.midW : (slot.tier === 2 ? strip.smallW : strip.tinyW))
+            readonly property int targetH: slot.tier === 0 ? strip.heroH : (slot.tier === 1 ? strip.midH : (slot.tier === 2 ? strip.smallH : strip.tinyH))
+
+            width: slot.targetW
+            height: view.height
+
+            onWidthChanged: Qt.callLater(strip.relayout)
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: Theme.ms(300)
+                    easing.type: Easing.Bezier
+                    easing.bezierCurve: Theme.easeEmphasizedDecel
+                }
+
+            }
+
+            ClippingRectangle {
+                id: card
+
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: slot.hovered ? -Theme.dp(4) : 0
+                scale: slot.pressed ? 1 - 4 / card.width : (slot.hovered ? 1 + strip.hoverGrow / card.width : 1)
+                width: parent.width
+                height: slot.targetH
+
+                Behavior on anchors.verticalCenterOffset {
+                    NumberAnimation {
+                        duration: Theme.durShort
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Theme.durShort
+                        easing.type: Easing.OutCubic
+                    }
+
+                }
+                radius: slot.tier === 0 ? Theme.shapeXlInc : (slot.tier === 1 ? Theme.shapeLgInc : (slot.tier === 2 ? Theme.shapeMd : Theme.shapeSm))
+                color: Theme.bgTile
+                opacity: (slot.tier === 0 || slot.hovered) ? 1 : (slot.tier === 1 ? 0.78 : (slot.tier === 2 ? 0.5 : 0.36))
+
+                Behavior on height {
+                    NumberAnimation {
+                        duration: Theme.ms(300)
+                        easing.type: Easing.Bezier
+                        easing.bezierCurve: Theme.easeEmphasizedDecel
+                    }
+
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.ms(300)
+                    }
+
+                }
+
+
+                // the small copy decodes in a millisecond, so it is read in step and
+                // is up on the card's first frame; an original still waiting for
+                // one stays off the gui thread
+                Image {
+                    anchors.fill: parent
+                    source: {
+                        var p = (slot.thumb && slot.thumb !== "") ? slot.thumb : slot.path;
+                        if (!p || p === "" || /\.(mp4|webm|mkv|mov|m4v)$/i.test(p)) return "";
+                        return p.startsWith("file://") ? p : ("file://" + p);
+                    }
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: slot.thumb === ""
+                    cache: true
+                    sourceSize: strip.decodeSize
+                    smooth: true
+                    mipmap: false
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Theme.text
+                    opacity: slot.pressed ? Theme.statePressed : (slot.hovered ? Theme.stateHover : 0)
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Theme.durShort
+                        }
+
+                    }
+
+                }
+
+            }
+
+            Rectangle {
+                anchors.right: card.right
+                anchors.top: card.top
+                anchors.margins: Theme.dp(10)
+                width: Theme.dp(26)
+                height: Theme.dp(26)
+                radius: width / 2
+                color: Theme.accent
+                scale: slot.isApplied ? 1 : 0.4
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Theme.durFastSpatial
+                        easing.type: Easing.Bezier
+                        easing.bezierCurve: Theme.curveDefaultSpatial
+                    }
+
+                }
+                opacity: slot.isApplied ? 1 : 0
+                visible: opacity > 0.01
+
+                DockGlyph {
+                    anchors.centerIn: parent
+                    width: Theme.dp(15)
+                    height: Theme.dp(15)
+                    pathData: DockIcons.check
+                    glyphColor: Theme.fgAccent
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.durShort
+                    }
+
+                }
+
+            }
+
+            // set from outside the folder, from lumen say: in the strip only while
+            // it is the wallpaper, and this says so
+            Rectangle {
+                anchors.left: card.left
+                anchors.top: card.top
+                anchors.margins: Theme.dp(10)
+                width: Theme.dp(26)
+                height: Theme.dp(26)
+                radius: width / 2
+                color: Theme.secondaryContainer
+                visible: slot.temp
+
+                Icon {
+                    anchors.centerIn: parent
+                    name: "hourglass_top"
+                    size: Theme.dp(16)
+                    fill: 1
+                    color: Theme.fgSecondaryContainer
+                }
+
+            }
+
+            HoverHandler {
+                id: cardHover
+
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            TapHandler {
+                id: cardTap
+
+                onTapped: {
+                    if (slot.isCurrent) {
+                        strip.noteOrigin(slot);
+                        strip.chosen(slot.path);
+                    } else
+                        view.currentIndex = slot.index;
+                }
+            }
+
+        }
+
+    }
+
+    HoverHandler {
+        id: stripHover
+    }
+
+    WheelHandler {
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: (event) => {
+            strip.step(event.angleDelta.y < 0 || event.angleDelta.x < 0 ? 1 : -1);
+        }
+    }
+
+    Item {
+        id: caption
+        visible: false
+        height: 0
+
+        Row {
+            id: capRow
+
+            readonly property int at: strip.hoveredIndex >= 0 ? strip.hoveredIndex : view.currentIndex
+            readonly property var entry: strip.model && capRow.at >= 0 && capRow.at < strip.model.count ? strip.model.get(capRow.at) : null
+
+            anchors.centerIn: parent
+            spacing: Theme.dp(10)
+
+            LText {
+                id: capName
+
+                anchors.verticalCenter: parent.verticalCenter
+                role: "titleSmall"
+                text: capRow.entry ? capRow.entry.name : ""
+                color: Theme.text
+                elide: Text.ElideRight
+                width: Math.min(capMetrics.width + Theme.dp(2), Math.max(0, strip.width - Theme.dp(220)))
+
+                TextMetrics {
+                    id: capMetrics
+
+                    font: capName.font
+                    text: capName.text
+                }
+
+            }
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: appliedLabel.implicitWidth + Theme.dp(16)
+                height: Theme.dp(22)
+                radius: Theme.shapeFull
+                color: Theme.accent
+                visible: capRow.entry !== null && strip.appliedPath !== "" && strip.appliedPath === capRow.entry.path
+
+                LText {
+                    id: appliedLabel
+
+                    anchors.centerIn: parent
+                    role: "labelSmall"
+                    text: "On the desktop"
+                    color: Theme.fgAccent
+                }
+
+            }
+
+            LText {
+                anchors.verticalCenter: parent.verticalCenter
+                role: "labelMedium"
+                tabular: true
+                text: strip.model && strip.model.count > 0 ? (capRow.at + 1) + " / " + strip.model.count : ""
+                color: Theme.subtextDim
+            }
+
+        }
+
+    }
+
+    Column {
+        id: emptyState
+
+        anchors.top: parent.top
+        anchors.topMargin: Math.max(0, (strip.stableHeight - emptyState.implicitHeight) / 2)
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Theme.dp(12)
+        visible: !strip.model || strip.model.count === 0
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Theme.dp(58)
+            height: Theme.dp(58)
+            radius: Theme.shapeXl
+            color: Theme.withBlur(Theme.surfaceHigh)
+
+            Icon {
+                anchors.centerIn: parent
+                name: strip.live ? "movie" : "wallpaper"
+                size: Theme.dp(28)
+                color: Theme.primary
+            }
+
+        }
+
+        LText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            role: "titleMedium"
+            text: strip.live ? "No videos in this folder" : "No wallpapers in this folder"
+            color: Theme.text
+        }
+
+        LText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            role: "bodyMedium"
+            text: strip.live ? "Drop mp4, webm or mkv files into the theme's wallpaper folder and they show up here." : "Drop images into the theme's wallpaper folder and they show up here."
+            color: Theme.subtextDim
+        }
+
+    }
+
+}

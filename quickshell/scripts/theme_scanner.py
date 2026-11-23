@@ -3,7 +3,7 @@ import os
 import json
 
 def scan_themes():
-    theme_dir = os.path.expanduser("~/.config/themes")
+    theme_dir = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "themes")
     if not os.path.exists(theme_dir):
         print(json.dumps([]))
         return

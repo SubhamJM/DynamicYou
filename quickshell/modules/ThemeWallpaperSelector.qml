@@ -256,16 +256,8 @@ Item {
         if (themeCarousel.currentIndex >= 0 && themeCarousel.currentIndex < filteredThemes.length) {
             var t = filteredThemes[themeCarousel.currentIndex];
             if (t && t.rawName) {
-                var home = Quickshell.env("HOME") || "";
-                var cmd = `
-                    for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh" "$HOME/.config/hypr/scripts/apply-theme.sh"; do
-                        if [ -x "$s" ] || [ -f "$s" ]; then
-                            exec bash "$s" "${t.rawName}"
-                        fi
-                    done
-                    apply-theme.sh "${t.rawName}"
-                `;
-                Quickshell.execDetached(["bash", "-c", cmd]);
+                const config = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config");
+                Quickshell.execDetached(["bash", config + "/hypr/scripts/apply-theme.sh", t.rawName]);
                 Theme.currentThemeName = t.rawName;
                 if (typeof root !== "undefined") root.collapseToIdle();
             }
@@ -368,7 +360,7 @@ Item {
 
     function lockSessionNow() {
         if (typeof root !== "undefined") root.collapseToIdle();
-        Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.local/bin/lock-screen.sh"]);
+        Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/hypr/scripts/lock-screen.sh"]);
     }
 
     // ==========================================
@@ -420,7 +412,7 @@ import os, glob, subprocess
 
 theme = '${Theme.currentThemeName}'.strip()
 if not theme or theme.lower() == 'default':
-    name_file = os.path.expanduser('~/.config/active-theme/theme-name.txt')
+    name_file = os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'active-theme/theme-name.txt')
     if os.path.exists(name_file):
         try:
             with open(name_file, 'r') as f:
@@ -434,12 +426,6 @@ theme_lower = theme.lower()
 candidates = [
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme}'),
     os.path.expanduser(f'~/Pictures/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/git/DynamicYou/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/git/MyLinuxSetup/Wallpapers/{theme_lower}'),
-    os.path.expanduser(f'~/rice/Wallpapers/{theme}'),
-    os.path.expanduser(f'~/current/Wallpapers/{theme}')
 ]
 wall_dir = ''
 for c in candidates:
@@ -448,7 +434,7 @@ for c in candidates:
         break
 
 if not wall_dir:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/DynamicYou/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/current/Wallpapers')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers')]:
         if os.path.isdir(base):
             for d in os.listdir(base):
                 if d.lower() == theme_lower and os.path.isdir(os.path.join(base, d)):
@@ -473,16 +459,16 @@ except Exception:
 exts = ('.jpg', '.jpeg', '.png', '.webp')
 files = []
 if wall_dir and os.path.exists(wall_dir):
-    for root_dir, dirs, fnames in os.walk(wall_dir, followlinks=True):
+    for root_dir, dirs, fnames in os.walk(wall_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fn in fnames:
             if fn.lower().endswith(exts) and not fn.startswith('.'):
                 files.append(os.path.join(root_dir, fn))
 
 if not files:
-    for base in [os.path.expanduser('~/Pictures/Wallpapers'), os.path.expanduser('~/git/MyLinuxSetup/Wallpapers'), os.path.expanduser('~/rice/Wallpapers'), os.path.expanduser('~/Pictures')]:
+    for base in [os.path.expanduser('~/Pictures/Wallpapers')]:
         if os.path.isdir(base):
-            for root_dir, dirs, fnames in os.walk(base, followlinks=True):
+            for root_dir, dirs, fnames in os.walk(base):
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
                 for fn in fnames:
                     if fn.lower().endswith(exts) and not fn.startswith('.'):
@@ -587,7 +573,7 @@ for f in sorted_files:
             }
             var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
             Quickshell.execDetached([
-                Quickshell.env("HOME") + "/.config/quickshell/scripts/apply_wallpaper.sh",
+                Quickshell.shellPath("scripts/apply_wallpaper.sh"),
                 path,
                 trans
             ]);

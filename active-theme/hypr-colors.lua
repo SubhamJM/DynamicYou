@@ -1,1 +1,1 @@
-/home/subham/.config/themes/Verdant/hypr-colors.lua
+../themes/Verdant/hypr-colors.lua

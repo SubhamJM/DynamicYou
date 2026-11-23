@@ -238,11 +238,7 @@ def scan_wallpaper_engine():
 def scan_local_wallpapers():
     items = []
     seen_paths = set()
-    dirs = [
-        os.path.expanduser("~/Pictures/Wallpapers"),
-        os.path.expanduser("~/git/DynamicYou/Wallpapers"),
-        os.path.expanduser("~/.config/quickshell/inir/assets/wallpapers")
-    ]
+    dirs = [os.path.expanduser("~/Pictures/Wallpapers")]
     valid_exts = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mkv")
 
     for base_dir in dirs:
@@ -280,7 +276,7 @@ def scan_local_wallpapers():
 
 def main():
     active = get_active_wallpaper()
-    engine_items = scan_wallpaper_engine()
+    engine_items = []
     local_items = scan_local_wallpapers()
 
     result = {

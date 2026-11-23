@@ -14,7 +14,7 @@ for i in {1..30}; do
     sleep 0.1
 done
 
-ACTIVE_DIR="$HOME/.config/active-theme"
+ACTIVE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/active-theme"
 
 # 3. Read active transition
 TRANSITION="simple"
@@ -32,7 +32,7 @@ WE_STATE="$HOME/.config/active-wallpaper-engine"
 if [ -f "$WE_STATE" ] && [ -s "$WE_STATE" ]; then
     WE_DIR=$(cat "$WE_STATE" | tr -d '\n\r ')
     if [ -d "$WE_DIR" ] && [ -f "$WE_DIR/project.json" ]; then
-        for we_script in "$HOME/.config/quickshell/scripts/apply_wallpaper.sh" "$HOME/git/MyLinuxSetup/quickshell/scripts/apply_wallpaper.sh"; do
+        for we_script in "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/scripts/apply_wallpaper.sh"; do
             if [ -x "$we_script" ] || [ -f "$we_script" ]; then
                 bash "$we_script" "$WE_DIR" "$TRANSITION" &
                 exit 0
@@ -57,25 +57,13 @@ if [ -z "$WALLPAPER" ] && [ -f "$ACTIVE_DIR/current-wallpaper.txt" ]; then
     fi
 fi
 
-# 6. Apply wallpaper if found
-if [ -n "$WALLPAPER" ] && [ -f "$WALLPAPER" ]; then
-    awww img "$WALLPAPER" \
-        --transition-type "$TRANSITION" \
-        --transition-fps 144 \
-        --transition-step 240 \
-        --transition-bezier "0.25,0.1,0.25,1.0"
-else
-    # First boot or missing wallpaper: determine active theme and apply it
-    THEME="Abyss"
-    if [ -f "$ACTIVE_DIR/theme-name.txt" ]; then
-        THEME=$(cat "$ACTIVE_DIR/theme-name.txt" | tr -d '\n\r ')
-    fi
-    [ -z "$THEME" ] && THEME="Abyss"
-
-    for s in "$HOME/.local/bin/apply-theme.sh" "$HOME/.config/scripts/apply-theme.sh" "$HOME/git/MyLinuxSetup/scripts/apply-theme.sh"; do
-        if [ -x "$s" ] || [ -f "$s" ]; then
-            bash "$s" "$THEME"
-            break
-        fi
-    done
+# Use the same wallpaper and palette path for startup and the picker.
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+WALLPAPER_SCRIPT="$CONFIG_DIR/quickshell/scripts/apply_wallpaper.sh"
+if [[ -z "$WALLPAPER" ]]; then
+    WALLPAPER=$(find -L "$HOME/Pictures/Wallpapers" -type f \
+        \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) -print -quit 2>/dev/null)
+fi
+if [[ -n "$WALLPAPER" ]]; then
+    bash "$WALLPAPER_SCRIPT" "$WALLPAPER" "$TRANSITION"
 fi

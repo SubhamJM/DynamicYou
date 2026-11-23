@@ -23,9 +23,9 @@ Item {
     readonly property string fontBody: "Inter"
 
     readonly property color accentColor: Theme.accent ?? "#38bdf8"
-    readonly property color cardBg: Qt.rgba(255, 255, 255, 0.04)
-    readonly property color cardHoverBg: Qt.rgba(255, 255, 255, 0.075)
-    readonly property color cardBorder: Qt.rgba(255, 255, 255, 0.055)
+    readonly property color cardBg: Qt.rgba(255, 255, 255, 0.055)
+    readonly property color cardHoverBg: Qt.rgba(255, 255, 255, 0.09)
+    readonly property color cardBorder: "transparent"
     readonly property color textPrimary: Theme.colors.text_primary ?? "#f8fafc"
     readonly property color textSecondary: Qt.rgba(255, 255, 255, 0.60)
     readonly property color textMuted: Qt.rgba(255, 255, 255, 0.38)
@@ -208,8 +208,8 @@ Item {
 
             Text {
                 text: "Power & Battery"
-                font.family: batteryModule.fontDisplay
-                font.pixelSize: 13
+                font.family: "Noto Sans"
+                font.pixelSize: 15
                 font.weight: Font.DemiBold
                 color: batteryModule.textPrimary
                 renderType: Text.NativeRendering
@@ -224,7 +224,7 @@ Item {
                 Layout.preferredWidth: statusBadgeLayout.implicitWidth + 18
                 radius: 12
                 color: Qt.alpha(batteryModule.statusColor, 0.12)
-                border.width: 1
+                border.width: 0
                 border.color: Qt.alpha(batteryModule.statusColor, 0.22)
                 Layout.alignment: Qt.AlignVCenter
 
@@ -274,7 +274,7 @@ Item {
             Layout.preferredHeight: 88
             radius: 14
             color: batteryModule.cardBg
-            border.width: 1
+            border.width: 0
             border.color: batteryModule.cardBorder
 
             ColumnLayout {
@@ -311,7 +311,7 @@ Item {
                                 Layout.preferredWidth: heroSubText.implicitWidth + 14
                                 radius: 10
                                 color: Qt.alpha(batteryModule.statusColor, 0.14)
-                                border.width: 1
+                                border.width: 0
                                 border.color: Qt.alpha(batteryModule.statusColor, 0.22)
                                 Layout.alignment: Qt.AlignVCenter
 
@@ -353,7 +353,7 @@ Item {
                         Layout.preferredHeight: 44
                         radius: 22
                         color: Qt.alpha(batteryModule.statusColor, 0.12)
-                        border.width: 1
+                        border.width: 0
                         border.color: Qt.alpha(batteryModule.statusColor, 0.20)
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
@@ -408,7 +408,7 @@ Item {
             Layout.preferredHeight: 34
             radius: 12
             color: batteryModule.cardBg
-            border.width: 1
+            border.width: 0
             border.color: batteryModule.cardBorder
 
             RowLayout {
@@ -441,7 +441,7 @@ Item {
                     Layout.preferredWidth: healthBadgeText.implicitWidth + 14
                     radius: 10
                     color: batteryModule.healthPercentage >= 80 ? Qt.alpha(batteryModule.accentColor, 0.12) : Qt.alpha(batteryModule.warningColor, 0.15)
-                    border.width: 1
+                    border.width: 0
                     border.color: batteryModule.healthPercentage >= 80 ? Qt.alpha(batteryModule.accentColor, 0.22) : Qt.alpha(batteryModule.warningColor, 0.25)
                     Layout.alignment: Qt.AlignVCenter
 
@@ -494,7 +494,7 @@ Item {
             Layout.preferredHeight: 36
             radius: 12
             color: batteryModule.cardBg
-            border.width: 1
+            border.width: 0
             border.color: batteryModule.cardBorder
 
             RowLayout {
@@ -575,7 +575,7 @@ Item {
                 Layout.preferredHeight: 51
                 radius: 12
                 color: careMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                border.width: 1
+                border.width: 0
                 border.color: batteryModule.cardBorder
                 scale: careMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
@@ -652,7 +652,7 @@ Item {
                 Layout.preferredHeight: 51
                 radius: 12
                 color: ecoMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                border.width: 1
+                border.width: 0
                 border.color: batteryModule.cardBorder
                 scale: ecoMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
@@ -729,7 +729,7 @@ Item {
                 Layout.preferredHeight: 51
                 radius: 12
                 color: kbdMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                border.width: 1
+                border.width: 0
                 border.color: batteryModule.cardBorder
                 scale: kbdMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }
@@ -806,7 +806,7 @@ Item {
                 Layout.preferredHeight: 51
                 radius: 12
                 color: pwrMouse.containsMouse ? batteryModule.cardHoverBg : batteryModule.cardBg
-                border.width: 1
+                border.width: 0
                 border.color: batteryModule.cardBorder
                 scale: pwrMouse.pressed ? 0.97 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveFastSpatial } }

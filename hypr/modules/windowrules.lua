@@ -144,27 +144,27 @@ hl.window_rule({
 
 hl.window_rule({
     match = { initial_class = "(?i)discord" },
-    workspace = "special:extra silent"
+    workspace = "special:comms silent"
 })
 
 hl.window_rule({
     match = { initial_class = "(?i)webcord" },
-    workspace = "special:extra silent"
+    workspace = "special:comms silent"
 })
 
 hl.window_rule({
     match = { initial_class = "(?i)vesktop" },
-    workspace = "special:extra silent"
+    workspace = "special:comms silent"
 })
 
 hl.window_rule({
     match = { initial_class = "(?i)karere" },
-    workspace = "special:extra silent"
+    workspace = "special:comms silent"
 })
 
 hl.window_rule({
     match = { initial_class = "(?i)zapzap" },
-    workspace = "special:extra silent"
+    workspace = "special:comms silent"
 })
 
 

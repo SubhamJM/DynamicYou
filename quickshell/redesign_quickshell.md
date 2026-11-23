@@ -79,7 +79,7 @@ The new Control Center adopts a **480px Bento Grid** built on an 8px grid with u
 │  Control Center                            󰐥 Power   ⚙ Settings│  [Header: 32px]
 ├──────────────────────────────┬───────────────────────────────┤
 │ 󰤨  Wi-Fi                     │ 󰂯  Bluetooth                  │
-│    DynamicHotspot        (>) │    realme Buds T300       (>) │  [Connectivity Bento: 56px]
+│    SubhamLaptop          (>) │    realme Buds T300       (>) │  [Connectivity Bento: 56px]
 ├──────────────────────────────┼───────────────────────────────┤
 │ 󰕾  Volume               74% │ 󰃠  Display                60% │
 │    [ ━━━━━━━━━━━━━╺━━━━ ]    │    [ ━━━━━━━━━━╺━━━━━━━ ]     │  [Twin Sliders Bento: 64px]

@@ -11,6 +11,7 @@ ColumnLayout {
     Layout.fillWidth: true
     Layout.fillHeight: true
     focus: true
+    Keys.forwardTo: [searchInput]
     Keys.onEscapePressed: (event) => {
         root.collapseToIdle();
         event.accepted = true;
@@ -177,38 +178,38 @@ for line in lines:
         Layout.fillWidth: true
         spacing: 10
 
-        // Back to Utility Button — Circular M3 Pill
+        // Back to Utility Button — Circular Minimal Pill
         IrisIconButton {
-            width: 40
-            height: 40
-            buttonSize: 40
-            buttonRadius: 20
+            width: 34
+            height: 34
+            buttonSize: 34
+            buttonRadius: 17
             icon: "arrow_back"
-            iconSize: 20
-            backgroundColor: clipModule.colChipBg
-            backgroundHoverColor: clipModule.colCardHover
-            iconColor: clipModule.colText
+            iconSize: 18
+            backgroundColor: Qt.rgba(255, 255, 255, 0.05)
+            backgroundHoverColor: Qt.rgba(255, 255, 255, 0.12)
+            iconColor: "#ffffff"
             onClicked: root.switchMode("utility", true)
         }
 
         // Search Bar Capsule
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
-            radius: 21
-            color: clipModule.colChipBg
+            Layout.preferredHeight: 34
+            radius: 17
+            color: Qt.rgba(255, 255, 255, 0.05)
             border.width: 0
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 12
-                spacing: 10
+                anchors.leftMargin: 12
+                anchors.rightMargin: 10
+                spacing: 8
 
                 MaterialSymbol {
                     text: "search"
-                    iconSize: 20
-                    color: searchInput.activeFocus ? clipModule.colAccent : clipModule.colMuted
+                    iconSize: 18
+                    color: searchInput.activeFocus ? "#ffffff" : Qt.rgba(255, 255, 255, 0.40)
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
 
@@ -216,14 +217,15 @@ for line in lines:
                     id: searchInput
                     focus: true
                     Layout.fillWidth: true
-                    color: clipModule.colText
+                    color: "#ffffff"
                     font.family: "Noto Sans"
-                    font.pixelSize: 13
+                    font.pixelSize: 12
                     placeholderText: "Search clipboard history…"
-                    placeholderTextColor: clipModule.colMuted
+                    placeholderTextColor: Qt.rgba(255, 255, 255, 0.35)
                     verticalAlignment: TextInput.AlignVCenter
                     selectByMouse: true
                     background: Item {}
+                    renderType: Text.NativeRendering
 
                     onTextChanged: clipModule.applyFilter()
 
@@ -252,15 +254,15 @@ for line in lines:
                 // Clear Search Text Icon
                 IrisIconButton {
                     visible: searchInput.text.length > 0
-                    width: 26
-                    height: 26
-                    buttonSize: 26
-                    buttonRadius: 13
+                    width: 24
+                    height: 24
+                    buttonSize: 24
+                    buttonRadius: 12
                     flat: true
                     icon: "close"
-                    iconSize: 16
-                    iconColor: clipModule.colSubtext
-                    hoverIconColor: clipModule.colText
+                    iconSize: 14
+                    iconColor: Qt.rgba(255, 255, 255, 0.50)
+                    hoverIconColor: "#ffffff"
                     onClicked: {
                         searchInput.text = "";
                         searchInput.forceActiveFocus();
@@ -269,31 +271,31 @@ for line in lines:
             }
         }
 
-        // Clear All History — Material 3 Tonal Error Pill
+        // Clear All History — Minimal Pill
         Rectangle {
-            Layout.preferredHeight: 42
-            Layout.preferredWidth: clearRow.implicitWidth + 26
-            radius: 21
-            color: clearMouse.containsMouse ? Qt.alpha(clipModule.colRed, 0.25) : Qt.alpha(clipModule.colRed, 0.15)
+            Layout.preferredHeight: 34
+            Layout.preferredWidth: clearRow.implicitWidth + 22
+            radius: 17
+            color: clearMouse.containsMouse ? Qt.rgba(248, 113, 113, 0.22) : Qt.rgba(248, 113, 113, 0.12)
             border.width: 0
-            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
                 id: clearRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 5
 
                 MaterialSymbol {
                     text: "delete_sweep"
-                    iconSize: 18
-                    color: clipModule.colRed
+                    iconSize: 16
+                    color: "#f87171"
                 }
                 Text {
                     text: "Clear"
                     font.family: "Noto Sans"
-                    font.pixelSize: 12
+                    font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    color: clipModule.colRed
+                    color: "#f87171"
                     renderType: Text.NativeRendering
                 }
             }
@@ -314,46 +316,46 @@ for line in lines:
     }
 
     // ========================================================
-    // 2. MATERIAL YOU FILTER CHIPS (All / Text / Images)
+    // 2. LUXURY MINIMAL FILTER CHIPS (All / Text / Images)
     // ========================================================
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: 6
 
         // Chip: All
         Rectangle {
-            Layout.preferredHeight: 30
-            Layout.preferredWidth: chipAllRow.implicitWidth + 20
-            radius: 15
-            color: clipModule.activeFilterChip === "all" ? clipModule.colAccent : (chipAllMouse.containsMouse ? clipModule.colCardHover : clipModule.colChipBg)
+            Layout.preferredHeight: 28
+            Layout.preferredWidth: chipAllRow.implicitWidth + 18
+            radius: 14
+            color: clipModule.activeFilterChip === "all" ? "#ffffff" : (chipAllMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
             border.width: 0
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
                 id: chipAllRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 5
                 Text {
                     text: "All"
                     font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.weight: clipModule.activeFilterChip === "all" ? Font.DemiBold : Font.Medium
-                    color: clipModule.activeFilterChip === "all" ? clipModule.colOnAccent : clipModule.colText
+                    font.pixelSize: 11
+                    font.weight: clipModule.activeFilterChip === "all" ? Font.DemiBold : Font.Normal
+                    color: clipModule.activeFilterChip === "all" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
                     renderType: Text.NativeRendering
                 }
                 Rectangle {
-                    height: 18
-                    radius: 9
-                    color: clipModule.activeFilterChip === "all" ? Qt.alpha(clipModule.colOnAccent, 0.18) : clipModule.colCardHover
-                    implicitWidth: allCountText.implicitWidth + 10
+                    height: 16
+                    radius: 8
+                    color: clipModule.activeFilterChip === "all" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                    implicitWidth: allCountText.implicitWidth + 8
                     Text {
                         id: allCountText
                         anchors.centerIn: parent
                         text: "" + clipModule.allClips.length
-                        font.family: "Noto Sans"
+                        font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: clipModule.activeFilterChip === "all" ? clipModule.colOnAccent : clipModule.colSubtext
+                        font.weight: Font.DemiBold
+                        color: clipModule.activeFilterChip === "all" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
                         renderType: Text.NativeRendering
                     }
                 }
@@ -372,43 +374,43 @@ for line in lines:
 
         // Chip: Text
         Rectangle {
-            Layout.preferredHeight: 30
-            Layout.preferredWidth: chipTextRow.implicitWidth + 20
-            radius: 15
-            color: clipModule.activeFilterChip === "text" ? clipModule.colAccent : (chipTextMouse.containsMouse ? clipModule.colCardHover : clipModule.colChipBg)
+            Layout.preferredHeight: 28
+            Layout.preferredWidth: chipTextRow.implicitWidth + 18
+            radius: 14
+            color: clipModule.activeFilterChip === "text" ? "#ffffff" : (chipTextMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
             border.width: 0
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
                 id: chipTextRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 5
                 MaterialSymbol {
                     text: "description"
-                    iconSize: 14
-                    color: clipModule.activeFilterChip === "text" ? clipModule.colOnAccent : clipModule.colSubtext
+                    iconSize: 13
+                    color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
                 }
                 Text {
                     text: "Text"
                     font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.weight: clipModule.activeFilterChip === "text" ? Font.DemiBold : Font.Medium
-                    color: clipModule.activeFilterChip === "text" ? clipModule.colOnAccent : clipModule.colText
+                    font.pixelSize: 11
+                    font.weight: clipModule.activeFilterChip === "text" ? Font.DemiBold : Font.Normal
+                    color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
                     renderType: Text.NativeRendering
                 }
                 Rectangle {
-                    height: 18
-                    radius: 9
-                    color: clipModule.activeFilterChip === "text" ? Qt.alpha(clipModule.colOnAccent, 0.18) : clipModule.colCardHover
-                    implicitWidth: textCountText.implicitWidth + 10
+                    height: 16
+                    radius: 8
+                    color: clipModule.activeFilterChip === "text" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                    implicitWidth: textCountText.implicitWidth + 8
                     Text {
                         id: textCountText
                         anchors.centerIn: parent
                         text: "" + clipModule.textClipCount
-                        font.family: "Noto Sans"
+                        font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: clipModule.activeFilterChip === "text" ? clipModule.colOnAccent : clipModule.colSubtext
+                        font.weight: Font.DemiBold
+                        color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
                         renderType: Text.NativeRendering
                     }
                 }
@@ -427,43 +429,43 @@ for line in lines:
 
         // Chip: Images
         Rectangle {
-            Layout.preferredHeight: 30
-            Layout.preferredWidth: chipImgRow.implicitWidth + 20
-            radius: 15
-            color: clipModule.activeFilterChip === "image" ? clipModule.colAccent : (chipImgMouse.containsMouse ? clipModule.colCardHover : clipModule.colChipBg)
+            Layout.preferredHeight: 28
+            Layout.preferredWidth: chipImgRow.implicitWidth + 18
+            radius: 14
+            color: clipModule.activeFilterChip === "image" ? "#ffffff" : (chipImgMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
             border.width: 0
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
 
             RowLayout {
                 id: chipImgRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 5
                 MaterialSymbol {
                     text: "image"
-                    iconSize: 14
-                    color: clipModule.activeFilterChip === "image" ? clipModule.colOnAccent : clipModule.colSubtext
+                    iconSize: 13
+                    color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
                 }
                 Text {
                     text: "Images"
                     font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.weight: clipModule.activeFilterChip === "image" ? Font.DemiBold : Font.Medium
-                    color: clipModule.activeFilterChip === "image" ? clipModule.colOnAccent : clipModule.colText
+                    font.pixelSize: 11
+                    font.weight: clipModule.activeFilterChip === "image" ? Font.DemiBold : Font.Normal
+                    color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
                     renderType: Text.NativeRendering
                 }
                 Rectangle {
-                    height: 18
-                    radius: 9
-                    color: clipModule.activeFilterChip === "image" ? Qt.alpha(clipModule.colOnAccent, 0.18) : clipModule.colCardHover
-                    implicitWidth: imgCountText.implicitWidth + 10
+                    height: 16
+                    radius: 8
+                    color: clipModule.activeFilterChip === "image" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
+                    implicitWidth: imgCountText.implicitWidth + 8
                     Text {
                         id: imgCountText
                         anchors.centerIn: parent
                         text: "" + clipModule.imageClipCount
-                        font.family: "Noto Sans"
+                        font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: clipModule.activeFilterChip === "image" ? clipModule.colOnAccent : clipModule.colSubtext
+                        font.weight: Font.DemiBold
+                        color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
                         renderType: Text.NativeRendering
                     }
                 }
@@ -484,10 +486,10 @@ for line in lines:
 
         // Hint: Enter to copy
         Text {
-            text: "↵ click or Enter to copy"
+            text: "↵ copy"
             font.family: "Noto Sans"
-            font.pixelSize: 11
-            color: clipModule.colMuted
+            font.pixelSize: 10
+            color: Qt.rgba(255, 255, 255, 0.35)
             renderType: Text.NativeRendering
             Layout.alignment: Qt.AlignVCenter
             Layout.rightMargin: 4

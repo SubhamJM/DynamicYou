@@ -36,27 +36,11 @@ Item {
     readonly property bool isNerd: rawIcon.length > 0 && ((rawIcon.codePointAt ? rawIcon.codePointAt(0) : rawIcon.charCodeAt(0)) >= 0xE000)
 
     // 2. Direct file/image protocol detection
-    readonly property bool isDirectFile: rawIcon.startsWith("/") || rawIcon.startsWith("file://") || rawIcon.startsWith("http://") || rawIcon.startsWith("https://")
-
-    // Helper: is this string a known Material Symbol name (not a desktop application icon)?
-    function isStandardSymbol(s) {
-        if (!s) return false;
-        if (s.indexOf("_") !== -1) return true; // e.g. memory_alt, play_circle, volume_up, content_paste, screenshot_monitor
-        var symbols = {
-            "memory": 1, "settings": 1, "widgets": 1, "notifications": 1, "close": 1, "check": 1,
-            "refresh": 1, "lock": 1, "folder": 1, "code": 1, "terminal": 1, "palette": 1, "wifi": 1,
-            "bluetooth": 1, "crop": 1, "colorize": 1, "videocam": 1, "equalizer": 1, "speed": 1,
-            "brush": 1, "window": 1, "edit": 1, "timer": 1, "coffee": 1, "apps": 1, "hub": 1,
-            "lan": 1, "monitoring": 1, "hard_drive": 1, "security": 1, "bedtime": 1, "history": 1,
-            "tab": 1, "search": 1, "tune": 1, "sync": 1, "dns": 1, "language": 1, "send": 1,
-            "movie": 1, "chat": 1, "forum": 1, "help": 1, "info": 1, "download": 1, "upload": 1
-        };
-        return symbols[s] === 1;
-    }
+    readonly property bool isDirectFile: rawIcon.startsWith("/") || rawIcon.startsWith("file://") || rawIcon.startsWith("image://") || rawIcon.startsWith("http://") || rawIcon.startsWith("https://")
 
     // Resolved IconResolver entry for apps/processes
     readonly property var resolverEntry: {
-        if (!rawIcon || isNerd || isDirectFile || isStandardSymbol(rawIcon)) return null;
+        if (!rawIcon || isNerd || isDirectFile) return null;
         try {
             if (typeof IconResolver !== "undefined") {
                 return IconResolver.resolve(rawIcon);
@@ -65,10 +49,13 @@ Item {
         return null;
     }
 
-    readonly property bool looksLikeAppName: (root.isApp && !isStandardSymbol(rawIcon)) ||
+    readonly property bool looksLikeAppName: root.isApp ||
                                              (resolverEntry !== null && resolverEntry.displayName !== "") ||
-                                             (rawIcon.indexOf("-") !== -1 && !isStandardSymbol(rawIcon)) ||
-                                             (rawIcon.indexOf(".") !== -1 && !isDirectFile)
+                                             rawIcon.indexOf(" ") !== -1 ||
+                                             rawIcon.indexOf("-") !== -1 ||
+                                             rawIcon.indexOf(".") !== -1 ||
+                                             rawIcon.indexOf("/") !== -1 ||
+                                             /[A-Z]/.test(rawIcon)
 
     // 3. Resolve Image URL
     readonly property string resolvedImageUrl: {
@@ -77,22 +64,15 @@ Item {
             return rawIcon.startsWith("/") ? ("file://" + rawIcon) : rawIcon;
         }
 
-        // Theme / Desktop App Icon lookup
         if (root.looksLikeAppName) {
-            if (resolverEntry) {
-                if (resolverEntry.iconPath && resolverEntry.iconPath !== "") {
-                    return resolverEntry.iconPath;
-                }
-                if (resolverEntry.hasIcon === false) {
-                    return ""; // Known not to have a desktop theme icon
-                }
+            if (resolverEntry && resolverEntry.iconPath && resolverEntry.iconPath !== "") {
+                return resolverEntry.iconPath;
             }
-            if (root.isApp && rawIcon !== "" && !isStandardSymbol(rawIcon)) {
-                try {
-                    var p = Quickshell.iconPath(rawIcon);
-                    if (p && p.trim() !== "") return p;
-                } catch (e) {}
-            }
+            var lookupName = (resolverEntry && resolverEntry.iconName) ? resolverEntry.iconName : rawIcon;
+            try {
+                var p = Quickshell.iconPath(lookupName, "application-x-executable") || Quickshell.iconPath(lookupName);
+                if (p && p.trim() !== "") return p;
+            } catch (e) {}
         }
 
         return "";
@@ -100,57 +80,41 @@ Item {
 
     readonly property bool isImageIcon: resolvedImageUrl !== ""
 
-    readonly property bool hasRenderedDirectImage: isDirectFile && directImage.status === Image.Ready
-    readonly property bool hasRenderedAppIcon: !isDirectFile && isImageIcon && appIconImage.status === Image.Ready
-
     // 4. Resolve fallback glyph text when not an image
     readonly property string resolvedGlyphText: {
         // A. Nerd font glyphs are returned directly
         if (isNerd) return rawIcon;
 
-        // B. When an image is successfully ready/loaded, no text ligature is needed
-        if (hasRenderedDirectImage || hasRenderedAppIcon) return "";
+        // B. When an image is ready/loaded, no text ligature is needed
+        if (isImageIcon && appIconImage.status === Image.Ready) return "";
 
         // C. Empty icon string: fall back gracefully
         if (rawIcon === "") {
             return (root.fallbackSymbol && root.fallbackSymbol !== "") ? root.fallbackSymbol : "apps";
         }
 
-        // D. Application name or image that failed to load or has no theme icon
-        if (root.looksLikeAppName || isImageIcon || isDirectFile) {
+        // D. Application name or image that failed to load
+        if (root.looksLikeAppName || isImageIcon) {
             if (root.fallbackSymbol && root.fallbackSymbol !== "") return root.fallbackSymbol;
             if (resolverEntry && resolverEntry.fallbackSymbol && resolverEntry.fallbackSymbol !== "") return resolverEntry.fallbackSymbol;
             return "apps";
         }
 
-        // E. Otherwise rawIcon is a direct Material Symbol ligature
+        // E. Otherwise rawIcon is a direct Material Symbol ligature (e.g. "arrow_back", "refresh", "settings", "close", "wifi")
         return rawIcon;
     }
 
-    // Direct Image branch (handles screenshot images, file paths, web URLs)
-    Image {
-        id: directImage
-        anchors.fill: parent
-        visible: root.hasRenderedDirectImage
-        source: root.isDirectFile ? root.resolvedImageUrl : ""
-        fillMode: Image.PreserveAspectCrop
-        sourceSize.width: Math.max(32, root.iconSize * 2)
-        sourceSize.height: Math.max(32, root.iconSize * 2)
-        asynchronous: true
-        mipmap: true
-    }
-
-    // Native IconImage branch (handles freedesktop theme icons)
+    // Native IconImage branch (handles freedesktop theme icons & images)
     Item {
-        id: appIconContainer
+        id: imageContainer
         anchors.fill: parent
         clip: root.cornerRadius > 0
-        visible: root.hasRenderedAppIcon
+        visible: root.isImageIcon && appIconImage.status === Image.Ready
 
         IconImage {
             id: appIconImage
             anchors.fill: parent
-            source: (!root.isDirectFile && root.isImageIcon) ? root.resolvedImageUrl : ""
+            source: root.resolvedImageUrl
         }
     }
 
@@ -158,7 +122,7 @@ Item {
     MaterialSymbol {
         id: glyphText
         anchors.centerIn: parent
-        visible: !root.hasRenderedDirectImage && !root.hasRenderedAppIcon
+        visible: !imageContainer.visible
         text: root.resolvedGlyphText
         iconSize: root.iconSize
         fill: root.fill

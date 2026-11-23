@@ -1,0 +1,14 @@
+{
+    "accentPunch": 1,
+    "surfaceDarkness": -1,
+    "surfaceTint": -1,
+    "motionScale": 1,
+    "jellyMotion": true,
+    "jellyAmount": 1,
+    "barMotionScale": 0.5,
+    "fontFamily": "Google Sans",
+    "fontScale": 1,
+    "uiScale": 1.05,
+    "cornerScale": 1,
+    "barContentScale": 1
+}

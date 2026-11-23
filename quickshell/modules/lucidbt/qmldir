@@ -1,0 +1,13 @@
+singleton Theme 1.0 Theme.qml
+singleton Bt 1.0 Bt.qml
+BtAgent 1.0 BtAgent.qml
+BtReceive 1.0 BtReceive.qml
+singleton I18n 1.0 I18n.qml
+Icon 1.0 Icon.qml
+IconButton 1.0 IconButton.qml
+Jelly 1.0 Jelly.qml
+LoadingIndicator 1.0 LoadingIndicator.qml
+LText 1.0 LText.qml
+StateLayer 1.0 StateLayer.qml
+Switch 1.0 Switch.qml
+BluetoothPanel 1.0 BluetoothPanel.qml

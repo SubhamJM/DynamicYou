@@ -222,8 +222,7 @@ FocusScope {
         filteredList.sort(function(a, b) {
             var diff = 0;
             if (sortField === "cpu") {
-                diff = (a.cpu_raw !== undefined && b.cpu_raw !== undefined) ? (a.cpu_raw - b.cpu_raw) : (a.cpu - b.cpu);
-                if (Math.abs(diff) < 0.001) diff = a.mem_mb - b.mem_mb;
+                diff = a.cpu - b.cpu;
             } else if (sortField === "mem") {
                 diff = a.mem_mb - b.mem_mb;
             } else if (sortField === "name") {
@@ -274,7 +273,6 @@ FocusScope {
             if (updatedData) {
                 existingPids[curItem.pid] = true;
                 if (curItem.cpu !== updatedData.cpu) displayProcessModel.setProperty(u, "cpu", updatedData.cpu);
-                if (curItem.cpu_raw !== updatedData.cpu_raw) displayProcessModel.setProperty(u, "cpu_raw", updatedData.cpu_raw);
                 if (curItem.mem_mb !== updatedData.mem_mb) displayProcessModel.setProperty(u, "mem_mb", updatedData.mem_mb);
                 if (curItem.mem_percent !== updatedData.mem_percent) displayProcessModel.setProperty(u, "mem_percent", updatedData.mem_percent);
                 if (curItem.mem_bytes !== updatedData.mem_bytes) displayProcessModel.setProperty(u, "mem_bytes", updatedData.mem_bytes);
@@ -1526,7 +1524,7 @@ FocusScope {
                                     IrisIcon {
                                         anchors.centerIn: parent
                                         icon: (model.icon_name && model.icon_name !== "") ? model.icon_name : (model.icon || "memory")
-                                        isApp: Boolean(model.icon_name && model.icon_name !== "")
+                                        isApp: true
                                         iconSize: 20
                                         fill: model.category === "app" ? 1 : 0
                                         color: model.category === "app" ? taskManagerRoot.colAccent : taskManagerRoot.colSubtext
@@ -1714,7 +1712,7 @@ FocusScope {
 
                                         Text {
                                             Layout.alignment: Qt.AlignHCenter
-                                            text: (model.mem_percent >= 1.0 ? model.mem_percent.toFixed(0) : (model.mem_percent > 0 ? model.mem_percent.toFixed(1) : "0")) + "% RAM"
+                                            text: model.mem_percent.toFixed(0) + "% RAM"
                                             font.family: "Noto Sans"
                                             font.pixelSize: 9
                                             color: taskManagerRoot.colMuted

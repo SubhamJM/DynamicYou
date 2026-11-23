@@ -45,6 +45,7 @@ require("modules.misc")
 ---------------
 
 require("modules.input")
+require("modules.gestures")
 
 ---------------------
 ---- KEYBINDINGS ----

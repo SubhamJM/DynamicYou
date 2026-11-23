@@ -1,42 +1,32 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# DynamicYou - Robust Screenshot Handler
-# Cleans stale lockfiles, manages screenshot targets, notifies & copies to clipboard
-# ==============================================================================
+set -euo pipefail
 
-TARGET="${1:-area}"
-SAVE_DIR="${XDG_SCREENSHOTS_DIR:-${HOME}/Pictures/Screenshots}"
-mkdir -p "$SAVE_DIR"
-export XDG_SCREENSHOTS_DIR="$SAVE_DIR"
+save_dir="${XDG_SCREENSHOTS_DIR:-$HOME/Pictures/Screenshots}"
+mkdir -p "$save_dir"
+file="$save_dir/Screenshot_$(date +%Y%m%d_%H%M%S_%N).png"
 
-# 1. Auto-heal: Clean stale lockfiles if grimblast is not actively running
-LOCK_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/grimblast.lock"
-CACHE_LOCK="${HOME}/.cache/grimblast.lock"
-if ! pgrep -x grimblast >/dev/null 2>&1; then
-    rm -f "$LOCK_FILE" "$CACHE_LOCK" 2>/dev/null || true
-fi
-
-# 2. Kill any frozen hyprpicker from previous interrupted snips
-if ! pgrep -x grimblast >/dev/null 2>&1 && pgrep -x hyprpicker >/dev/null 2>&1; then
-    pkill -9 hyprpicker 2>/dev/null || true
-fi
-
-# 3. Handle screenshot actions
-case "$TARGET" in
+case "${1:-area}" in
     screen|full)
-        grimblast --notify copysave screen
+        grim "$file"
         ;;
     active|window)
-        grimblast --notify copysave active
+        geometry=$(hyprctl -j activewindow | jq -er 'select(.at and .size) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+        grim -g "$geometry" "$file"
         ;;
-    hub)
-        if [ -f "${HOME}/.config/quickshell/scripts/screenshot_hub.sh" ]; then
-            bash "${HOME}/.config/quickshell/scripts/screenshot_hub.sh"
-        else
-            grimblast --notify copysave area
-        fi
+    hub|area)
+        geometry=$(slurp </dev/null) || exit 0
+        [[ -n $geometry ]] || exit 0
+        sleep 0.1
+        grim -g "$geometry" "$file"
         ;;
-    area|*)
-        grimblast --notify copysave area
+    *)
+        printf 'Unknown screenshot mode: %s\n' "$1" >&2
+        exit 2
         ;;
 esac
+
+wl-copy --type image/png < "$file"
+if [[ ${1:-area} == hub ]]; then
+    qs ipc call notch showScreenshot "$file"
+fi
+notify-send -a 'Dynamic You' 'Screenshot captured' "$file"

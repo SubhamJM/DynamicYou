@@ -23,5 +23,5 @@ echo "$THEME" > "$HOME/.config/qylock/theme"
 echo "Active lockscreen theme set to: $THEME"
 
 if [ "$ACTION" == "--lock" ] || [ "$ACTION" == "-l" ]; then
-    exec "$HOME/.local/bin/lock-screen.sh" "$THEME"
+    exec "$HOME/.config/hypr/scripts/lock-screen.sh" "$THEME"
 fi

@@ -1,3 +1,9 @@
+//@ pragma DefaultEnv QS_NO_RELOAD_POPUP=1
+//@ pragma DefaultEnv QS_DROP_EXPENSIVE_FONTS=1
+//@ pragma DefaultEnv QSG_RENDER_LOOP=threaded
+//@ pragma DefaultEnv QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
+//@ pragma Env QSG_DISTANCEFIELD_ANTIALIASING=gray
+
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -15,12 +21,16 @@ ShellRoot {
     id: root
 
     property string activeMode: "idle"
+    property bool settingsOpen: false
+    property string initialSettingsPage: "keybinds"
     property string previousExpandedMode: "theme"
     property bool isWorkspacePeeking: false
     property bool isScreenRecording: false
+    property bool isScreenRecordingPaused: false
     property int screenRecordSeconds: 0
     property string recSaveDirectory: "~/Videos"
     property bool recAudioEnabled: false
+    property bool recSoundEnabled: true
     property string recAudioSourceId: ""
     property string recAudioSourceName: "Default Microphone"
 
@@ -56,15 +66,21 @@ ShellRoot {
     Process {
         id: globalRecordChecker
         running: false
-        command: ["sh", "-c", "pgrep -x wf-recorder > /dev/null && echo 'running' || echo 'stopped'"]
+        command: [Quickshell.shellPath("scripts/record.sh"), "--status"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var running = (this.text.trim() === "running");
-                if (root.isScreenRecording !== running) {
-                    root.isScreenRecording = running;
-                    if (!running) {
+                try {
+                    var data = JSON.parse(this.text.trim());
+                    root.isScreenRecording = (data.active === true);
+                    root.isScreenRecordingPaused = (data.paused === true);
+                    if (data.seconds !== undefined && data.seconds > 0) {
+                        root.screenRecordSeconds = data.seconds;
+                    } else if (!data.active) {
                         root.screenRecordSeconds = 0;
                     }
+                } catch(e) {
+                    root.isScreenRecording = false;
+                    root.isScreenRecordingPaused = false;
                 }
             }
         }
@@ -72,7 +88,7 @@ ShellRoot {
 
     Timer {
         id: globalRecordPollTimer
-        interval: 2000
+        interval: 1500
         running: true
         repeat: true
         triggeredOnStart: true
@@ -91,33 +107,30 @@ ShellRoot {
     }
 
     function startRecording(regionMode = false) {
-        var saveDir = (root.recSaveDirectory && root.recSaveDirectory !== "") ? root.recSaveDirectory : "~/Videos";
-        var expandedDir = saveDir.replace(/^~/, Quickshell.env("HOME"));
-        var filename = "recording_" + Qt.formatDateTime(new Date(), "yyyyMMdd_hhmmss") + ".mp4";
-        
-        var audioCmd = "";
-        if (root.recAudioEnabled) {
-            var targetSrc = (root.recAudioSourceId && root.recAudioSourceId !== "") ? root.recAudioSourceId : "@DEFAULT_SOURCE@";
-            audioCmd = "--audio=" + targetSrc;
-        }
-        
-        var recordCmd = "";
-        if (regionMode) {
-            recordCmd = `mkdir -p "${expandedDir}" && wf-recorder ${audioCmd} -g "$(slurp)" -f "${expandedDir}/${filename}"`;
-        } else {
-            recordCmd = `mkdir -p "${expandedDir}" && wf-recorder ${audioCmd} -f "${expandedDir}/${filename}"`;
-        }
-
-        Quickshell.execDetached(["sh", "-c", recordCmd]);
+        var script = Quickshell.shellPath("scripts/record.sh");
+        var args = [script];
+        if (regionMode) args.push("--region");
+        if (root.recSoundEnabled) args.push("--sound");
+        if (root.recAudioEnabled) args.push("--mic");
+        Quickshell.execDetached(args);
         root.isScreenRecording = true;
+        root.isScreenRecordingPaused = false;
         root.screenRecordSeconds = 0;
         root.collapseToIdle();
     }
 
     function stopRecording() {
-        Quickshell.execDetached(["sh", "-c", "killall -s SIGINT wf-recorder || killall wf-recorder"]);
+        var script = Quickshell.shellPath("scripts/record.sh");
+        Quickshell.execDetached([script, "--stop"]);
         root.isScreenRecording = false;
+        root.isScreenRecordingPaused = false;
         root.screenRecordSeconds = 0;
+    }
+
+    function togglePauseRecording() {
+        var script = Quickshell.shellPath("scripts/record.sh");
+        Quickshell.execDetached([script, "--pause"]);
+        root.isScreenRecordingPaused = !root.isScreenRecordingPaused;
     }
     property bool openedViaShortcut: false
 
@@ -369,19 +382,25 @@ ShellRoot {
     }
 
     readonly property bool isDashMode: activeMode === "idle" || activeMode === "hover"
+    readonly property bool isExpanding: !isDashMode && activeMode !== "osd"
     readonly property color notchSurfaceColor: Theme.colors.bg ?? "#000000"
     readonly property bool isPopupMode: activeMode !== "idle" && activeMode !== "osd"
 
     function collapseToIdle() {
         root.isWorkspacePeeking = false;
         root.openedViaShortcut = false;
-        if (typeof notchHoverHandler !== "undefined" && notchHoverHandler.hovered) {
-            root.activeMode = "hover";
-        } else if (typeof notchHoverArea !== "undefined" && notchHoverArea.containsMouse) {
-            root.activeMode = "hover";
-        } else {
-            root.activeMode = "idle";
+        root.activeMode = "idle";
+        if (typeof GlobalStates !== "undefined") {
+            GlobalStates.overviewOpen = false;
         }
+    }
+
+    function openSettings(page) {
+        root.collapseToIdle();
+        if (page && page.length > 0 && typeof settingsModal !== "undefined" && settingsModal) {
+            settingsModal.setPage(page);
+        }
+        root.settingsOpen = true;
     }
 
     function switchMode(newMode, fromShortcut = false) {
@@ -391,6 +410,15 @@ ShellRoot {
         } else {
             root.openedViaShortcut = fromShortcut;
             root.activeMode = newMode;
+            if (typeof GlobalStates !== "undefined") {
+                if (newMode === "launcher") {
+                    if (typeof GlobalStates !== "undefined") {
+                GlobalStates.overviewOpen = true;
+            }
+                } else {
+                    GlobalStates.overviewOpen = false;
+                }
+            }
             if (root.isWindowFullscreen) {
                 root.fullscreenHoverRevealed = true;
             }
@@ -401,6 +429,7 @@ ShellRoot {
     property string loadedExpandedMode: ""
     property string requestedUtilitySection: ""
     property string requestedMusicPanel: ""
+    property string pendingSearchQuery: ""
 
     // Persistent caches for instant zero-latency module rendering across the entire shell
     property var cachedApps: []
@@ -411,121 +440,88 @@ ShellRoot {
 
     Timer {
         id: moduleUnloadTimer
-        interval: 8000 // 8s grace period prevents cold reload lag while releasing memory promptly
+        interval: 60000 // 60s grace period prevents cold reload lag while releasing memory promptly
         repeat: false
         onTriggered: {
             if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd") {
-                root.loadedExpandedMode = "";
-            }
-        }
-    }
-
-    // Background Global App Scanner (runs at shell startup and periodically)
-    Process {
-        id: globalAppScanner
-        running: false
-        command: ["sh", "-c", `
-            python3 -c "
-import os, glob, re, json
-
-cache_file = os.path.expanduser('~/.cache/qs_icon_cache.json')
-icon_cache = {}
-if os.path.exists(cache_file):
-    try:
-        with open(cache_file, 'r') as f: icon_cache = json.load(f)
-    except: pass
-
-if not icon_cache:
-    for base in ['/usr/share/pixmaps', os.path.expanduser('~/.local/share/icons')]:
-        if os.path.exists(base):
-            for root, dirs, files in os.walk(base):
-                for f in files:
-                    name, ext = os.path.splitext(f)
-                    if ext.lower() in ('.png', '.svg', '.xpm') and name not in icon_cache:
-                        icon_cache[name] = os.path.join(root, f)
-    for theme in ['breeze-dark', 'breeze', 'Adwaita', 'hicolor']:
-        base = f'/usr/share/icons/{theme}'
-        if os.path.exists(base):
-            for root, dirs, files in os.walk(base):
-                for f in files:
-                    name, ext = os.path.splitext(f)
-                    if ext.lower() in ('.png', '.svg') and name not in icon_cache:
-                        icon_cache[name] = os.path.join(root, f)
-    try:
-        with open(cache_file, 'w') as f: json.dump(icon_cache, f)
-    except: pass
-
-def resolve_icon(i):
-    if not i: return ''
-    if os.path.isabs(i) and os.path.exists(i): return i
-    return icon_cache.get(i, '')
-
-apps = []
-usage = {}
-try:
-    with open(os.path.expanduser('~/.cache/qs_app_usage.json'), 'r') as f: usage = json.load(f)
-except: pass
-
-paths = ['/usr/share/applications', os.path.expanduser('~/.local/share/applications')]
-for p in paths:
-    for f in glob.glob(p + '/*.desktop'):
-        try:
-            with open(f, 'r', encoding='utf-8', errors='ignore') as file:
-                content = file.read()
-                if 'NoDisplay=true' in content: continue
-                name = re.search(r'^Name=(.*)$', content, re.M)
-                exec_cmd = re.search(r'^Exec=(.*)$', content, re.M)
-                icon = re.search(r'^Icon=(.*)$', content, re.M)
-                comment = re.search(r'^Comment=(.*)$', content, re.M)
-                if name and exec_cmd:
-                    n = name.group(1).strip()
-                    e = re.sub(r'%[fFuUiDc]', '', exec_cmd.group(1)).strip()
-                    i_raw = icon.group(1).strip() if (icon and icon.group(1)) else ''
-                    i = resolve_icon(i_raw)
-                    c = comment.group(1).strip() if comment else ''
-                    u = usage.get(e, 0)
-                    apps.append((u, n, e, i, c))
-        except: pass
-apps = sorted(list(set(apps)), key=lambda x: (-x[0], x[1].lower()))
-for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
-"
-        `]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n");
-                var tempList = [];
-                for (var i = 0; i < lines.length; i++) {
-                    var parts = lines[i].split("|||");
-                    if (parts.length >= 3) {
-                        tempList.push({
-                            "name": parts[0],
-                            "exec": parts[1],
-                            "iconName": parts[2],
-                            "comment": parts.length > 3 ? parts[3] : ""
-                        });
-                    }
-                }
-                if (tempList.length > 0) {
-                    root.cachedApps = tempList;
-                    if (root.launcherMod) {
-                        root.launcherMod.allApps = tempList;
-                        root.launcherMod.updateSuggestions();
-                        root.launcherMod.processSearch(root.launcherMod.searchInput.text);
-                    }
+                if (root.loadedExpandedMode !== "launcher") {
+                    root.loadedExpandedMode = "";
                 }
             }
         }
     }
 
+    // Native DesktopEntries sync (matching Caelestia architecture)
     Timer {
-        id: globalAppScanTimer
-        interval: 1000
-        running: false
+        id: deSyncDebounce
+        interval: 60
         repeat: false
-        triggeredOnStart: false
-        onTriggered: {
-            if (!globalAppScanner.running) globalAppScanner.running = true;
+        onTriggered: root.syncDesktopEntries()
+    }
+
+    Connections {
+        target: DesktopEntries
+        function onApplicationsChanged() {
+            deSyncDebounce.restart();
         }
+    }
+
+    Connections {
+        target: (typeof GlobalStates !== "undefined") ? GlobalStates : null
+        function onOverviewOpenChanged() {
+            if (typeof GlobalStates !== "undefined" && !GlobalStates.overviewOpen && root.activeMode === "launcher") {
+                root.collapseToIdle();
+            }
+        }
+    }
+
+    function syncDesktopEntries() {
+        var rawApps = DesktopEntries.applications.values;
+        if (!rawApps || rawApps.length === 0) return;
+        var list = [];
+        for (var i = 0; i < rawApps.length; i++) {
+            var entry = rawApps[i];
+            if (!entry || entry.noDisplay || !entry.name) continue;
+            var cmdStr = "";
+            if (typeof entry.execString === "string" && entry.execString.trim() !== "") {
+                cmdStr = entry.execString.trim();
+            } else if (entry.command) {
+                if (typeof entry.command === "string") {
+                    cmdStr = entry.command.trim();
+                } else {
+                    try {
+                        cmdStr = Array.from(entry.command).join(" ").trim();
+                    } catch (e) {
+                        cmdStr = String(entry.command).trim();
+                    }
+                }
+            } else if (entry.id) {
+                cmdStr = "gtk-launch " + entry.id;
+            }
+            if (!cmdStr && typeof entry.execute !== "function") continue;
+            var cleanExec = cmdStr.replace(/%[fFuUiDcnmk]/g, "").trim();
+            list.push({
+                name: String(entry.name),
+                exec: String(cleanExec),
+                iconName: (entry.icon ? String(entry.icon) : ""),
+                comment: (entry.comment ? String(entry.comment) : (entry.genericName ? String(entry.genericName) : "")),
+                id: (entry.id ? String(entry.id) : ""),
+                rawEntry: entry
+            });
+        }
+        list.sort(function(a, b) { return a.name.localeCompare(b.name); });
+        root.cachedApps = list;
+        if (root.launcherMod) {
+            root.launcherMod.allApps = list;
+            root.launcherMod.updateSuggestions();
+            if (root.launcherMod.searchInput.text.trim() !== "") {
+                root.launcherMod.processSearch(root.launcherMod.searchInput.text);
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        root.syncDesktopEntries();
     }
 
     // Background Global Wallpaper Scanner
@@ -536,8 +532,6 @@ for a in apps: print(f'{a[1]}|||{a[2]}|||{a[3]}|||{a[4]}')
 import os, subprocess
 
 wall_dir = os.path.expanduser('~/Pictures/Wallpapers')
-if not os.path.isdir(wall_dir):
-    wall_dir = os.path.expanduser('~/Pictures')
 
 active_wall = ''
 try:
@@ -555,7 +549,7 @@ except Exception:
 exts = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
 files = []
 if os.path.isdir(wall_dir):
-    for root_dir, dirs, fnames in os.walk(wall_dir, followlinks=True):
+    for root_dir, dirs, fnames in os.walk(wall_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fn in fnames:
             if fn.lower().endswith(exts) and not fn.startswith('.'):
@@ -619,9 +613,9 @@ for f in sorted_files:
     function getModuleSource(mode) {
         switch(mode) {
             case "launcher":      return Qt.resolvedUrl("modules/Launcher.qml");
-            case "theme":         return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
-            case "wallpaper":     return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
-            case "lockscreen":    return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
+            case "theme":         return Qt.resolvedUrl("modules/ThemeSelector.qml");
+            case "wallpaper":     return Qt.resolvedUrl("modules/WallpaperSelector.qml");
+            case "lockscreen":     return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
             case "engine":        return Qt.resolvedUrl("modules/EngineWallpaperSelector.qml");
             case "transition":    return Qt.resolvedUrl("modules/TransitionSelector.qml");
             case "bluetooth":     return Qt.resolvedUrl("modules/BluetoothModule.qml");
@@ -638,17 +632,14 @@ for f in sorted_files:
             case "notes":         return Qt.resolvedUrl("modules/NotesModule.qml");
             case "cheatsheet":    return Qt.resolvedUrl("modules/KeybindsModule.qml");
             case "taskmanager":   return Qt.resolvedUrl("modules/TaskManagerModule.qml");
-            case "wallsort":      return Qt.resolvedUrl("modules/WallpaperSorterModule.qml");
             default:              return "";
         }
     }
 
     // Dynamic Module Aliases (Null-safe; points to moduleLoader.item when active)
-    readonly property var wallSortMod:   (root.loadedExpandedMode === "wallsort") ? moduleLoader.item : null
     readonly property var launcherMod:   (root.loadedExpandedMode === "launcher") ? moduleLoader.item : null
-    readonly property var themeMod:      (root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null
-    readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "theme" || root.loadedExpandedMode === "lockscreen") ? moduleLoader.item : null
-    readonly property var lockMod:       (root.loadedExpandedMode === "lockscreen" || root.loadedExpandedMode === "wallpaper" || root.loadedExpandedMode === "theme") ? moduleLoader.item : null
+    readonly property var themeMod:      (root.loadedExpandedMode === "theme") ? moduleLoader.item : null
+    readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper") ? moduleLoader.item : null
     readonly property var engineMod:     (root.loadedExpandedMode === "engine") ? moduleLoader.item : null
     readonly property var transMod:      (root.loadedExpandedMode === "transition") ? moduleLoader.item : null
     readonly property var btMod:         (root.loadedExpandedMode === "bluetooth") ? moduleLoader.item : null
@@ -687,8 +678,11 @@ for f in sorted_files:
         if (activeMode === "launcher" && root.launcherMod) root.launcherMod.searchInput.forceActiveFocus();
 		else if (activeMode === "switcher" && root.switcherMod) root.switcherMod.forceActiveFocus();
         else if (activeMode === "theme" && root.themeMod) root.themeMod.forceThemeFocus();
-        else if (activeMode === "wallpaper" && root.wallMod) root.wallMod.wallpaperGrid.forceActiveFocus();
-        else if (activeMode === "lockscreen" && root.lockMod) root.lockMod.forceLockscreenFocus();
+        else if (activeMode === "wallpaper" && root.wallMod) {
+            if (root.wallMod.searchInput) root.wallMod.searchInput.forceActiveFocus();
+            else if (typeof root.wallMod.forceActiveFocus === "function") root.wallMod.forceActiveFocus();
+            else root.wallMod.focus = true;
+        }
         else if (activeMode === "transition" && root.transMod) root.transMod.transitionGrid.forceActiveFocus();
         else if (activeMode === "clipboard" && root.clipMod) root.clipMod.searchInput.forceActiveFocus();
         else if (activeMode === "powermenu" && root.powerMod) root.powerMod.forceActiveFocus();
@@ -696,10 +690,7 @@ for f in sorted_files:
         else if (activeMode === "cheatsheet" && root.cheatsheetMod) root.cheatsheetMod.forceSearchFocus();
         else if (activeMode === "taskmanager" && root.taskMgrMod) root.taskMgrMod.forceSearchFocus();
         else if (activeMode === "music" && root.musicMod) root.musicMod.forceActiveFocus();
-        else if (typeof moduleLoader !== "undefined" && moduleLoader.item) {
-            if (typeof panel !== "undefined" && panel.activeFocusItem && panel.activeFocusItem !== notchContainer) return;
-            moduleLoader.item.forceActiveFocus();
-        }
+        else if (typeof moduleLoader !== "undefined" && moduleLoader.item) moduleLoader.item.forceActiveFocus();
         else notchContainer.forceActiveFocus();
     }
 
@@ -728,16 +719,19 @@ for f in sorted_files:
         if (activeMode === "launcher") {
             if (root.cachedApps.length === 0 && !globalAppScanner.running) globalAppScanner.running = true;
             if (root.launcherMod) root.launcherMod.onOpened();
+        } else if (activeMode === "lockscreen") {
+            Qt.callLater(() => {
+                if (root.activeMode === "lockscreen" && moduleLoader.item)
+                    moduleLoader.item.switchTab("lockscreen");
+            });
         } else if (activeMode === "wallpaper") {
             if (root.cachedWallpapers.length === 0 && !globalWallpaperScanner.running) globalWallpaperScanner.running = true;
-        } else if (activeMode === "lockscreen") {
-            if (root.lockMod) root.lockMod.switchTab("lockscreen");
         }
 
         Qt.callLater(() => {
             root.regainFocus();
             if (activeMode !== "launcher" && root.launcherMod) root.launcherMod.searchInput.text = "";
-            if (activeMode !== "theme" && activeMode !== "wallpaper" && activeMode !== "lockscreen" && root.themeMod) root.themeMod.resetSearch();
+            if (activeMode !== "theme" && root.themeMod) root.themeMod.resetSearch();
             if (activeMode !== "clipboard" && root.clipMod) root.clipMod.searchInput.text = "";
             if (activeMode !== "taskmanager" && root.taskMgrMod) root.taskMgrMod.searchInput.text = "";
         });
@@ -754,6 +748,14 @@ for f in sorted_files:
             calculatedWidth = 820;
         } else if (activeMode === "utility" && root.utilMod && root.utilMod.activeSection === "vpn") {
             calculatedWidth = 420;
+        } else if (activeMode === "launcher") {
+            calculatedWidth = (root.launcherMod && root.launcherMod.targetWidth > 0)
+                ? root.launcherMod.targetWidth
+                : (NotchConfig.modeDimensions["launcher"] ? NotchConfig.modeDimensions["launcher"].width : 580);
+        } else if (activeMode === "calendar") {
+            calculatedWidth = (root.calMod && root.calMod.targetWidth > 0)
+                ? root.calMod.targetWidth
+                : (NotchConfig.modeDimensions["calendar"] ? NotchConfig.modeDimensions["calendar"].width : 720);
         } else {
             var dim = NotchConfig.modeDimensions[activeMode];
             calculatedWidth = (dim && dim.width !== undefined) ? dim.width : NotchConfig.modeDimensions["idle"].width;
@@ -773,10 +775,14 @@ for f in sorted_files:
         } else if (activeMode === "cheatsheet" && root.cheatsheetMod && root.cheatsheetMod.isAddingMode) {
             calculatedHeight = 500;
         } else if (activeMode === "launcher") {
-            calculatedHeight = (root.launcherMod && root.launcherMod.allApps)
-                ? NotchConfig.calculateLauncherHeight(root.launcherMod.calculatedCount, root.launcherMod.allApps.length, root.launcherMod.browsing)
-                : 246;
-        } else if (activeMode === "transition" || activeMode === "calendar" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
+            calculatedHeight = (root.launcherMod && root.launcherMod.targetHeight > 0)
+                ? root.launcherMod.targetHeight
+                : 500;
+        } else if (activeMode === "calendar") {
+            calculatedHeight = (root.calMod && root.calMod.targetHeight > 0)
+                ? root.calMod.targetHeight
+                : (NotchConfig.modeDimensions["calendar"] ? NotchConfig.modeDimensions["calendar"].height : 490);
+        } else if (activeMode === "transition" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
             var mDim = NotchConfig.modeDimensions[activeMode];
             calculatedHeight = (mDim && mDim.height !== undefined) ? mDim.height : 220;
         } else if (activeMode === "notifications") {
@@ -785,16 +791,18 @@ for f in sorted_files:
             calculatedHeight = NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
         } else if (activeMode === "recorder") {
             calculatedHeight = root.recMod 
-                ? NotchConfig.calculateRecorderHeight(root.recMod.recordAudio, root.recMod.isMicDropdownOpen, root.recMod.isRecording) 
+                ? root.recMod.calculatedHeight
                 : 270;
         } else if (activeMode === "bluetooth") {
             calculatedHeight = (root.btMod && root.btMod.calculatedHeight)
                 ? root.btMod.calculatedHeight
                 : (NotchConfig.modeDimensions["bluetooth"] ? NotchConfig.modeDimensions["bluetooth"].height : 280);
         } else if (activeMode === "wifi") {
-            calculatedHeight = (root.wifiMod && root.wifiMod.model)
-                ? NotchConfig.calculateWifiHeight(root.wifiMod.activeTab, root.wifiMod.wifiEnabled, root.wifiMod.model.count, root.wifiMod.listViewContentHeight)
-                : 380;
+            calculatedHeight = (root.wifiMod && root.wifiMod.calculatedHeight)
+                ? root.wifiMod.calculatedHeight
+                : ((root.wifiMod && root.wifiMod.model)
+                    ? NotchConfig.calculateWifiHeight(root.wifiMod.activeTab, root.wifiMod.wifiEnabled, root.wifiMod.model.count, root.wifiMod.listViewContentHeight, root.wifiMod.ethernetData !== null)
+                    : 380);
         } else if (activeMode === "utility") {
             calculatedHeight = root.utilMod
                 ? NotchConfig.calculateUtilityHeight(root.utilMod.activeSection)
@@ -802,9 +810,9 @@ for f in sorted_files:
         } else if (activeMode === "music") {
             calculatedHeight = (root.musicMod && root.musicMod.calculatedHeight) ? root.musicMod.calculatedHeight : 265;
         } else if (activeMode === "taskmanager") {
-            calculatedHeight = (root.taskMgrMod)
-                ? NotchConfig.calculateTaskManagerHeight(root.taskMgrMod.activeTab, root.taskMgrMod.displayCount, root.taskMgrMod.listViewContentHeight)
-                : 520;
+            calculatedHeight = (NotchConfig.modeDimensions["taskmanager"] && NotchConfig.modeDimensions["taskmanager"].height !== undefined)
+                ? NotchConfig.modeDimensions["taskmanager"].height
+                : 620;
         } else if (activeMode === "idle") {
             calculatedHeight = 32;
         } else if (activeMode === "hover") {
@@ -964,9 +972,9 @@ for f in sorted_files:
             }
         }
     }
+    GlobalShortcut { name: "toggleLockscreenNotch"; onPressed: root.switchMode("lockscreen", true) }
     GlobalShortcut { name: "toggleThemeNotch"; onPressed: root.switchMode("theme", true) }
     GlobalShortcut { name: "toggleWallpaperNotch"; onPressed: root.switchMode("wallpaper", true) }
-    GlobalShortcut { name: "toggleLockscreenNotch"; onPressed: root.switchMode("lockscreen", true) }
     GlobalShortcut { name: "toggleWallpaperEngineNotch"; onPressed: root.switchMode("engine", true) }
     GlobalShortcut { name: "toggleTransitionNotch"; onPressed: root.switchMode("transition", true) }
     GlobalShortcut { name: "resetNotchToIdle"; onPressed: root.collapseToIdle() }
@@ -1012,6 +1020,10 @@ for f in sorted_files:
     GlobalShortcut {
         name: "togglePomo"
         onPressed: root.togglePomodoroPause()
+    }
+    GlobalShortcut {
+        name: "toggleSettings"
+        onPressed: root.settingsOpen = !root.settingsOpen
     }
 
     property bool switcherQuickTapArmed: false
@@ -1086,7 +1098,92 @@ for f in sorted_files:
     }
 
     IpcHandler {
+        target: "workspaces"
+
+        function open(): void {
+            if (root.activeMode !== "hover")
+                root.switchMode("hover", true);
+        }
+
+        function close(): void {
+            if (root.activeMode === "hover")
+                root.collapseToIdle();
+        }
+
+        function toggle(): void {
+            if (root.activeMode === "hover")
+                close();
+            else
+                open();
+        }
+    }
+
+    IpcHandler {
         target: "notch"
+        function toggleSettings(): string {
+            root.collapseToIdle();
+            root.settingsOpen = !root.settingsOpen;
+            return "OK";
+        }
+        function openSettings(): string {
+            root.openSettings("");
+            return "OK";
+        }
+        function openSettingsPage(page: string): string {
+            root.openSettings(page);
+            return "OK";
+        }
+        function checkSettings(): string {
+            return "settingsOpen: " + root.settingsOpen + " page: " + root.initialSettingsPage;
+        }
+        function getActiveMode(): string {
+            return root.activeMode;
+        }
+        function setCalendarTab(tabName: string): string {
+            if (root.calMod) {
+                root.calMod.showTab(tabName);
+                return "OK: " + root.calMod.tab;
+            }
+            return "calMod null";
+        }
+        function isOverviewOpen(): string {
+            return "" + (typeof GlobalStates !== "undefined" ? GlobalStates.overviewOpen : false);
+        }
+        function getLauncherDebug(): string {
+            var sm = root.launcherMod;
+            var si = sm ? sm.searchInput : null;
+            var ar = sm && sm.searchWidget ? sm.searchWidget.appResults : null;
+            return "activeMode=" + root.activeMode
+                 + " targetW=" + root.targetWidth
+                 + " targetH=" + root.targetHeight
+                 + " notchW=" + notch.width
+                 + " notchH=" + notch.height
+                 + " launcherMod=" + (sm ? "exists" : "null")
+                 + " siFocus=" + (si ? si.focus : "null")
+                 + " siActiveFocus=" + (si ? si.activeFocus : "null")
+                 + " overviewOpen=" + (typeof GlobalStates !== "undefined" ? GlobalStates.overviewOpen : "null")
+                 + " realResults=" + (sm && sm.searchWidget ? sm.searchWidget.realResultCount : "null")
+                 + " arCount=" + (ar ? ar.count : "null")
+                 + " arIndex=" + (ar ? ar.currentIndex : "null");
+        }
+        function activate(): string {
+            if (root.launcherMod && typeof root.launcherMod.activateSelected === "function") {
+                return "res=" + root.launcherMod.activateSelected();
+            }
+            return "no launcherMod";
+        }
+        function navDown(): string {
+            if (root.launcherMod && root.launcherMod.searchWidget && root.launcherMod.searchWidget.searchKeyRouter) {
+                return "res=" + root.launcherMod.searchWidget.searchKeyRouter.dispatch("navigateDown");
+            }
+            return "no router";
+        }
+        function navUp(): string {
+            if (root.launcherMod && root.launcherMod.searchWidget && root.launcherMod.searchWidget.searchKeyRouter) {
+                return "res=" + root.launcherMod.searchWidget.searchKeyRouter.dispatch("navigateUp");
+            }
+            return "no router";
+        }
         function switchMode(mode: string): string {
             root.switchMode(mode, true);
             return "OK";
@@ -1112,9 +1209,18 @@ for f in sorted_files:
         }
         function search(query: string): string {
             root.openedViaShortcut = true;
-            root.activeMode = "launcher";
-            if (root.launcherMod && root.launcherMod.searchInput) {
-                root.launcherMod.searchInput.text = query || "";
+            var q = query || "";
+            root.pendingSearchQuery = q;
+            if (root.activeMode !== "launcher") {
+                root.switchMode("launcher", true);
+            }
+            if (typeof GlobalStates !== "undefined") {
+                GlobalStates.overviewOpen = true;
+            }
+            if (root.launcherMod) {
+                root.launcherMod.onOpened();
+                root.launcherMod.processSearch(q);
+                root.pendingSearchQuery = "";
             }
             return "OK";
         }
@@ -1139,10 +1245,42 @@ for f in sorted_files:
             }
             return "ERROR";
         }
+        function toggleBtExpand(address: string): string {
+            if (root.activeMode !== "bluetooth") root.switchMode("bluetooth", true);
+            if (root.btMod) {
+                root.btMod.expandedKey = (root.btMod.expandedKey === address) ? "" : address;
+                return "OK";
+            }
+            return "ERROR";
+        }
         function searchTask(query: string): string {
             if (root.activeMode !== "taskmanager") root.switchMode("taskmanager", true);
             if (root.taskMgrMod && root.taskMgrMod.searchInput) {
                 root.taskMgrMod.searchInput.text = query || "";
+                return "OK";
+            }
+            return "ERROR";
+        }
+        function setTaskTab(tabStr: string): string {
+            if (root.activeMode !== "taskmanager") root.switchMode("taskmanager", true);
+            var t = parseInt(tabStr);
+            if (!isNaN(t) && root.taskMgrMod) {
+                root.taskMgrMod.activeTab = t;
+                root.taskMgrMod.applyFilterAndSort(true);
+                return "OK";
+            }
+            return "ERROR";
+        }
+        function setTaskSort(field: string): string {
+            if (root.activeMode !== "taskmanager") root.switchMode("taskmanager", true);
+            if (root.taskMgrMod) {
+                if (root.taskMgrMod.sortField === field) {
+                    root.taskMgrMod.sortAsc = !root.taskMgrMod.sortAsc;
+                } else {
+                    root.taskMgrMod.sortField = field;
+                    root.taskMgrMod.sortAsc = (field === "name");
+                }
+                root.taskMgrMod.applyFilterAndSort(true);
                 return "OK";
             }
             return "ERROR";
@@ -1174,6 +1312,10 @@ for f in sorted_files:
         function showScreenshot(filePath: string): string {
             root.triggerScreenshotHub(filePath);
             return "OK";
+        }
+        function toggleDnd(): string {
+            root.dndEnabled = !root.dndEnabled;
+            return root.dndEnabled ? "DND Enabled" : "DND Disabled";
         }
         function startPomo(minutes: int, mode: string): string {
             root.startPomodoro(minutes, mode);
@@ -1210,11 +1352,28 @@ for f in sorted_files:
     // Permanent top reservation for Hyprland window tiling (32px)
     PanelWindow {
         id: reservationPanel
-        anchors.top: true
+        anchors {
+            top: true
+            left: true
+            right: true
+        }
+        implicitHeight: NotchConfig.baseExclusiveZone
         exclusiveZone: NotchConfig.baseExclusiveZone
         color: "transparent"
-        Item { id: emptyResItem; width: 0; height: 0 }
-        mask: Region { item: emptyResItem }
+        WlrLayershell.namespace: "notch-reserve"
+        mask: Region {}
+    }
+
+    // Modern hardware display rounded corners (Liquid Retina aesthetic, 100% click-through)
+    Variants {
+        model: Quickshell.screens
+
+        ScreenCorners {
+            required property var modelData
+            screen: modelData
+            cornerRadius: 16
+            cornerColor: "#000000"
+        }
     }
 
     // Main Notch Panel
@@ -1255,10 +1414,10 @@ for f in sorted_files:
 
         mask: Region {
             item: {
+                if (root.settingsOpen) {
+                    return fullMaskArea;
+                }
                 if (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") {
-                    if (root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned) {
-                        return notchContainer;
-                    }
                     return fullMaskArea;
                 }
                 if (root.notchHidden) {
@@ -1271,15 +1430,9 @@ for f in sorted_files:
             }
         }
 
-        WlrLayershell.keyboardFocus: {
-            if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd" || root.activeMode === "switcher") {
-                return WlrKeyboardFocus.None;
-            }
-            if (root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned) {
-                return WlrKeyboardFocus.OnDemand;
-            }
-            return WlrKeyboardFocus.Exclusive;
-        }
+        WlrLayershell.keyboardFocus: (root.settingsOpen || (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "compact" && root.activeMode !== "workspace_peek" && root.activeMode !== "dashboard_peek" && root.activeMode !== "osd"))
+            ? WlrKeyboardFocus.Exclusive
+            : WlrKeyboardFocus.None
 
         // Top hover sensor mouse trigger for fullscreen mode
         MouseArea {
@@ -1330,7 +1483,7 @@ for f in sorted_files:
             id: outsideClickCatcher
             anchors.fill: parent
             z: 0
-            enabled: root.activeMode !== "idle" && root.activeMode !== "osd" && !(root.activeMode === "notes" && root.notesMod && root.notesMod.isPinned)
+            enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
             onClicked: {
                 root.collapseToIdle();
                 if (root.isWindowFullscreen) {
@@ -1352,19 +1505,20 @@ for f in sorted_files:
 
             Behavior on y {
                 NumberAnimation {
-                    duration: NotchConfig.animNotchResize
+                    duration: root.notchHidden ? NotchConfig.animNotchExit : NotchConfig.animNotchEnter
                     easing.type: Easing.BezierSpline
-                    easing.bezierCurve: NotchConfig.motionCurve
+                    easing.bezierCurve: root.notchHidden ? NotchConfig.curveAccel : NotchConfig.curveMorph
                 }
             }
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 180
+                    duration: root.notchHidden ? NotchConfig.animContentExit : NotchConfig.animDashEnter
                     easing.type: Easing.OutCubic
                 }
             }
 
             focus: root.activeMode !== "idle" && root.activeMode !== "hover"
+            Keys.forwardTo: (moduleLoader && moduleLoader.item) ? [moduleLoader.item] : []
             Keys.onPressed: (event) => {
                 if (event.key === Qt.Key_Escape) {
                     root.collapseToIdle();
@@ -1372,23 +1526,11 @@ for f in sorted_files:
                         root.fullscreenHoverRevealed = false;
                     }
                     event.accepted = true;
-                } else if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control ||
-                           event.key === Qt.Key_Alt || event.key === Qt.Key_Meta ||
-                           event.key === Qt.Key_CapsLock || event.key === Qt.Key_NumLock ||
-                           event.key === Qt.Key_ScrollLock) {
-                    event.accepted = true;
-                } else if (notchContainer.activeFocus) {
-                    root.regainFocus();
                 }
             }
             Keys.onReleased: (event) => {
                 if (root.activeMode === "switcher" && (event.key === Qt.Key_Alt || event.key === Qt.Key_Meta)) {
                     if (root.switcherMod) root.switcherMod.activateSelected();
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Shift || event.key === Qt.Key_Control ||
-                           event.key === Qt.Key_Alt || event.key === Qt.Key_Meta ||
-                           event.key === Qt.Key_CapsLock || event.key === Qt.Key_NumLock ||
-                           event.key === Qt.Key_ScrollLock) {
                     event.accepted = true;
                 }
             }
@@ -1407,7 +1549,7 @@ for f in sorted_files:
                     onPaint: {
                         var ctx = getContext("2d");
                         ctx.reset();
-                        ctx.fillStyle = "#000000";
+                        ctx.fillStyle = "" + root.notchSurfaceColor;
                         ctx.beginPath();
                         ctx.moveTo(width + 1, 0); ctx.lineTo(width + 1, height);
                         ctx.arcTo(width, 0, 0, 0, height);
@@ -1437,7 +1579,7 @@ for f in sorted_files:
                     onPaint: {
                         var ctx = getContext("2d");
                         ctx.reset();
-                        ctx.fillStyle = "#000000";
+                        ctx.fillStyle = "" + root.notchSurfaceColor;
                         ctx.beginPath();
                         ctx.moveTo(-1, 0); ctx.lineTo(-1, height);
                         ctx.arcTo(0, 0, width, 0, height);
@@ -1546,6 +1688,9 @@ for f in sorted_files:
                 width: root.targetWidth
                 height: root.targetHeight
                 color: root.notchSurfaceColor
+                border.width: 0
+                border.color: "transparent"
+                antialiasing: true
                 clip: true
 
                 // Consumes clicks on empty space inside notch so they do not fall through to click-away catcher
@@ -1557,8 +1702,35 @@ for f in sorted_files:
                 radius: 0
                 bottomLeftRadius: root.targetRadius
                 bottomRightRadius: root.targetRadius
-                Behavior on width  { NumberAnimation { duration: root.isOsdMode ? 220 : NotchConfig.animNotchResize; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1] } }
-                Behavior on height { NumberAnimation { duration: root.isOsdMode ? 220 : NotchConfig.animNotchResize; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1] } }
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                    }
+                }
+                Behavior on height {
+                    NumberAnimation {
+                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                    }
+                }
+                Behavior on bottomLeftRadius {
+                    NumberAnimation {
+                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                    }
+                }
+                Behavior on bottomRightRadius {
+                    NumberAnimation {
+                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                    }
+                }
 
                 // 1. Persistent Dash Layer
                 Item {
@@ -1571,12 +1743,28 @@ for f in sorted_files:
 
                     opacity: (root.isDashMode && root.activeMode !== "osd") ? 1.0 : 0.0
                     visible: opacity > 0.01
-                    Behavior on height { NumberAnimation { duration: root.isOsdMode ? 220 : NotchConfig.animNotchResize; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1] } }
-                    Behavior on opacity { NumberAnimation { duration: root.isOsdMode ? 140 : NotchConfig.animDashFade; easing.type: Easing.OutQuad } }
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                        }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: (root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animDashEnter : NotchConfig.animDashExit
+                            easing.type: Easing.OutQuad
+                        }
+                    }
 
                     MainDash { 
                         id: dashMod 
                         anchors.fill: parent
+                        settingsOpen: root.settingsOpen
+                        onSettingsRequested: {
+                            root.collapseToIdle();
+                            root.settingsOpen = !root.settingsOpen;
+                        }
                     }
                 }
 
@@ -1584,26 +1772,45 @@ for f in sorted_files:
                 Item {
                     id: modulesContainer
                     anchors.fill: parent
-                    anchors.leftMargin: root.activeMode === "music" ? 0 : 12
-                    anchors.rightMargin: root.activeMode === "music" ? 0 : 12
-                    anchors.topMargin: root.activeMode === "music" ? 0 : 12
-                    anchors.bottomMargin: root.activeMode === "music" ? 0 : 12
+                    anchors.leftMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.rightMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.topMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    anchors.bottomMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
                     z: 2
 
                     opacity: (!root.isDashMode && root.activeMode !== "osd" && notch.height > 35) ? 1.0 : 0.0
                     visible: opacity > 0.001
                     enabled: !root.isDashMode && root.activeMode !== "osd"
-                    Behavior on opacity { NumberAnimation { duration: NotchConfig.animModulesFade; easing.type: Easing.OutQuad } }
+                    scale: (!root.isDashMode && root.activeMode !== "osd" && notch.height > 35) ? 1.0 : 0.97
+                    transformOrigin: Item.Top
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: (!root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animContentEnter : NotchConfig.animContentExit
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: (!root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animNotchEnter : NotchConfig.animContentExit
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: NotchConfig.curveMorph
+                        }
+                    }
 
                     Loader {
                         id: moduleLoader
                         anchors.fill: parent
-                        asynchronous: true
+                        asynchronous: false
                         source: root.getModuleSource(root.loadedExpandedMode)
                         onLoaded: {
                             if (!item) return;
                             if (root.loadedExpandedMode === "launcher") {
                                 if (typeof item.onOpened === "function") item.onOpened();
+                                if (root.pendingSearchQuery !== "") {
+                                    item.processSearch(root.pendingSearchQuery);
+                                    root.pendingSearchQuery = "";
+                                }
                             } else if (root.loadedExpandedMode === "wifi") {
                                 if (typeof item.refreshStatus === "function") item.refreshStatus();
                             } else if (root.loadedExpandedMode === "utility") {
@@ -1675,6 +1882,44 @@ for f in sorted_files:
                         }
                     }
                 }
+            }
+        }
+
+        // Expressive Settings Modal Window (The Goat Architecture)
+        Rectangle {
+            id: settingsBackdrop
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.65)
+            opacity: root.settingsOpen ? 1.0 : 0.0
+            visible: opacity > 0.001
+            z: 99
+
+            Behavior on opacity {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.settingsOpen = false
+            }
+
+            SettingsWindow {
+                id: settingsModal
+                activePageId: root.initialSettingsPage
+                anchors.centerIn: parent
+                width: Math.min(panel.width - 48, 1040)
+                height: Math.min(panel.height - 64, 680)
+                scale: root.settingsOpen ? 1.0 : 0.95
+                opacity: root.settingsOpen ? 1.0 : 0.0
+
+                Behavior on scale {
+                    NumberAnimation { duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.16, 1, 0.3, 1, 1, 1] }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                }
+
+                onCloseRequested: root.settingsOpen = false
             }
         }
     }

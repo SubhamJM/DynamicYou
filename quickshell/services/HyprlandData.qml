@@ -1,0 +1,544 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Quickshell.Wayland
+import Quickshell.Hyprland
+import qs.modules.common
+
+/**
+ * Provides access to some Hyprland data not available in Quickshell.Hyprland.
+ */
+Singleton {
+    id: root
+    property var windowList: []
+    property bool windowListLoaded: false
+    property var addresses: []
+    property var windowByAddress: ({})
+    property var workspaces: []
+    property var workspaceIds: []
+    property var workspaceById: ({})
+    property var activeWorkspace: null
+    property var monitors: []
+    property var layers: ({})
+
+    // Convenient stuff
+
+    function toplevelsForWorkspace(workspace) {
+        return ToplevelManager.toplevels.values.filter(toplevel => {
+            const address = `0x${toplevel.HyprlandToplevel?.address}`;
+            var win = HyprlandData.windowByAddress[address];
+            return win?.workspace?.id === workspace;
+        })
+    }
+
+    function hyprlandClientsForWorkspace(workspace) {
+        return root.windowList.filter(win => win.workspace.id === workspace);
+    }
+
+    function clientForToplevel(toplevel) {
+        if (!toplevel || !toplevel.HyprlandToplevel) {
+            return null;
+        }
+        const address = `0x${toplevel?.HyprlandToplevel?.address}`;
+        return root.windowByAddress[address];
+    }
+
+    /**
+     * The workspaces on screen at the monitor holding the keyboard: the one that monitor
+     * shows, plus a special workspace pulled over it. A workspace lives on exactly one
+     * monitor, so this also answers "is it on the screen being used" once a second one
+     * is plugged in.
+     */
+    readonly property var visibleWorkspaceIds: {
+        const ids = [];
+        const activeId = Number(root.activeWorkspace?.id ?? NaN);
+        if (isFinite(activeId))
+            ids.push(activeId);
+
+        const monitorId = Number(Hyprland.focusedMonitor?.id ?? NaN);
+        const monitor = Array.from(root.monitors ?? [])
+            .find(candidate => Number(candidate?.id ?? NaN) === monitorId);
+        const specialId = Number(monitor?.specialWorkspace?.id ?? 0);
+        if (isFinite(specialId) && specialId !== 0)
+            ids.push(specialId);
+
+        return ids;
+    }
+
+    /**
+     * Whether a toplevel sits on a workspace the user is currently looking at.
+     *
+     * Hyprland leaves keyboard focus - and with it the toplevel's `activated` flag - on a
+     * window that was sent away with a silent move: Super + Alt + a number, or a drag in the
+     * overview. It does ask for a refocus, but a refocus only clears the keyboard when
+     * nothing at all is under the cursor, and the wallpaper is a layer surface, so something
+     * always is. `activated` therefore marks windows that are not on screen at all, and
+     * anything asking "is this the window in front of me" has to ask this instead.
+     *
+     * A window that cannot be placed counts as on screen: that is the reading that changes
+     * nothing for the caller.
+     */
+    function toplevelOnScreen(toplevel) {
+        const client = root.clientForToplevel(toplevel);
+        const ids = root.visibleWorkspaceIds;
+        if (!client || ids.length === 0)
+            return true;
+        const workspaceId = Number(client.workspace?.id ?? NaN);
+        return ids.some(id => id === workspaceId);
+    }
+
+    /**
+     * Whether the named monitor is showing a fullscreen window right now: one on the
+     * workspace it displays, or on a special workspace pulled over it.
+     *
+     * Built from the client list rather than a workspace's own `toplevels`, because the
+     * workspace arranger renumbers workspaces in place (`changeworkspaceid`) and those
+     * lists never follow: the windows stay in the workspace object they were in while the
+     * numbers move underneath them, so the workspace the user is standing on goes on
+     * reporting a fullscreen window that left with its old number - and the bar, the
+     * corners and the island all hide over nothing until the shell is restarted.
+     * `Hyprland.refreshToplevels()` is no cure: it adds the new link without dropping the
+     * stale one, and the window ends up counted twice.
+     *
+     * Addresses survive a renumbering, so the fullscreen flag still comes from the Wayland
+     * toplevel - it flips the instant the window goes fullscreen - and only the workspace
+     * it sits on is read from the client list.
+     */
+    /** Position of a monitor in the workspace map (see `monitors` ordering); 0 if unknown. */
+    function workspaceMapIndex(monitorName) {
+        return Math.max(0, root.monitors.findIndex(mon => mon.name === monitorName));
+    }
+
+    function monitorHasFullscreenWindow(monitorName) {
+        if (!monitorName) return false;
+        const monitor = root.monitors.find(candidate => candidate?.name === monitorName);
+        if (!monitor) return false;
+        const visibleIds = [monitor.activeWorkspace?.id, monitor.specialWorkspace?.id]
+            .map(id => Number(id ?? NaN))
+            .filter(id => isFinite(id) && id !== 0);
+        if (visibleIds.length === 0) return false;
+        return ToplevelManager.toplevels.values.some(toplevel => {
+            if (!toplevel?.fullscreen) return false;
+            const client = root.clientForToplevel(toplevel);
+            return !!client && visibleIds.some(id => id === Number(client.workspace?.id ?? NaN));
+        });
+    }
+
+    // Internals
+
+    property bool _windowListNeedsUpdate: false
+    property bool _monitorsNeedsUpdate: false
+    property bool _layersNeedsUpdate: false
+    property bool _workspacesNeedsUpdate: false
+    property bool _activeWorkspaceNeedsUpdate: false
+    property string _activeWindowAddress: ""
+
+    function updateWindowList() {
+        if (getClients.running) {
+            root._windowListNeedsUpdate = true;
+        } else {
+            getClients.running = true;
+        }
+    }
+
+    function updateLayers() {
+        if (getLayers.running) {
+            root._layersNeedsUpdate = true;
+        } else {
+            getLayers.running = true;
+        }
+    }
+
+    function updateMonitors() {
+        if (getMonitors.running) {
+            root._monitorsNeedsUpdate = true;
+        } else {
+            getMonitors.running = true;
+        }
+    }
+
+    function updateWorkspaces() {
+        if (getWorkspaces.running) {
+            root._workspacesNeedsUpdate = true;
+        } else {
+            getWorkspaces.running = true;
+        }
+
+        if (getActiveWorkspace.running) {
+            root._activeWorkspaceNeedsUpdate = true;
+        } else {
+            getActiveWorkspace.running = true;
+        }
+    }
+
+    function updateAll() {
+        updateWindowList();
+        updateMonitors();
+        updateLayers();
+        updateWorkspaces();
+    }
+
+    // The workspace arranger's renumberings still in flight: old id -> new id.
+    // Quickshell's workspace model and the window list both learn the new id
+    // from their own asynchronous refresh, a few ms apart and in either order,
+    // and in between a window and its workspace disagree. Compare ids with
+    // sameWorkspace() where that gap would flip a state (the window blur read
+    // "no windows" for one refresh and dropped and restarted, flashing the
+    // sharp wallpaper).
+    property var workspaceIdRenames: ({})
+    // A special workspace (the scratchpad) comes with no id at all, so a or b can be undefined:
+    // renames[b] === a would then hold for any b without a pending rename, and a scratchpad
+    // window - shown or not - would count as being on every workspace.
+    // A shown special workspace (the scratchpad) on that monitor that holds windows. Matched by
+    // name: since Hyprland 0.57 a special workspace carries no numeric id.
+    function specialWindowsShown(monitorName) {
+        const mon = (root.monitors ?? []).find(m => m.name === monitorName);
+        const name = mon?.specialWorkspace?.name ?? "";
+        if (name === "")
+            return false;
+        return root.windowList.some(w => w.workspace?.name === name);
+    }
+    function sameWorkspace(a, b) {
+        if (a === undefined || a === null || b === undefined || b === null)
+            return false;
+        const renames = root.workspaceIdRenames;
+        return a === b || renames[a] === b || renames[b] === a;
+    }
+    Timer {
+        id: workspaceIdRenamesExpiry
+        interval: 250
+        repeat: false
+        onTriggered: root.workspaceIdRenames = ({})
+    }
+
+    function biggestWindowForWorkspace(workspaceId) {
+        const windowsInThisWorkspace = HyprlandData.windowList.filter(w => w.workspace.id == workspaceId);
+        return windowsInThisWorkspace.reduce((maxWin, win) => {
+            const maxArea = (maxWin?.size?.[0] ?? 0) * (maxWin?.size?.[1] ?? 0);
+            const winArea = (win?.size?.[0] ?? 0) * (win?.size?.[1] ?? 0);
+            return winArea > maxArea ? win : maxWin;
+        }, null);
+    }
+
+    // Quickshell connects its event socket only after an async status request comes back, so the
+    // first read below can predate it: a window closed in between is never reported, and the
+    // wallpaper blur keeps seeing it on an empty workspace until something else changes.
+    // Quickshell refreshes its monitors right after connecting, so its first focused monitor
+    // marks the point from which no event is lost: read everything once more then.
+    property bool _eventStreamSynced: false
+
+    function syncAfterEventStream() {
+        if (root._eventStreamSynced || !Hyprland.focusedMonitor)
+            return;
+        root._eventStreamSynced = true;
+        root.updateAll();
+    }
+
+    Component.onCompleted: {
+        // Already connected: nothing can have slipped past the read below.
+        root._eventStreamSynced = Hyprland.focusedMonitor !== null;
+        updateAll();
+        if (Config.ready) {
+            syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
+    }
+
+    // Window titles can change at very high frequency (browsers,
+    // terminals, media applications, etc.). Debounce these events
+    // and refresh only the client/window list after title activity settles.
+    Timer {
+        id: windowTitleUpdateDebounce
+        interval: 250
+        repeat: false
+        onTriggered: root.updateWindowList()
+    }
+
+    Connections {
+        target: Hyprland
+
+        function onFocusedMonitorChanged() {
+            root.syncAfterEventStream();
+        }
+
+        function onRawEvent(event) {
+            // console.log("Hyprland raw event:", event.name);
+
+            // Keep window titles eventually consistent without causing
+            // repeated hyprctl calls during continuous title changes.
+            if (event.name === "windowtitle"
+                    || event.name === "windowtitlev2") {
+                windowTitleUpdateDebounce.restart();
+                return;
+            }
+
+            switch (event.name) {
+                case "workspace":
+                case "workspacev2":
+                case "focusedmon":
+                case "activespecial":
+                case "activespecialv2":
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    root.updateWindowList();
+                    break;
+
+                // Hyprland re-sends activewindow on every title change of the focused
+                // window (spinners, media titles: about once a second). Only an address
+                // change is a focus change; the rest is a title change like any other.
+                case "activewindow":
+                    break;
+                case "activewindowv2":
+                    if (event.data === root._activeWindowAddress) {
+                        windowTitleUpdateDebounce.restart();
+                        break;
+                    }
+                    root._activeWindowAddress = event.data;
+                    root.updateWindowList();
+                    root.updateWorkspaces();
+                    break;
+
+                case "openwindow":
+                case "closewindow":
+                case "movewindow":
+                case "movewindowv2":
+                    root.updateWindowList();
+                    root.updateWorkspaces();
+                    break;
+
+                case "changefloatingmode":
+                case "fullscreen":
+                case "urgent":
+                case "minimize":
+                    root.updateWindowList();
+                    break;
+
+                case "createworkspace":
+                case "destroyworkspace":
+                case "moveworkspace":
+                case "renameworkspace":
+                    root.updateWorkspaces();
+                    break;
+
+                // The workspace arranger renumbers workspaces in place instead of moving
+                // windows, so every client's workspace id changes without a single window event.
+                // Quickshell's own Hyprland model does not know this event either.
+                // Until both refreshes are in, the two ids name one workspace
+                // (workspaceIdRenames).
+                case "changeworkspaceid": {
+                    const ids = event.data.split(",");
+                    const fromId = parseInt(ids[0]);
+                    const toId = parseInt(ids[1]);
+                    if (!isNaN(fromId) && !isNaN(toId)) {
+                        const renames = Object.assign({}, root.workspaceIdRenames);
+                        renames[fromId] = toId;
+                        root.workspaceIdRenames = renames;
+                        workspaceIdRenamesExpiry.restart();
+                    }
+                    Hyprland.refreshWorkspaces();
+                    Hyprland.refreshMonitors();
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    root.updateWindowList();
+                    break;
+                }
+
+                case "monitoradded":
+                case "monitorremoved":
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    break;
+            }
+        }
+    }
+
+    Process {
+        id: getClients
+        command: ["hyprctl", "clients", "-j"]
+        stdout: StdioCollector {
+            id: clientsCollector
+            onStreamFinished: {
+                // The phone mirror's scrcpy window is a piece of the Phone
+                // sidebar, not a window of the user's: it lives under a
+                // cut-out in the panel and is painted over, so an overview or
+                // a task list offering to raise it would be offering to raise
+                // something that cannot be seen.
+                root.windowList = JSON.parse(clientsCollector.text)
+                    .filter(win => !String(win?.title ?? "").startsWith("ii-phone-embed-"));
+                root.windowListLoaded = true;
+                let tempWinByAddress = {};
+                for (var i = 0; i < root.windowList.length; ++i) {
+                    var win = root.windowList[i];
+                    tempWinByAddress[win.address] = win;
+                }
+                root.windowByAddress = tempWinByAddress;
+                root.addresses = root.windowList.map(win => win.address);
+
+                if (root._windowListNeedsUpdate) {
+                    root._windowListNeedsUpdate = false;
+                    getClients.running = true;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: getMonitors
+        command: ["hyprctl", "monitors", "all", "-j"]
+        stdout: StdioCollector {
+            id: monitorsCollector
+            onStreamFinished: {
+                // Ordered by Hyprland's monitor id, not by `hyprctl` order: a monitor that
+                // reconnects (e.g. HDMI on resume) keeps its id but is listed last, and the
+                // workspace map is indexed by this position.
+                root.monitors = JSON.parse(monitorsCollector.text).sort((a, b) => a.id - b.id);
+
+                if (root._monitorsNeedsUpdate) {
+                    root._monitorsNeedsUpdate = false;
+                    getMonitors.running = true;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: getLayers
+        command: ["hyprctl", "layers", "-j"]
+        stdout: StdioCollector {
+            id: layersCollector
+            onStreamFinished: {
+                root.layers = JSON.parse(layersCollector.text);
+
+                if (root._layersNeedsUpdate) {
+                    root._layersNeedsUpdate = false;
+                    getLayers.running = true;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: getWorkspaces
+        command: ["hyprctl", "workspaces", "-j"]
+        stdout: StdioCollector {
+            id: workspacesCollector
+            onStreamFinished: {
+                var rawWorkspaces = JSON.parse(workspacesCollector.text);
+                // Filter out invalid workspace ids (e.g. lock-screen temp workspace 2147483647 - N)
+                root.workspaces = rawWorkspaces.filter(ws => ws.id >= 1 && ws.id <= 100);
+                let tempWorkspaceById = {};
+                for (var i = 0; i < root.workspaces.length; ++i) {
+                    var ws = root.workspaces[i];
+                    tempWorkspaceById[ws.id] = ws;
+                }
+                root.workspaceById = tempWorkspaceById;
+                root.workspaceIds = root.workspaces.map(ws => ws.id);
+
+                if (root._workspacesNeedsUpdate) {
+                    root._workspacesNeedsUpdate = false;
+                    getWorkspaces.running = true;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: getActiveWorkspace
+        command: ["hyprctl", "activeworkspace", "-j"]
+        stdout: StdioCollector {
+            id: activeWorkspaceCollector
+            onStreamFinished: {
+                root.activeWorkspace = JSON.parse(activeWorkspaceCollector.text);
+
+                if (root._activeWorkspaceNeedsUpdate) {
+                    root._activeWorkspaceNeedsUpdate = false;
+                    getActiveWorkspace.running = true;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: syncWorkspaceMapProcess
+    }
+
+    // Set by the lock while the screen is locked: the sync moves the mapped workspaces onto
+    // their monitors, which would bring windows back over the lock when a monitor reconnects
+    // on resume. Synced once on release instead.
+    property bool holdWorkspaceMapSync: false
+    property bool _workspaceMapSyncPending: false
+    onHoldWorkspaceMapSyncChanged: {
+        if (!root.holdWorkspaceMapSync && root._workspaceMapSyncPending)
+            root.syncWorkspaceMap();
+    }
+
+    function syncWorkspaceMap() {
+        if (!Config.ready || !Config.options.bar.workspaces.useWorkspaceMap) return;
+        root._workspaceMapSyncPending = root.holdWorkspaceMapSync;
+        if (root.holdWorkspaceMapSync) return;
+        const map = Config.options.bar.workspaces.workspaceMap;
+        if (!map || map.length === 0) return;
+        const monitorNames = root.monitors.map(m => m.name);
+        if (monitorNames.length === 0) return;
+        const shown = Config.options.bar.workspaces.shown || 10;
+        
+        syncWorkspaceMapProcess.command = [
+            "python3",
+            `${Directories.scriptPath}/hyprland/sync_workspace_map.py`,
+            JSON.stringify(map),
+            JSON.stringify(monitorNames),
+            shown.toString()
+        ];
+        syncWorkspaceMapProcess.running = true;
+    }
+
+    function syncWorkspaceGroupSize(shown) {
+        let script = `touch "$HOME/.config/hypr/custom/variables.lua" && sed -i '/workspaceGroupSize =/d' "$HOME/.config/hypr/custom/variables.lua" && echo "workspaceGroupSize = ${shown}" >> "$HOME/.config/hypr/custom/variables.lua" && hyprctl reload`;
+        Quickshell.execDetached(["bash", "-c", script]);
+    }
+
+    // Trigger sync functions on changes
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            if (Config.ready) {
+                root.syncWorkspaceMap();
+                const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+                const shown = Config.options.bar.workspaces.shown || 10;
+                root.syncWorkspaceGroupSize(useMap ? shown : 10);
+            }
+        }
+    }
+
+    Connections {
+        target: Config.ready ? Config.options.bar.workspaces : null
+        ignoreUnknownSignals: true
+
+        function onWorkspaceMapChanged() {
+            root.syncWorkspaceMap();
+        }
+
+        function onUseWorkspaceMapChanged() {
+            root.syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            root.syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
+
+        function onShownChanged() {
+            root.syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            root.syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
+    }
+
+    onMonitorsChanged: {
+        root.syncWorkspaceMap();
+    }
+}

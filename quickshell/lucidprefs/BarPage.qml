@@ -1,0 +1,484 @@
+import QtQuick
+import qs
+import qs.lucidui
+
+Column {
+    id: page
+
+    // whether any corner on the bar blends into something
+    readonly property bool blendsAnything: Prefs.barNotch || (Prefs.barPopupMode && Prefs.barPopupNotched) || Object.keys(Prefs.barJoinSet).length > 0
+    // shown in edit mode's sheet beside the bar itself, which needs no preview, and
+    // whose modules and their options have a sheet of their own
+    property bool inSheet: false
+
+    spacing: Theme.dp(26)
+
+    BarPreview {
+        width: parent.width
+        visible: !page.inSheet
+    }
+
+    SettingCard {
+        title: "MODULES"
+        visible: !page.inSheet
+
+        SettingRow {
+            title: "Arrange the bar"
+            description: "Modules are arranged on the bar itself. In edit mode the desktop shades over: drag a module along the bar to move it, pull one down off the bar to take it out, click the link between two neighbours to join them, and right-click any of them for its looks and options."
+            enabled: Prefs.barEnabled
+            disabledReason: "The bar is switched off, so there is nothing to arrange."
+            showDivider: false
+
+            M3Button {
+                text: "Edit the bar"
+                variant: "filled"
+                iconPath: "edit"
+                enabled: Prefs.barEnabled
+                onClicked: Edit.enterFromSettings("bar", "")
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "STYLE"
+
+        SettingRow {
+            title: "Bar style"
+            resetKey: "barStyle"
+            description: "Islands float free of the screen edge. Notches sit flush against it, squaring off the corners that meet it. Full bar joins every module on one continuous strip across the top."
+            showDivider: false
+
+            M3Segmented {
+                width: Math.max(Theme.dp(360), fitWidth)
+                current: Prefs.barStyle
+                options: [{
+                    "key": "island",
+                    "label": "Islands"
+                }, {
+                    "key": "notch",
+                    "label": "Notches"
+                }, {
+                    "key": "full",
+                    "label": "Full bar"
+                }]
+                onChosen: (key) => {
+                    return Prefs.barStyle = key;
+                }
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "OPENING BEHAVIOUR"
+
+        SettingRow {
+            title: "Auto-hide"
+            resetKey: "barAutoHide"
+            description: "The bar slides off the top of the screen and comes back when the pointer reaches the edge, or while one of its panels is open. Windows use the space it leaves."
+
+            M3Switch {
+                checked: Prefs.barAutoHide
+                onToggled: (v) => {
+                    return Prefs.barAutoHide = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Open on hover"
+            resetKey: "barHoverOpen"
+            description: "Rest the pointer on a module and its panel opens by itself, no click needed; move away and it closes again. A panel opened this way leaves the keyboard with whatever window had it - click the panel to take focus, exactly as a clicked-open one does. The workspace overview still needs a click."
+
+            M3Switch {
+                checked: Prefs.barHoverOpen
+                onToggled: (v) => {
+                    return Prefs.barHoverOpen = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Pop-up mode"
+            description: "Modules stop morphing their own pill into a panel. The pill stays put in the bar and the panel appears below it as a pop-up."
+
+            M3Switch {
+                checked: Prefs.barPopupMode
+                onToggled: (v) => {
+                    return Prefs.barPopupMode = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Notched pop-ups"
+            resetKey: "barPopupNotched"
+            description: "A pop-up grows straight down out of its module, or out of the group the module is joined into, and their corners curve into each other the way a notch meets the top of the screen. Off, it floats below with a gap."
+            enabled: Prefs.barPopupMode
+            disabledReason: "Only applies in pop-up mode."
+
+            M3Switch {
+                enabled: Prefs.barPopupMode
+                checked: Prefs.barPopupNotched
+                onToggled: (v) => {
+                    return Prefs.barPopupNotched = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Pop-up distance"
+            resetKey: "barPopupGap"
+            description: "The gap between a module's pill and the panel it opens."
+            enabled: Prefs.barPopupMode && !Prefs.barPopupNotched
+            disabledReason: Prefs.barPopupMode ? "A notched pop-up hangs flush from its module - switch Notched pop-ups off to float it." : "Only applies in pop-up mode."
+            showDivider: false
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                enabled: Prefs.barPopupMode && !Prefs.barPopupNotched
+                from: 0
+                to: 24
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barPopupGap
+                onMoved: (v) => {
+                    return Prefs.barPopupGap = v;
+                }
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "LAYOUT"
+
+        SettingRow {
+            title: "Bar height"
+            resetKey: "barHeight"
+            description: "How tall each module's resting pill is."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 26
+                to: 52
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barHeight
+                onMoved: (v) => {
+                    return Prefs.barHeight = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Distance from top"
+            resetKey: "barTopMargin"
+            description: "How far the bar floats below the top edge of the screen."
+            enabled: !Prefs.barFlush
+            disabledReason: "Notches and the full bar sit flush against the screen edge by definition - set Bar style back to Islands above to float the bar."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                enabled: !Prefs.barFlush
+                from: 0
+                to: 48
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barTopMargin
+                onMoved: (v) => {
+                    return Prefs.barTopMargin = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Side margin"
+            resetKey: "barSideMargin"
+            description: "Inset from the left and right screen edges."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 0
+                to: 60
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barSideMargin
+                onMoved: (v) => {
+                    return Prefs.barSideMargin = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Edge blend"
+            resetKey: "barNotchFlare"
+            description: "How far notched corners sweep out: a notched module's upper corners into the top of the screen, and a panel's into the bar it hangs from. Only drawn where there is room for it - modules packed close together keep their square corners rather than leaving a spike of wallpaper between them."
+            enabled: page.blendsAnything
+            disabledReason: "Nothing on the bar is notched - set Bar style to Notches above, turn on notched pop-ups, or join two modules."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                enabled: page.blendsAnything
+                from: 0
+                to: 32
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barNotchFlare
+                onMoved: (v) => {
+                    return Prefs.barNotchFlare = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Screen corners"
+            resetKey: "barFullCorner"
+            description: "How far the full bar's strip curves down into the left and right screen edges, and into the sides of a panel that opens from it."
+            enabled: Prefs.barFull
+            disabledReason: "Only the full bar meets the screen edges - set Bar style to Full bar above."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                enabled: Prefs.barFull
+                from: 0
+                to: 40
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barFullCorner
+                onMoved: (v) => {
+                    return Prefs.barFullCorner = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Animation speed"
+            resetKey: "barMotionScale"
+            description: "Scales every transition in the bar - hovers, pills growing and shrinking, modules appearing and leaving - on top of the shell-wide Animation speed on the General page. Above 1.00x the bar moves more slowly than the rest of the shell."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 0
+                to: 2.5
+                stepSize: 0.05
+                decimals: 2
+                suffix: "x"
+                value: Prefs.barMotionScale
+                onMoved: (v) => {
+                    return Prefs.barMotionScale = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Module spacing"
+            resetKey: "barSpacing"
+            description: "The gap between neighbouring pills."
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 0
+                to: 24
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barSpacing
+                onMoved: (v) => {
+                    return Prefs.barSpacing = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Hover growth"
+            resetKey: "barHoverGrow"
+            description: "How far a pill swells under the pointer to show it opens. Capped at half the module spacing."
+            showDivider: false
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 0
+                to: 6
+                stepSize: 1
+                suffix: " px"
+                value: Prefs.barHoverGrow
+                onMoved: (v) => {
+                    return Prefs.barHoverGrow = v;
+                }
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "GROUPS"
+
+        SettingRow {
+            title: "Lines between joined modules"
+            resetKey: "barJoinDividers"
+            description: "A faint line where two joined modules meet. Off, a group reads as one piece."
+            enabled: Prefs.barEnabled
+
+            M3Switch {
+                checked: Prefs.barJoinDividers
+                onToggled: (v) => {
+                    Prefs.barJoinDividers = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Middle clearance"
+            resetKey: "barZoneGap"
+            description: "How close the middle may come to either side before it gives way and slides along."
+            showDivider: false
+            stacked: true
+
+            M3Slider {
+                width: parent.width
+                from: 8
+                to: 80
+                stepSize: 2
+                suffix: " px"
+                value: Prefs.barZoneGap
+                onMoved: (v) => {
+                    return Prefs.barZoneGap = v;
+                }
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "NOTIFICATIONS"
+        visible: !page.inSheet
+
+        SettingRow {
+            title: "Do not disturb"
+            resetKey: "doNotDisturb"
+            description: "Notifications are still collected in the list, but no popup is shown."
+
+            M3Switch {
+                checked: Prefs.doNotDisturb
+                onToggled: (v) => {
+                    return Prefs.doNotDisturb = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Everything else"
+            description: "How long a popup stays, quiet hours, sound and which applications may interrupt you all live on their own page."
+            showDivider: false
+
+            M3Button {
+                text: "Notifications…"
+                variant: "tonal"
+                onClicked: Prefs.settingsRequested("notifications")
+            }
+
+        }
+
+    }
+
+    SettingCard {
+        title: "SYSTEM MODULE"
+        visible: !page.inSheet
+
+        SettingRow {
+            title: "Keyboard layout"
+            resetKey: "showKbLayout"
+            description: "Shows the active keyboard layout next to the network icon. Click it to switch to the next layout."
+
+            M3Switch {
+                checked: Prefs.showKbLayout
+                onToggled: (v) => {
+                    return Prefs.showKbLayout = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Game mode: turn on"
+            resetKey: "gameModeOnCmd"
+            description: "Left empty, with the command below, game mode is Lucid's own: animations, blur, shadows, rounded corners and gaps go off, and come back as they were. Or give a shell command of your own for the Game mode tile (under Edit tiles in the control centre); it runs through bash, so pipes and && work."
+            stacked: true
+
+            M3TextField {
+                width: parent.width
+                placeholder: "Lucid's own, or e.g. sudo -n g15-gamemode on"
+                text: Prefs.gameModeOnCmd
+                onAccepted: (v) => {
+                    return Prefs.gameModeOnCmd = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Game mode: turn off"
+            resetKey: "gameModeOffCmd"
+            description: "The command that switches your own game mode off again. Leave both empty for Lucid's."
+            stacked: true
+
+            M3TextField {
+                width: parent.width
+                placeholder: "Lucid's own, or e.g. sudo -n g15-gamemode off"
+                text: Prefs.gameModeOffCmd
+                onAccepted: (v) => {
+                    return Prefs.gameModeOffCmd = v;
+                }
+            }
+
+        }
+
+        SettingRow {
+            title: "Game mode: status check"
+            resetKey: "gameModeStatusCmd"
+            description: "Optional, and not needed for Lucid's own. Exits 0 while your game mode is on, so the toggle stays right when something else (a keybind, a script) changes it. Checked whenever the panel opens."
+            showDivider: false
+            stacked: true
+
+            M3TextField {
+                width: parent.width
+                placeholder: "e.g. test -f /run/g15-gamemode.state"
+                text: Prefs.gameModeStatusCmd
+                onAccepted: (v) => {
+                    return Prefs.gameModeStatusCmd = v;
+                }
+            }
+
+        }
+
+    }
+
+}

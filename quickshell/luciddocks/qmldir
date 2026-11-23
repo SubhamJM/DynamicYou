@@ -1,0 +1,10 @@
+module qs.luciddocks
+singleton DockIcons 1.0 DockIcons.qml
+DockGlyph 1.0 DockGlyph.qml
+WallpaperStrip 1.0 WallpaperStrip.qml
+WallpaperTiles 1.0 WallpaperTiles.qml
+WallpaperPills 1.0 WallpaperPills.qml
+WallpaperSlots 1.0 WallpaperSlots.qml
+WallpaperBento 1.0 WallpaperBento.qml
+LauncherFace 1.0 LauncherFace.qml
+LauncherHead 1.0 LauncherHead.qml

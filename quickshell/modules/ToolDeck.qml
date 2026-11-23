@@ -6,7 +6,7 @@ import Quickshell.Io
 import Quickshell.Bluetooth
 import "../"
 
-Item {
+FocusScope {
     id: toolDeckRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -39,7 +39,7 @@ Item {
     property bool nightLightActive: false
     property bool caffeineActive: false
     property bool micMuted: false
-    property bool hotspotActive: root.wifiMod ? root.wifiMod.hotspotActive : false
+    property bool hotspotActive: false
 
     // Enabled Utilities List
     property var enabledKeys: [
@@ -231,24 +231,6 @@ Item {
             isActive: false,
             action: function() { root.switchMode("theme", false); }
         },
-        "wallpaper": {
-            id: "wallpaper",
-            name: "Wallpapers",
-            icon: "wallpaper",
-            desc: "Backgrounds",
-            color: "#7aa2f7",
-            isActive: false,
-            action: function() { root.switchMode("wallpaper", false); }
-        },
-        "lockscreen": {
-            id: "lockscreen",
-            name: "Lock Screen",
-            icon: "lock_clock",
-            desc: "Lock style",
-            color: "#e0af68",
-            isActive: false,
-            action: function() { root.switchMode("lockscreen", false); }
-        },
         "taskmgr": {
             id: "taskmgr",
             name: "Task Manager",
@@ -277,8 +259,6 @@ Item {
         "notes",
         "clipboard",
         "theme",
-        "wallpaper",
-        "lockscreen",
         "taskmgr"
     ]
 
@@ -369,18 +349,16 @@ Item {
     Process {
         id: checkHotspotStatus
         running: root.activeMode === "tooldeck"
-        command: ["python3", Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", ""), "status"]
+        command: ["python3", Quickshell.shellPath("scripts/hotspot_manager.py"), "status"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     var data = JSON.parse(this.text.trim());
                     var isActive = !!data.active;
                     toolDeckRoot.hotspotActive = isActive;
-                    if (root.wifiMod) root.wifiMod.hotspotActive = isActive;
                 } catch(e) {
                     var fallback = (this.text.indexOf('"active": true') !== -1);
                     toolDeckRoot.hotspotActive = fallback;
-                    if (root.wifiMod) root.wifiMod.hotspotActive = fallback;
                 }
             }
         }
@@ -389,12 +367,8 @@ Item {
     function toggleHotspot() {
         var targetState = !toolDeckRoot.hotspotActive;
         toolDeckRoot.hotspotActive = targetState;
-        if (root.wifiMod) {
-            root.wifiMod.toggleHotspot(targetState);
-        } else {
-            var scriptPath = Qt.resolvedUrl("../scripts/hotspot_manager.py").toString().replace("file://", "");
-            Quickshell.execDetached(["python3", scriptPath, targetState ? "start" : "stop"]);
-        }
+        var scriptPath = Quickshell.shellPath("scripts/hotspot_manager.py");
+        Quickshell.execDetached(["python3", scriptPath, targetState ? "start" : "stop"]);
         checkHotspotStatus.running = true;
     }
 

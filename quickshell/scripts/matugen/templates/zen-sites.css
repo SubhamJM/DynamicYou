@@ -1,0 +1,79 @@
+/* lucid's colours for websites in zen. matugen renders this into the
+   profile's chrome/lucid-sites.css: userContent.css imports it at startup,
+   and JS/lucid-zen.sys.mjs swaps in each new render while zen runs. each
+   site's own colour tokens are overridden, so its layout stays its own.
+   everything is !important, like lucid-zen.css. the sites should follow
+   the device theme, so their light or dark matches lucid's */
+
+@-moz-document domain("github.com") {
+  /* primer: the base tokens, which the button, card and header ones mostly point at */
+  :root,
+  [data-color-mode] {
+    --bgColor-default: {{colors.surface.default.hex}} !important;
+    --bgColor-muted: {{colors.surface_container_low.default.hex}} !important;
+    --bgColor-inset: {{colors.surface_container_lowest.default.hex}} !important;
+    --bgColor-emphasis: {{colors.inverse_surface.default.hex}} !important;
+    --bgColor-disabled: {{colors.surface_container_high.default.hex}} !important;
+    --bgColor-neutral-muted: color-mix(in srgb, {{colors.on_surface_variant.default.hex}} 20%, transparent) !important;
+    --bgColor-neutral-emphasis: {{colors.outline.default.hex}} !important;
+    --bgColor-accent-muted: color-mix(in srgb, {{colors.primary.default.hex}} 12%, transparent) !important;
+    --bgColor-accent-emphasis: {{colors.primary.default.hex}} !important;
+
+    --fgColor-default: {{colors.on_surface.default.hex}} !important;
+    --fgColor-muted: {{colors.on_surface_variant.default.hex}} !important;
+    --fgColor-neutral: {{colors.on_surface_variant.default.hex}} !important;
+    --fgColor-disabled: {{colors.outline.default.hex}} !important;
+    --fgColor-accent: {{colors.primary.default.hex}} !important;
+    --fgColor-onEmphasis: {{colors.on_primary.default.hex}} !important;
+
+    --borderColor-default: {{colors.outline_variant.default.hex}} !important;
+    --borderColor-muted: color-mix(in srgb, {{colors.outline_variant.default.hex}} 70%, transparent) !important;
+    --borderColor-emphasis: {{colors.outline.default.hex}} !important;
+    --borderColor-disabled: color-mix(in srgb, {{colors.outline.default.hex}} 12%, transparent) !important;
+    --borderColor-accent-muted: color-mix(in srgb, {{colors.primary.default.hex}} 40%, transparent) !important;
+    --borderColor-accent-emphasis: {{colors.primary.default.hex}} !important;
+
+    /* these few are plain colours in github's light theme, not links to the ones above */
+    --control-fgColor-rest: {{colors.on_surface.default.hex}} !important;
+    --borderColor-neutral-emphasis: {{colors.outline.default.hex}} !important;
+    --overlay-borderColor: color-mix(in srgb, {{colors.outline_variant.default.hex}} 70%, transparent) !important;
+    --menu-bgColor-active: color-mix(in srgb, {{colors.on_surface.default.hex}} 12%, transparent) !important;
+    --selectMenu-bgColor-active: {{colors.secondary_container.default.hex}} !important;
+    --selectMenu-borderColor: {{colors.outline_variant.default.hex}} !important;
+    --control-checked-bgColor-hover: color-mix(in srgb, {{colors.primary.default.hex}}, {{colors.on_primary.default.hex}} 8%) !important;
+    --control-checked-bgColor-active: color-mix(in srgb, {{colors.primary.default.hex}}, {{colors.on_primary.default.hex}} 12%) !important;
+
+    --control-bgColor-rest: {{colors.surface_container_high.default.hex}} !important;
+    --control-bgColor-hover: {{colors.surface_container_highest.default.hex}} !important;
+    --control-bgColor-active: color-mix(in srgb, {{colors.surface_container_highest.default.hex}}, {{colors.on_surface.default.hex}} 8%) !important;
+    --control-borderColor-selected: {{colors.on_surface.default.hex}} !important;
+    --control-transparent-bgColor-hover: color-mix(in srgb, {{colors.on_surface.default.hex}} 8%, transparent) !important;
+    --control-transparent-bgColor-active: color-mix(in srgb, {{colors.on_surface.default.hex}} 12%, transparent) !important;
+    --control-transparent-bgColor-selected: color-mix(in srgb, {{colors.on_surface.default.hex}} 12%, transparent) !important;
+
+    --button-primary-bgColor-rest: {{colors.primary.default.hex}} !important;
+    --button-primary-bgColor-hover: color-mix(in srgb, {{colors.primary.default.hex}}, {{colors.on_primary.default.hex}} 8%) !important;
+    --button-primary-bgColor-active: color-mix(in srgb, {{colors.primary.default.hex}}, {{colors.on_primary.default.hex}} 12%) !important;
+    --button-primary-bgColor-disabled: color-mix(in srgb, {{colors.on_surface.default.hex}} 12%, transparent) !important;
+    --button-primary-borderColor-rest: transparent !important;
+    --button-primary-borderColor-disabled: transparent !important;
+    --button-primary-fgColor-rest: {{colors.on_primary.default.hex}} !important;
+    --button-primary-iconColor-rest: {{colors.on_primary.default.hex}} !important;
+    --button-primary-fgColor-disabled: color-mix(in srgb, {{colors.on_surface.default.hex}} 38%, transparent) !important;
+
+    --header-bgColor: {{colors.surface_container.default.hex}} !important;
+    --header-fgColor-default: {{colors.on_surface_variant.default.hex}} !important;
+    --header-fgColor-logo: {{colors.on_surface.default.hex}} !important;
+    --header-borderColor-divider: {{colors.outline_variant.default.hex}} !important;
+    --headerSearch-bgColor: {{colors.surface_container_high.default.hex}} !important;
+    --headerSearch-borderColor: {{colors.outline_variant.default.hex}} !important;
+
+    --overlay-bgColor: {{colors.surface_container.default.hex}} !important;
+    --overlay-backdrop-bgColor: color-mix(in srgb, {{colors.scrim.default.hex}} 40%, transparent) !important;
+    --sideNav-bgColor-selected: {{colors.secondary_container.default.hex}} !important;
+    --underlineNav-borderColor-active: {{colors.primary.default.hex}} !important;
+    --selection-bgColor: color-mix(in srgb, {{colors.primary.default.hex}} 35%, transparent) !important;
+  }
+}
+
+/* lucid-sites: end */

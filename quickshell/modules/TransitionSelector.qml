@@ -4,9 +4,10 @@ import Quickshell
 import Quickshell.Io
 import "../"
 
-ColumnLayout {
+FocusScope {
     id: transModule
-    spacing: 10
+    focus: true
+    Keys.forwardTo: [transitionGrid]
     Layout.fillWidth: true
     Layout.fillHeight: true
 
@@ -39,7 +40,11 @@ ColumnLayout {
         onExited: Theme.reload()
     }
 
-    // Header
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 10
+
+        // Header
     RowLayout {
         Layout.fillWidth: true
 		Layout.preferredHeight: 24
@@ -48,7 +53,7 @@ ColumnLayout {
 
         Text {
             text: "Wallpaper Transitions"
-            font.family: "Inter"
+            font.family: "Noto Sans"
             font.pixelSize: 15
             font.bold: true
             color: Theme.colors.text_primary ?? "white"
@@ -58,7 +63,7 @@ ColumnLayout {
 
         Text {
             text: "Active: " + Theme.activeTransition
-            font.family: "Inter"
+            font.family: "Noto Sans"
             font.pixelSize: 11
             font.bold: true
             color: Theme.colors.accent ?? "#7aa2f7"
@@ -251,7 +256,7 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
                         text: name
                         color: isCurrent ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_primary ?? "white")
-                        font.family: "Inter"
+                        font.family: "Noto Sans"
                         font.pixelSize: 11
                         font.weight: isCurrent ? Font.Bold : Font.Medium
                         elide: Text.ElideRight
@@ -268,5 +273,6 @@ ColumnLayout {
                 }
             }
         }
+    }
     }
 }

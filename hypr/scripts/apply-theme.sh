@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # The theme name is passed as the first argument ($1)
-TARGET_THEME=$1
-THEMES_DIR="$HOME/.config/themes"
+TARGET_THEME="${1:?usage: apply-theme.sh <theme>}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEMES_DIR="$CONFIG_DIR/themes"
 if [[ ! -d "$THEMES_DIR" && -d "$HOME/git/MyLinuxSetup/themes" ]]; then
     THEMES_DIR="$HOME/git/MyLinuxSetup/themes"
 fi
-ACTIVE_DIR="$HOME/.config/active-theme"
+ACTIVE_DIR="$CONFIG_DIR/active-theme"
 
 # Ensure target active directory exists
 mkdir -p "$ACTIVE_DIR"
@@ -30,26 +31,6 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
     ln -sf "$THEMES_DIR/$TARGET_THEME/theme-name.txt" "$ACTIVE_DIR/theme-name.txt"
     ln -sf "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" "$ACTIVE_DIR/starship-colors.toml"
 
-    mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
-    if [[ -f "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" ]]; then
-        cp "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" "$HOME/.config/gtk-3.0/gtk.css"
-        cp "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" "$HOME/.config/gtk-4.0/gtk.css"
-    fi
-
-    # --- 3. Update GSettings (for libadwaita & portal sync) ---
-    gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>/dev/null
-    gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark' 2>/dev/null
-
-    # --- 4. Reload xsettingsd (if installed, for instant live GTK3 reloading) ---
-    if command -v xsettingsd >/dev/null 2>&1; then
-        killall -HUP xsettingsd 2>/dev/null
-    fi
-
-    # Update starship config
-    if [[ -f "$HOME/.config/fish/base.toml" && -f "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" ]]; then
-        cat "$HOME/.config/fish/base.toml" "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" > "$HOME/.config/starship.toml"
-    fi
-
     # --- 5. Generate Hyprlock colors ---
     ACCENT_HEX="89b4fa"
     if [[ -f "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" ]] && command -v jq >/dev/null 2>&1; then
@@ -65,38 +46,7 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
 \$subtext = rgb(148, 163, 184)
 EOF
 
-    # Map active theme to the Neovim colorscheme name (case-insensitive)
-    THEME_LOWER="$(echo "$TARGET_THEME" | tr '[:upper:]' '[:lower:]')"
-    case "$THEME_LOWER" in
-      "afterglow")                NVIM_THEME="rose-pine" ;;
-      "crimson")                  NVIM_THEME="monokai-pro" ;;
-      "solstice")                 NVIM_THEME="gruvbox" ;;
-      "verdant")                  NVIM_THEME="everforest" ;;
-      "frost")                    NVIM_THEME="e-ink" ;;
-      "cyber")                    NVIM_THEME="tokyonight-night" ;;
-      "astral")                   NVIM_THEME="nord" ;;
-      "abyss")                    NVIM_THEME="tokyonight-night" ;;
-      "serenity")                 NVIM_THEME="ayu-mirage" ;;
-      "cloudscape")               NVIM_THEME="onedark" ;;
-      "catppuccin")               NVIM_THEME="catppuccin-mocha" ;;
-      "gruvbox")                  NVIM_THEME="gruvbox" ;;
-      "tokyo-night"|"tokyonight")  NVIM_THEME="tokyonight-night" ;;
-      "rose-pine"|"rosepine")    NVIM_THEME="rose-pine" ;;
-      "nord")                     NVIM_THEME="nord" ;;
-      "onedark")                  NVIM_THEME="onedark" ;;
-      "dracula")                  NVIM_THEME="dracula" ;;
-      "everforest")               NVIM_THEME="everforest" ;;
-      "monokai-pro"|"monokaipro") NVIM_THEME="monokai-pro" ;;
-      "ayu-mirage"|"ayumirage")   NVIM_THEME="ayu-mirage" ;;
-      "e-ink"|"eink")            NVIM_THEME="e-ink" ;;
-      "emerald")                  NVIM_THEME="emerald" ;;
-      "gloaming")                 NVIM_THEME="gloaming" ;;
-      *)                          NVIM_THEME="catppuccin-mocha" ;;
-    esac
-
-    # 1. Save current colorscheme to a dedicated state file
-    mkdir -p "$HOME/.local/state/nvim"
-    echo "$NVIM_THEME" > "$HOME/.local/state/nvim/active_colorscheme"
+    THEME_LOWER="${TARGET_THEME,,}"
 
     # Read active transition (fallback to "simple" if file doesn't exist)
     TRANSITION="simple"
@@ -116,12 +66,6 @@ EOF
     CANDIDATES=(
         "$HOME/Pictures/Wallpapers/$TARGET_THEME"
         "$HOME/Pictures/Wallpapers/$THEME_LOWER"
-        "$HOME/git/DynamicYou/Wallpapers/$TARGET_THEME"
-        "$HOME/git/DynamicYou/Wallpapers/$THEME_LOWER"
-        "$HOME/git/MyLinuxSetup/Wallpapers/$TARGET_THEME"
-        "$HOME/git/MyLinuxSetup/Wallpapers/$THEME_LOWER"
-        "$HOME/Wallpapers/$TARGET_THEME"
-        "$HOME/.config/Wallpapers/$TARGET_THEME"
     )
     for c in "${CANDIDATES[@]}"; do
         if [[ -d "$c" ]]; then
@@ -145,9 +89,9 @@ EOF
     fi
     # Global fallback if theme folder had no matching wallpapers
     if [[ -z "$RANDOM_WALLPAPER" ]]; then
-        for fallback_dir in "$HOME/Pictures/Wallpapers" "$HOME/git/DynamicYou/Wallpapers" "$HOME/git/MyLinuxSetup/Wallpapers"; do
+        for fallback_dir in "$HOME/Pictures/Wallpapers"; do
             if [[ -d "$fallback_dir" ]]; then
-                RANDOM_WALLPAPER=$(find "$fallback_dir" -maxdepth 3 -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.webp" \) | shuf -n 1)
+                RANDOM_WALLPAPER=$(find -L "$fallback_dir" -maxdepth 3 -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.webp" \) | shuf -n 1)
                 [[ -n "$RANDOM_WALLPAPER" ]] && break
             fi
         done
@@ -173,14 +117,12 @@ EOF
         fi
     fi
 
-    # Reload components
-    if [[ -f "$ACTIVE_DIR/kitty-colors.conf" ]]; then
-        kitty @ set-colors --all "$ACTIVE_DIR/kitty-colors.conf" 2>/dev/null &
+    # Render from the selected wallpaper after the preset has set its fallbacks.
+    PALETTE="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/scripts/matugen/update.py"
+    if [[ -f "$PALETTE" && -n "$RANDOM_WALLPAPER" ]]; then
+        python3 "$PALETTE" "$RANDOM_WALLPAPER" || hyprctl reload 2>/dev/null || true
     fi
 
-    hyprctl reload 2>/dev/null &
-    killall -SIGUSR1 kitty 2>/dev/null
-    killall -SIGUSR1 nvim 2>/dev/null
     qs ipc call notch reloadTheme >/dev/null 2>&1 &
 
     notify-send "Theme Applied" "Activated $TARGET_THEME"

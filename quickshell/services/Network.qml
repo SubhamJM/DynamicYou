@@ -1,0 +1,613 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
+// Took many bits from https://github.com/caelestia-dots/shell (GPLv3)
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import Quickshell.Networking as QNet
+import qs.modules.common.functions
+import qs.services.network
+import "network/NetworkConnectionSelection.js" as ConnectionSelection
+
+/**
+ * Wi-Fi and wired status.
+ *
+ * State is read from NetworkState, which sits on Quickshell's native
+ * NetworkManager backend, and writes go out through NetworkCommands. The shape
+ * below is what the bar, the sidebars and the mode conditions already bind to,
+ * and is kept stable on purpose.
+ */
+Singleton {
+    id: root
+
+    // The backend needs a second or two to enumerate devices on a cold shell.
+    // Until it has, status comes from a one-shot nmcli seed so the bar doesn't
+    // spend that time claiming there is no adapter.
+    property string seedStatus: "disconnected"
+    property bool seedWifiEnabled: false
+    property bool seedEthernet: false
+    property string seedNetworkName: ""
+
+    readonly property bool ready: NetworkState.ready
+    readonly property bool wifi: root.wifiStatus === "connected"
+    readonly property bool ethernet: root.ready ? NetworkState.wiredConnected : root.seedEthernet
+    readonly property bool wifiEnabled: root.ready ? NetworkState.wifiEnabled : root.seedWifiEnabled
+    readonly property bool wifiHardwareEnabled: root.ready ? NetworkState.wifiHardwareEnabled : true
+    readonly property bool captivePortal: NetworkState.captivePortal
+
+    property bool wifiScanning: false
+    readonly property bool wifiConnecting: root.wifiConnectTarget !== null || NetworkState.wifiConnecting
+
+    property string lastWifiError: ""
+    property int lastWifiExitCode: 0
+    property WifiAccessPoint wifiConnectTarget
+    property WifiAccessPoint wifiErrorTarget
+
+    property var savedConnections: []
+    property list<string> savedSsids: []
+    property var wifiDetails: ({})
+
+    readonly property list<WifiAccessPoint> wifiNetworks: []
+    readonly property WifiAccessPoint active: wifiNetworks.find(n => n && n.active) ?? null
+
+    // Sorted by connection state then signal strength. Recomputed explicitly
+    // rather than as a live binding: reading `.active`/`.strength` off every
+    // access point inside a binding subscribes it to every AP's RSSI, so this
+    // used to re-sort — and hand every listener a brand-new array — on every
+    // signal fluctuation from any network in range, freezing the Wi-Fi tab and
+    // the sidebar/quick-toggle Wi-Fi lists whenever several APs were visible.
+    property list<var> friendlyWifiNetworks: []
+
+    function resortFriendlyNetworks(): void {
+        root.friendlyWifiNetworks = [...root.wifiNetworks].sort((a, b) => {
+            if (a.active && !b.active)
+                return -1;
+            if (!a.active && b.active)
+                return 1;
+            return b.strength - a.strength;
+        });
+    }
+
+    readonly property string wifiStatus: {
+        if (!root.ready)
+            return root.seedStatus;
+        if (!NetworkState.hasWifiDevice || !NetworkState.wifiEnabled || !NetworkState.wifiHardwareEnabled)
+            return "disabled";
+        if (NetworkState.wifiConnecting)
+            return "connecting";
+        if (!NetworkState.wifiConnected)
+            return "disconnected";
+        return NetworkState.limited ? "limited" : "connected";
+    }
+
+    readonly property string networkName: {
+        if (!root.ready)
+            return root.seedNetworkName;
+        return ConnectionSelection.preferredConnectionName(
+            NetworkState.wiredConnected,
+            NetworkState.wiredNetworkName,
+            NetworkState.wifiConnected,
+            NetworkState.wifiNetworkName
+        );
+    }
+    readonly property string activeConnectionName: root.networkName
+    readonly property string activeInterface: root.ready
+        ? ConnectionSelection.preferredInterface(
+            NetworkState.wiredConnected,
+            NetworkState.wiredInterface,
+            NetworkState.wifiConnected,
+            NetworkState.wifiInterface
+        ) : ""
+    readonly property int networkStrength: root.active?.strength ?? 0
+    readonly property string materialSymbol: NetworkState.accessPointMode ? "wifi_tethering" : root.ethernet ? "lan" : (root.wifiEnabled && root.wifiStatus === "connected") ? ((root.active?.strength ?? 0) > 83 ? "android_wifi_4_bar" : (root.active?.strength ?? 0) > 67 ? "android_wifi_3_bar" : (root.active?.strength ?? 0) > 50 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 33 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 17 ? "wifi_1_bar" : "signal_wifi_0_bar") : (root.wifiStatus === "connecting") ? "signal_wifi_statusbar_not_connected" : (root.wifiStatus === "disconnected") ? "wifi_find" : (root.wifiStatus === "disabled") ? "signal_wifi_off" : "signal_wifi_bad"
+
+    // Connection Details
+    property string ipAddress: ""
+    property string ipAddress6: ""
+    property string gateway: ""
+    property string dns: ""
+    property string subnetMask: ""
+    readonly property string macAddress: NetworkState.wifiMac
+
+    // Control
+    function enableWifi(enabled = true): void {
+        NetworkCommands.setWifiRadio(enabled);
+    }
+
+    function toggleWifi(): void {
+        root.enableWifi(!root.wifiEnabled);
+    }
+
+    function rescanWifi(): void {
+        if (root.wifiScanning)
+            return;
+        root.wifiScanning = true;
+        NetworkCommands.rescanWifi(() => {
+            root.wifiScanning = false;
+            root.refreshDetails();
+        });
+    }
+
+    // ---- Keeping the list of networks alive -------------------------------
+    /**
+     * The surfaces currently showing a list of networks, by name.
+     *
+     * A one-shot rescan when a dialog opens is not enough to keep a list
+     * populated: NetworkManager scans on its own only now and then, so the
+     * backend hands out whatever it last cached — here that was three networks
+     * against the sixteen in range, and on an adapter that had just connected
+     * it can be the one network in use and nothing else, which is an empty
+     * "Available Wi-Fi" list under a working connection.
+     *
+     * Scanning costs power and briefly interrupts the radio, so it is asked for
+     * only while something is on screen to show the result. Holders are keyed
+     * rather than counted so that a surface asking twice, or releasing what it
+     * never took, cannot leave the radio scanning forever.
+     */
+    property var wifiScanHolders: ({})
+    readonly property bool wifiScanWanted: Object.keys(root.wifiScanHolders).length > 0
+
+    function setWifiScanHolder(key: string, held: bool): void {
+        if ((root.wifiScanHolders[key] === true) === held)
+            return;
+        const holders = Object.assign({}, root.wifiScanHolders);
+        if (held)
+            holders[key] = true;
+        else
+            delete holders[key];
+        root.wifiScanHolders = holders;
+    }
+
+    onWifiScanWantedChanged: {
+        NetworkState.setScannerEnabled(root.wifiScanWanted);
+        if (root.wifiScanWanted)
+            root.rescanWifi();
+    }
+
+    function connectToWifiNetwork(accessPoint: WifiAccessPoint): void {
+        if (!accessPoint)
+            return;
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        if (accessPoint.enterprise) {
+            NetworkCommands.connectEnterprise(accessPoint.ssid, NetworkState.wifiInterface, done);
+            return;
+        }
+        NetworkCommands.connectToSsid(accessPoint.ssid, NetworkState.wifiInterface, done);
+    }
+
+    // `domain` is the 802.1X server domain; null leaves the saved one alone.
+    function connectWithPassword(ssid: string, password: string, username = "", hidden = false, domain = null): void {
+        const accessPoint = root.wifiNetworks.find(n => n && n.ssid === ssid) ?? null;
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        // Chosen by the network rather than by whether a username was typed: on
+        // an 802.1X network an empty one keeps the saved identity, and the PSK
+        // path below would delete that profile.
+        if ((accessPoint?.enterprise ?? false) || username.length > 0) {
+            const savedDomain = accessPoint?.savedDomain ?? "";
+            NetworkCommands.saveEnterprise(ssid, password, {
+                identity: username,
+                domain: domain ?? savedDomain,
+                savedDomain: savedDomain,
+                ifname: NetworkState.wifiInterface,
+                hidden: hidden
+            }, done);
+            return;
+        }
+        // A stored profile still holding the old password would just fail the
+        // same way again, so it goes before the retry rather than after it.
+        const stale = root.savedProfileFor(ssid);
+        if (stale.length > 0)
+            NetworkCommands.forgetProfile(stale);
+        NetworkCommands.connectWithPsk(ssid, password, {
+            ifname: NetworkState.wifiInterface,
+            hidden: hidden,
+            kind: root.pskKind(accessPoint)
+        }, done);
+    }
+
+    // What a new profile for a password network needs, read off the scan.
+    // Anything still offering WPA/WPA2 gets wpa-psk, which also covers WPA2/WPA3
+    // transition networks; WPA3 alone needs SAE. A hidden network has no scan
+    // entry to read and gets wpa-psk.
+    function pskKind(accessPoint): string {
+        const tokens = (accessPoint?.security ?? "").split(/\s+/);
+        if (tokens.some(t => t === "WPA" || t === "WPA1" || t === "WPA2"))
+            return "wpa-psk";
+        if (tokens.includes("WPA3"))
+            return "sae";
+        if (tokens.includes("WEP"))
+            return "wep";
+        return "wpa-psk";
+    }
+
+    function connectToHiddenNetwork(ssid: string, password: string, username = ""): void {
+        root.connectWithPassword(ssid, password, username, true);
+    }
+
+    function changePassword(network: WifiAccessPoint, password: string, username = "", domain = null): void {
+        if (!network)
+            return;
+        root.connectWithPassword(network.ssid, password, username, false, domain);
+    }
+
+    function disconnectWifiNetwork(): void {
+        const network = NetworkState.activeWifiNetwork;
+        if (network) {
+            network.disconnect();
+            return;
+        }
+        if (NetworkState.wifiInterface.length > 0)
+            NetworkCommands.disconnectDevice(NetworkState.wifiInterface);
+    }
+
+    // Goes through the backend so the right profile is removed even when it was
+    // saved under a name that isn't the SSID.
+    function forgetWifiNetwork(ssid: string): void {
+        const network = NetworkState.findNetwork(ssid);
+        if (network) {
+            network.forget();
+            Qt.callLater(root.refreshSaved);
+            return;
+        }
+        const profile = root.savedProfileFor(ssid);
+        if (profile.length === 0)
+            return;
+        NetworkCommands.forgetProfile(profile, () => root.refreshSaved());
+    }
+
+    function openPublicWifiPortal(): void {
+        Quickshell.execDetached(["xdg-open", "https://nmcheck.gnome.org/"]); // From some StackExchange thread, seems to work
+    }
+
+    function update(): void {
+        root.refreshDetails();
+        root.refreshSaved();
+        root.refreshAddresses();
+    }
+
+    // ---- Connection bookkeeping -------------------------------------------
+    // Commands run one at a time, so a network clicked while another is still
+    // connecting waits its turn. Numbering the attempts keeps the first one's
+    // result off the target and error state the second one now owns.
+    property int connectAttempt: 0
+
+    function beginConnect(accessPoint): int {
+        root.lastWifiError = "";
+        root.lastWifiExitCode = 0;
+        root.wifiErrorTarget = null;
+        root.wifiConnectTarget = accessPoint;
+        if (accessPoint)
+            accessPoint.askingPassword = false;
+        return ++root.connectAttempt;
+    }
+
+    function finishConnect(attempt: int, exitCode: int, output: string, stderr: string): void {
+        root.refreshDetails();
+        root.refreshSaved();
+        if (attempt !== root.connectAttempt)
+            return;
+        const target = root.wifiConnectTarget;
+        root.wifiConnectTarget = null;
+        root.lastWifiError = (stderr ?? "").trim();
+        if (!target)
+            return;
+        // A certificate profile has no password to ask for, so its failures stay
+        // errors. Otherwise missing secrets, or a missing 802.1X profile, are
+        // what the prompt is for.
+        const lines = (output ?? "").split("\n");
+        target.askingPassword = exitCode !== 0 && !lines.includes(NetworkCommands.kCertificateProfile);
+        if (exitCode === 0 || (target.askingPassword && (lines.includes(NetworkCommands.kNoProfile) || root.lastWifiError.includes("Secrets were required")))) {
+            root.lastWifiExitCode = 0;
+            root.wifiErrorTarget = null;
+            return;
+        }
+        root.lastWifiExitCode = exitCode;
+        root.wifiErrorTarget = target;
+    }
+
+    function savedProfileFor(ssid: string): string {
+        const match = root.savedConnections.find(c => c.type === "802-11-wireless" && c.name === ssid);
+        return match?.name ?? "";
+    }
+
+    // Cleared first so a prompt opening again still sees the values change and
+    // picks them up.
+    function loadEnterpriseProfile(accessPoint: WifiAccessPoint): void {
+        accessPoint.savedIdentity = "";
+        accessPoint.savedDomain = "";
+        accessPoint.savedCaCert = false;
+        NetworkCommands.readEnterpriseProfile(accessPoint.ssid, profile => {
+            // The access point can leave the scan while this is read.
+            if (!root.wifiNetworks.includes(accessPoint))
+                return;
+            accessPoint.savedIdentity = profile.identity;
+            accessPoint.savedDomain = profile.domain;
+            accessPoint.savedCaCert = profile.caCert;
+        });
+    }
+
+    // ---- Backend to WifiAccessPoint bridge --------------------------------
+    function syncNetworks(): void {
+        if (NetworkState.wifiFromNmcli) {
+            root.syncNetworksFromDetails();
+            return;
+        }
+        const live = Array.from(NetworkState.wifiNetworks ?? []);
+        const wrappers = root.wifiNetworks;
+        for (let i = wrappers.length - 1; i >= 0; i--) {
+            const wrapper = wrappers[i];
+            if (live.some(n => n === wrapper.backend))
+                continue;
+            wrappers.splice(i, 1);
+            if (root.wifiConnectTarget === wrapper)
+                root.wifiConnectTarget = null;
+            if (root.wifiErrorTarget === wrapper)
+                root.wifiErrorTarget = null;
+            wrapper.destroy();
+        }
+        for (const network of live) {
+            if (wrappers.some(w => w.backend === network))
+                continue;
+            wrappers.push(apComponent.createObject(root, {
+                backend: network,
+                details: root.wifiDetails[network.name] ?? null
+            }));
+        }
+        root.applyDetails();
+        root.resortFriendlyNetworks();
+    }
+
+    /**
+     * The same list, built from the nmcli scan instead of the backend, for
+     * machines where the backend has no adapter to scan with. `wifiDetails` is
+     * already read on every network event for the extras the backend does not
+     * expose, and carries everything an access point needs on its own: SSID,
+     * signal, band, security and whether it is the one in use.
+     */
+    function syncNetworksFromDetails(): void {
+        const rows = Object.keys(root.wifiDetails ?? ({})).map(ssid => root.wifiDetails[ssid]);
+        const wrappers = root.wifiNetworks;
+        for (let i = wrappers.length - 1; i >= 0; i--) {
+            const wrapper = wrappers[i];
+            if (rows.some(row => row.ssid === wrapper.ssid))
+                continue;
+            wrappers.splice(i, 1);
+            if (root.wifiConnectTarget === wrapper)
+                root.wifiConnectTarget = null;
+            if (root.wifiErrorTarget === wrapper)
+                root.wifiErrorTarget = null;
+            wrapper.destroy();
+        }
+        for (const row of rows) {
+            // Updated in place rather than rebuilt, so an access point being
+            // asked for a password is not destroyed under the dialog asking.
+            const existing = wrappers.find(w => w.ssid === row.ssid);
+            if (existing) {
+                existing.lastIpcObject = row;
+                continue;
+            }
+            wrappers.push(apComponent.createObject(root, {
+                lastIpcObject: row,
+                details: row
+            }));
+        }
+        root.applyDetails();
+        root.resortFriendlyNetworks();
+    }
+
+    function applyDetails(): void {
+        for (const accessPoint of root.wifiNetworks)
+            accessPoint.details = root.wifiDetails[accessPoint.ssid] ?? null;
+    }
+
+    function refreshDetails(): void {
+        detailsDebounce.restart();
+    }
+
+    function refreshSaved(): void {
+        savedDebounce.restart();
+    }
+
+    function refreshAddresses(): void {
+        addressDebounce.restart();
+    }
+
+    // Mirrored locally rather than watched through Connections: the backend can
+    // be up before this singleton exists, and then its first change signal has
+    // already been and gone.
+    readonly property var liveNetworks: NetworkState.wifiNetworks
+    readonly property bool wifiConnected: NetworkState.wifiConnected
+    readonly property bool wiredConnected: NetworkState.wiredConnected
+    readonly property var activeBackendNetwork: NetworkState.activeWifiNetwork
+
+    onWifiNetworksChanged: root.applyDetails()
+    onLiveNetworksChanged: {
+        root.syncNetworks();
+        root.refreshDetails();
+    }
+    readonly property bool wifiFromNmcli: NetworkState.wifiFromNmcli
+    onWifiFromNmcliChanged: {
+        // The two lists hold different objects, so the wrappers built for one
+        // source cannot be handed to the other.
+        root.syncNetworks();
+        root.refreshDetails();
+    }
+
+    onWifiConnectedChanged: {
+        root.refreshSaved();
+    }
+    onWiredConnectedChanged: root.refreshSaved()
+    onActiveInterfaceChanged: root.refreshAddresses()
+    onActiveBackendNetworkChanged: root.refreshAddresses()
+    onReadyChanged: {
+        root.syncNetworks();
+        root.update();
+    }
+
+    // The only failure the backend reports that the UI acts on: a network that
+    // wants a password it doesn't have yet.
+    Connections {
+        target: root.wifiConnectTarget?.backend ?? null
+        function onConnectionFailed(reason): void {
+            const target = root.wifiConnectTarget;
+            if (!target)
+                return;
+            if (reason === QNet.ConnectionFailReason.NoSecrets) {
+                // 802.1X is left to finishConnect, which knows whether the
+                // profile is a certificate one with no password to ask for.
+                if (!target.enterprise)
+                    target.askingPassword = true;
+                return;
+            }
+            root.lastWifiError = NetworkState.failReasonLabel(reason);
+        }
+    }
+
+    // Nothing pushes signal strength at a shell reading the scan through nmcli,
+    // so the list follows the probe that is already running for device state.
+    Connections {
+        target: NetworkFallback
+
+        function onProbed(): void {
+            if (NetworkState.wifiFromNmcli)
+                root.refreshDetails();
+        }
+    }
+
+    /**
+     * The same job on the nmcli path, where there is no backend scanner to turn
+     * on. Deliberately quiet: it does not raise `wifiScanning`, because a
+     * spinner blinking every few seconds on its own is not progress anybody
+     * asked to watch.
+     */
+    Timer {
+        interval: 10000
+        repeat: true
+        running: root.wifiScanWanted && NetworkState.wifiFromNmcli
+        onTriggered: NetworkCommands.rescanWifi(() => root.refreshDetails())
+    }
+
+    Timer {
+        id: detailsDebounce
+        interval: 250
+        onTriggered: NetworkCommands.readWifiDetails(details => {
+            root.wifiDetails = details;
+            root.syncNetworks();
+        })
+    }
+
+    Timer {
+        id: savedDebounce
+        interval: 400
+        onTriggered: {
+            NetworkCommands.readSavedConnections(rows => root.savedConnections = rows);
+            // By SSID rather than profile name, which is all a scan row has to
+            // match against on the nmcli path (see WifiAccessPoint.known).
+            NetworkCommands.readSavedWifiSsids(ssids => {
+                const known = Array.from(NetworkState.wifiNetworks ?? []).filter(n => n.known).map(n => n.name);
+                root.savedSsids = [...new Set([...ssids, ...known])];
+            });
+        }
+    }
+
+    Timer {
+        id: addressDebounce
+        interval: 250
+        onTriggered: {
+            if (root.activeInterface.length === 0) {
+                root.ipAddress = "";
+                root.ipAddress6 = "";
+                root.gateway = "";
+                root.dns = "";
+                root.subnetMask = "";
+                return;
+            }
+            NetworkCommands.readIpConfig(root.activeInterface, config => {
+                root.ipAddress = config.address ?? "";
+                root.ipAddress6 = config.address6 ?? "";
+                root.gateway = config.gateway ?? "";
+                root.dns = (config.dns ?? []).join(" / ");
+                root.subnetMask = NetworkCommands.prefixToMask(config.prefix ?? 0);
+            });
+        }
+    }
+
+    // NetworkManager profiles can also be added, edited or removed from outside
+    // the shell, and the D-Bus backend only tracks the networks in range.
+    Process {
+        id: subscriber
+        running: true
+        // Runs for as long as the shell does, and reports nothing between network
+        // events, so an orphaned one never notices its output is gone.
+        command: ProcUtils.pdeath(["nmcli", "monitor"])
+        stdout: SplitParser {
+            onRead: {
+                root.refreshSaved();
+                root.refreshDetails();
+                NetworkFallback.refresh();
+            }
+        }
+    }
+
+    Process {
+        id: seedProc
+        running: true
+        command: ["bash", "-c", 'nmcli -t -f TYPE,STATE device status; echo ---; nmcli radio wifi; echo ---; nmcli -t -g NAME,TYPE connection show --active']
+        environment: ({
+                LANG: "C",
+                LC_ALL: "C"
+            })
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (NetworkState.ready)
+                    return;
+                const blocks = text.split("---");
+                let status = "disconnected";
+                let wired = false;
+                (blocks[0] ?? "").trim().split("\n").forEach(line => {
+                    if (line.startsWith("ethernet:") && line.includes("connected") && !line.includes("disconnected"))
+                        wired = true;
+                    if (!line.startsWith("wifi:"))
+                        return;
+                    if (line.includes("unavailable"))
+                        status = "disabled";
+                    else if (line.includes("connecting"))
+                        status = "connecting";
+                    else if (line.includes("disconnected"))
+                        status = "disconnected";
+                    else if (line.includes("connected"))
+                        status = "connected";
+                });
+                root.seedWifiEnabled = (blocks[1] ?? "").trim() === "enabled";
+                root.seedEthernet = wired;
+                root.seedStatus = root.seedWifiEnabled ? status : "disabled";
+                const activeRows = (blocks[2] ?? "").trim().split("\n").filter(row => row.length > 0);
+                root.seedNetworkName = ConnectionSelection.seededConnectionName(activeRows);
+            }
+        }
+    }
+
+    Component {
+        id: apComponent
+
+        WifiAccessPoint {}
+    }
+
+    // Catches RSSI drift between network add/remove events. Explicit and
+    // throttled on purpose — see the note on friendlyWifiNetworks above.
+    Timer {
+        interval: 4000
+        repeat: true
+        running: root.wifiNetworks.length > 0
+        onTriggered: root.resortFriendlyNetworks()
+    }
+
+    Component.onCompleted: {
+        root.syncNetworks();
+        root.update();
+    }
+}

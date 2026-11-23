@@ -2,3 +2,10 @@ qylock/
 *.qslog
 hotspot.json
 quickshell/hotspot.json
+kitty/dynamic-you-wallpaper.generated.conf
+__pycache__/
+*.py[cod]
+*.qml.bak
+quickshell/default_vpn
+quickshell/lucidbar/clock_reminders.json
+quickshell/lucidbar/chrono.json

@@ -6,19 +6,59 @@ QtObject {
     id: config
 
     // ==========================================
-    // 1. GLOBAL MOTION CURVES & EASINGS
+    // 1. INIR-INSPIRED MOTION CURVES & EASINGS
     // ==========================================
-    // Caelestia / Material 3 emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1)
-    readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
+    // Liquid morph curve from iNiR / PillMotion: cubic-bezier(0.16, 1, 0.3, 1)
+    // Front-loaded for immediate physical responsiveness, followed by a long, silky settle tail.
+    readonly property var curveMorph: [0.16, 1, 0.3, 1, 1, 1]
+
+    // Emphasized deceleration: cubic-bezier(0.05, 0.7, 0.1, 1)
+    readonly property var curveDecel: [0.05, 0.7, 0.1, 1, 1, 1]
+
+    // Emphasized acceleration: cubic-bezier(0.3, 0, 0.8, 0.15)
+    // Crisp, snappy curve for dismissals and exits.
+    readonly property var curveAccel: [0.3, 0, 0.8, 0.15, 1, 1]
+
+    // Expressive spatial overshoot: cubic-bezier(0.38, 1.21, 0.22, 1)
+    readonly property var curveSpatial: [0.38, 1.21, 0.22, 1, 1, 1]
+
+    // Non-overshooting smooth effects curve for fades, colors, and opacity transitions
+    readonly property var curveEffects: [0.34, 0.80, 0.34, 1, 1, 1]
+
+    // Backward-compatibility alias
+    readonly property var motionCurve: curveMorph
 
     // ==========================================
-    // 2. GLOBAL ANIMATION DURATIONS (ms)
+    // 2. CONTEXTUAL & INTUITION-BASED ANIMATION DURATIONS (ms)
     // ==========================================
-    readonly property int animNotchResize: 260      // Width / height transition of the notch surface (Iris snappy morph)
-    readonly property int animDashFade: 90          // Quick cross-fade for the persistent dash bar
-    readonly property int animModulesFade: 100      // Cross-fade for the expanded module body
-    readonly property int animColor: 150            // Standard button & hover color transitions
-    readonly property int animScale: 140            // Quick press/hover scale transitions
+    // Opening / Expansion: Rich, fluid, liquid unfold downward (360ms)
+    readonly property int animNotchEnter: 360
+
+    // Closing / Collapse to Idle: Quick, confident, clean retreat (220ms)
+    readonly property int animNotchExit: 220
+
+    // Switching between two expanded cards: Smooth glide (300ms)
+    readonly property int animNotchSwitch: 300
+
+    // OSD Toast mode: Snappy compact toast morph (180ms)
+    readonly property int animOsdMorph: 180
+
+    // Content fade-in when expanding: starts with graceful deceleration
+    readonly property int animContentEnter: 240
+
+    // Content fade-out when closing: dissolves fast before notch collapses so cards don't clip
+    readonly property int animContentExit: 110
+
+    // Dash idle layer fade transitions
+    readonly property int animDashEnter: 180
+    readonly property int animDashExit: 100
+
+    // Backward compatibility aliases
+    readonly property int animNotchResize: 360
+    readonly property int animDashFade: 120
+    readonly property int animModulesFade: 220
+    readonly property int animColor: 150
+    readonly property int animScale: 140
 
     // ==========================================
     // 3. AUTO-COLLAPSE & POPUP TIMERS (ms)
@@ -34,7 +74,7 @@ QtObject {
     readonly property int timerNetPopup: 1500       // Duration for Network handoff island popup
     readonly property int timerIslandText: 3500     // Duration for Island textual info labels
     readonly property int timerFullscreenHideGrace: 250 // Duration before auto-hiding when leaving top hover in fullscreen
-    readonly property string scriptsDir: (Quickshell.env("HOME") || "") + "/.config/quickshell/scripts"
+    readonly property string scriptsDir: Quickshell.shellPath("scripts")
 
     // ==========================================
     // 4. STATIC NOTCH BASE DIMENSIONS
@@ -44,36 +84,35 @@ QtObject {
 
     readonly property var modeDimensions: ({
         "idle":          { width: 184, height: 32,  radius: 16 },
-		"hover":         { width: 480, height: 44,  radius: 22 },
-		"switcher":      { width: 800, height: 420, radius: 14 },
-        "launcher":      { width: 560, height: 246, radius: 22 },
-        "theme":         { width: 760, height: 230, radius: 14 },
-        "wallpaper":     { width: 760, height: 320, radius: 14 },
-        "lockscreen":    { width: 760, height: 320, radius: 14 },
-        "engine":        { width: 840, height: 480, radius: 14 },
-        "transition":    { width: 440, height: 320, radius: 12 },
+		"hover":         { width: 440, height: 44,  radius: 22 },
+		"switcher":      { width: 800, height: 420, radius: 22 },
+        "launcher":      { width: 640, height: 215, radius: 22 },
+        "theme":         { width: 880, height: 360, radius: 24 },
+        "wallpaper":     { width: 880, height: 360, radius: 24 },
+        "lockscreen":    { width: 880, height: 360, radius: 24 },
+        "engine":        { width: 840, height: 480, radius: 22 },
+        "transition":    { width: 440, height: 320, radius: 22 },
         "osd":           { width: 280, height: 40,  radius: 16 },
-        "wifi":          { width: 420, height: 380, radius: 26 }, 
-        "bluetooth":     { width: 420, height: 285, radius: 26 },
-        "recorder":      { width: 420, height: 275, radius: 26 },
-        "battery":       { width: 460, height: 348, radius: 26 },
-        "powermenu":     { width: 460, height: 108, radius: 24 },
-        "calendar":      { width: 320, height: 280, radius: 12 },
-        "clipboard":     { width: 580, height: 500, radius: 26 },
-        "utility":       { width: 424, height: 330, radius: 26 },
-        "music":         { width: 480, height: 265, radius: 26 },
-        "notes":         { width: 680, height: 480, radius: 14 },
-        "cheatsheet":    { width: 800, height: 440, radius: 14 },
-        "notifications": { width: 460, height: 380, radius: 26 },
-        "taskmanager":   { width: 880, height: 620, radius: 22 },
-        "wallsort":      { width: 540, height: 280, radius: 22 }
+        "wifi":          { width: 440, height: 460, radius: 22 },
+        "bluetooth":     { width: 440, height: 360, radius: 22 },
+        "recorder":      { width: 440, height: 270, radius: 22 },
+        "battery":       { width: 440, height: 348, radius: 22 },
+        "powermenu":     { width: 440, height: 104, radius: 22 },
+        "calendar":      { width: 720, height: 490, radius: 24 },
+        "clipboard":     { width: 440, height: 440, radius: 22 },
+        "utility":       { width: 440, height: 350, radius: 24 },
+        "music":         { width: 560, height: 285, radius: 22 },
+        "notes":         { width: 680, height: 480, radius: 22 },
+        "cheatsheet":    { width: 800, height: 440, radius: 22 },
+        "notifications": { width: 440, height: 380, radius: 22 },
+        "taskmanager":   { width: 880, height: 620, radius: 22 }
     })
 
     function calculateUtilityHeight(activeSection) {
-        if (activeSection === "audio") return 384;
-        if (activeSection === "vpn") return 264;
-        if (activeSection === "pomo") return 360;
-        return 330;
+        if (activeSection === "audio") return 400;
+        if (activeSection === "vpn") return 300;
+        if (activeSection === "pomo") return 370;
+        return 350;
     }
 
     // ==========================================
@@ -94,22 +133,21 @@ QtObject {
     }
 
     function calculateLauncherHeight(count, allAppsLength, browsing = false) {
-        if (browsing) return 246;
-        if (count <= 0) return 128;
-        if (count === 1) return 156;
-        if (count === 2) return 224;
-        if (count === 3) return 266;
-        if (count === 4) return 308;
-        if (count === 5) return 350;
-        if (count === 6) return 392;
+        if (browsing) return 215;
+        if (count <= 0) return 140;
+        if (count === 1) return 170;
+        if (count === 2) return 236;
+        if (count === 3) return 286;
+        if (count === 4) return 336;
+        if (count === 5) return 386;
+        if (count === 6) return 416;
         return 436;
     }
 
-    function calculateRecorderHeight(recordAudio, isDropdownOpen, isRecording) {
-        if (isRecording) return 210;
-        if (recordAudio && isDropdownOpen) return 360;
-        if (recordAudio) return 310;
-        return 270;
+    function calculateRecorderHeight(hasLastRecording, isRecording) {
+        var base = isRecording ? 162 : 174;
+        var cardH = hasLastRecording ? 68 : 38;
+        return base + cardH + 28;
     }
 
     function calculateBluetoothHeight(devices, stateMap) {
@@ -126,14 +164,14 @@ QtObject {
         return Math.min(480, Math.max(285, 160 + listItemsHeight + 12));
     }
 
-    function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight) {
-        if (activeTab === "hotspot") return 405;
+    function calculateWifiHeight(activeTab, wifiEnabled, modelCount, listContentHeight, hasEthernet) {
+        if (activeTab === "hotspot") return 380;
         if (!wifiEnabled) return 240;
-        if (modelCount === 0) return 260;
-        var base = 192;
-        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 76);
-        var dynamicListHeight = Math.min(300, Math.max(68, effectiveList));
-        return Math.min(495, Math.max(260, base + dynamicListHeight));
+        if (modelCount === 0) return hasEthernet ? 310 : 260;
+        var base = hasEthernet ? 160 : 110;
+        var effectiveList = (listContentHeight > 0) ? listContentHeight : (modelCount * 56);
+        var dynamicListHeight = Math.min(430, Math.max(120, effectiveList));
+        return Math.min(540, Math.max(hasEthernet ? 340 : 300, base + dynamicListHeight));
     }
 
     function calculateTaskManagerHeight(activeTab, modelCount, listContentHeight) {

@@ -15,11 +15,11 @@ An expressive, modern Linux rice built on **Arch Linux**, **Hyprland**, and **Qu
 
 ## ✨ Features
 
-- 🎨 **Material You Dynamic Theming**: 6 distinct, curated aesthetic themes (`Crimson`, `Solstice`, `Verdant`, `Abyss`, `Afterglow`, `Frost`) with dedicated color harmonies, unique backgrounds, and smooth wallpaper transitions.
+- 🎨 **Material You Dynamic Theming** from the active wallpaper, with six bundled wallpaper collections and opt-in app palettes.
 - 🏝️ **Dynamic Notch QuickShell**: Fluid, animated notch expanding into:
   - 📝 **Zen Editorial Notepad & Todo list** (distraction-free, Material 3 rounded pill styling).
   - 📋 **Material You Clipboard History** (dynamic sizing, smooth arrow transitions, soft dim borders).
-  - 📶 **Wi-Fi & Bluetooth Panels** (expressive toggles, detailed device cards).
+  - 📶 **Lucid Wi-Fi & Bluetooth** with the Material 3 scan animation, saved and nearby networks, QR sharing, and device pairing.
   - 🚀 **App Launcher & System Deck** (instant fuzzy search and quick hardware toggles).
 - 🖥️ **SDDM Rice Greeter (`ii-pixel`)**: Native Wayland greeter compositor powered by **Niri** with dynamic shape-morphing password characters, battery readout, and floating avatar cards.
 - ⚡ **High Performance & Minimal Latency**: Pure Wayland architecture running without Xorg dependencies, utilizing GPU-accelerated rendering.
@@ -28,25 +28,38 @@ An expressive, modern Linux rice built on **Arch Linux**, **Hyprland**, and **Qu
 
 ## 🚀 Installation & Setup
 
-### Option 1: Full Fresh Arch Installation (`install.sh`)
-For a fresh Arch Linux / EndeavourOS / CachyOS installation. This will detect/install an AUR helper, resolve all official and AUR dependencies, deploy SDDM with the Material You Wayland greeter, configure system services, set `fish` as your default shell, and deploy all dotfiles:
+From a Dynamic You checkout, run the installer as your normal desktop user.
 
 ```bash
-git clone https://github.com/SubhamJM/MyLinuxSetup.git ~/git/MyLinuxSetup
-cd ~/git/MyLinuxSetup
-chmod +x install.sh setup.sh
+./install.sh --dry-run
 ./install.sh
 ```
 
-### Option 2: Fast Dotfiles Setup (`setup.sh`)
-If packages are already installed and you just want to cleanly backup existing configs, deploy symlinks, set permissions, and initialize the theme engine:
+The installer previews the paths it will change, asks which apps should follow the wallpaper, and asks before deploying Hyprland and Quickshell. It preserves named Quickshell configs, nonconflicting custom files, existing app settings, and your wallpaper library. The install uses your existing login manager and network setup.
+
+On a fresh Arch install, run `./install.sh --deps` as your normal user with access to `sudo`. With your approval it installs Python if needed, then installs the supported Arch packages, including Quickshell with its NetworkManager integration, Matugen, and `qrencode`. Basic installation uses Arch's official repositories. Quickshell 0.3.2 and Hyprland 0.57.2 are the tested versions.
+
+The installer offers to start NetworkManager and BlueZ if they are inactive. Wi-Fi and Bluetooth need their respective services and supported hardware. Use `--enable-services` to opt in from a noninteractive install. The installer keeps an already active network manager. After installing, start a Hyprland session to launch the bar.
+
+The browser key uses Zen if present and can fall back to Firefox on a fresh installation. Use `--browser zen` or `--browser helium` to explicitly choose another browser. Installing either through `--deps` requires an existing AUR helper if the browser is absent. System browser defaults are your choice. `setup.sh` uses the same installer, and `setup.sh --install` is an alias for `install.sh --deps`.
+
+For an unattended setup, explicitly choose your app integrations. Omit `--apps` to keep saved choices, or to use the shell palette alone on a fresh install.
 
 ```bash
-./setup.sh
+./install.sh --yes --apps kitty,zen
+./install.sh --dry-run --rollback
+./install.sh --rollback
 ```
-*(Tip: You can also run `./setup.sh --install` to trigger the full package installer).*
 
----
+Use `--apps all` or `--apps none` to select all or no integrations. Restore a specific install with `--rollback <install-id>`. Backups live under `${XDG_STATE_HOME:-$HOME/.local/state}/dynamic-you/install-backups/`. Rollback saves a recovery copy of your current files before restoring. Eject an active Tapes profile before installing or restoring the standalone desktop.
+
+### Workspace controls
+
+Scrolling is the default layout. `Super+Ctrl+↑/↓` switches workspaces and adding Shift moves the focused window. `Super+D` cycles half-width and full-width columns. Three-finger vertical swipes switch workspaces, horizontal swipes pan columns, and four-finger down/up opens or closes the workspace pager. `Super+X` opens the communications workspace.
+
+### Wallpaper-derived colors
+
+Matugen derives the shell, compositor, terminal, and app colors from your wallpaper. See the [wallpaper color setup](quickshell/scripts/matugen/README.md) for settings, Zen integration, and existing installations.
 
 ## ⌨️ Keybindings Cheat Sheet
 
@@ -73,8 +86,8 @@ If packages are already installed and you just want to cleanly backup existing c
 
 ```text
 MyLinuxSetup/
-├── install.sh              # Full automated installer & dependency resolver
-├── setup.sh                # Fast dotfiles deployer & permission initializer
+├── install.sh              # Preview, install, and restore backed-up configs
+├── setup.sh                # Alias for the same installer
 ├── hypr/                   # Hyprland compositor configs, rules, animations & keybinds
 ├── quickshell/             # QuickShell QML notch, dock, and interactive modules
 │   ├── modules/            # Notes, Clipboard, Wi-Fi, Bluetooth, Launcher, Deck

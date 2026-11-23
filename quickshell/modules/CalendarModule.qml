@@ -1,241 +1,161 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
-import Quickshell
+import "../lucidbar"
+import "../lucidui"
 import "../"
+import qs
+import qs.lucidui
+import qs.lucidbar
 
-ColumnLayout {
-    id: calModule
-    spacing: 12
+FocusScope {
+    id: calRoot
     Layout.fillWidth: true
     Layout.fillHeight: true
     focus: true
-    Keys.onEscapePressed: (event) => {
-        root.collapseToIdle();
-        event.accepted = true;
-    }
 
-    property date viewDate: new Date()
-    readonly property date today: new Date()
+    readonly property real targetWidth: 720
+    readonly property real targetHeight: 490
 
-    readonly property var monthNames: [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
+    property string tab: "calendar"
+    property bool tabSwitching: false
+    property bool expanded: true
+
+    readonly property int pad: Theme.dp(16)
+    readonly property var tabs: [
+        { "key": "today", "label": I18n.tr("Today"), "icon": "wb_sunny" },
+        { "key": "calendar", "label": I18n.tr("Calendar"), "icon": "calendar_month" },
+        { "key": "timer", "label": I18n.tr("Timer"), "icon": "hourglass_top" },
+        { "key": "stopwatch", "label": I18n.tr("Stopwatch"), "icon": "timer" },
+        { "key": "world", "label": I18n.tr("World"), "icon": "public" }
     ]
-    readonly property var dayNames: ["M", "T", "W", "T", "F", "S", "S"]
 
-    function getDaysInMonth(year, month) {
-        return new Date(year, month + 1, 0).getDate();
-    }
-
-    function getFirstDayOffset(year, month) {
-        var day = new Date(year, month, 1).getDay();
-        return (day === 0) ? 6 : day - 1;
-    }
-
-    function changeMonth(delta) {
-        var newMonth = viewDate.getMonth() + delta;
-        var newYear = viewDate.getFullYear();
-        if (newMonth < 0) {
-            newMonth = 11;
-            newYear--;
-        } else if (newMonth > 11) {
-            newMonth = 0;
-            newYear++;
+    readonly property int tabIndex: {
+        for (var i = 0; i < calRoot.tabs.length; i++) {
+            if (calRoot.tabs[i].key === calRoot.tab)
+                return i;
         }
-        viewDate = new Date(newYear, newMonth, 1);
+        return 1;
     }
 
-    // Top Header: Month, Year, and Minimal Controls
-    RowLayout {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        spacing: 8
+    function showTab(t) {
+        if (t === calRoot.tab)
+            return;
+        calRoot.tabSwitching = true;
+        tabSwitchTimer.restart();
+        calRoot.tab = t;
+    }
 
-        RowLayout {
-            spacing: 6
-            Text {
-                text: calModule.monthNames[calModule.viewDate.getMonth()]
-                font.pixelSize: 18
-                font.bold: true
-                color: Theme.colors.text_primary ?? "white"
-            }
-            Text {
-                text: calModule.viewDate.getFullYear()
-                font.pixelSize: 18
-                font.bold: false
-                color: Theme.colors.text_secondary ?? "#565f89"
-            }
-        }
+    function openTab(t) {
+        showTab(t);
+    }
 
-        Item { Layout.fillWidth: true }
+    Timer {
+        id: tabSwitchTimer
+        interval: Theme.barMs(350)
+        onTriggered: calRoot.tabSwitching = false
+    }
 
-        // Minimal Action Pills
-        RowLayout {
-            spacing: 4
+    Keys.onEscapePressed: {
+        if (typeof root !== "undefined") root.collapseToIdle();
+    }
 
-            Rectangle {
-                width: 28; height: 28; radius: 14
-                color: prevMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                Behavior on color { ColorAnimation { duration: 100 } }
+    Item {
+        anchors.fill: parent
 
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰅁"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    color: prevMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
-                }
-                MouseArea {
-                    id: prevMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: calModule.changeMonth(-1)
-                }
-            }
-
-            Rectangle {
-                width: 28; height: 28; radius: 14
-                color: todayMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                Behavior on color { ColorAnimation { duration: 100 } }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "•"
-                    font.pixelSize: 18
-                    font.bold: true
-                    color: todayMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
-                }
-                MouseArea {
-                    id: todayMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: calModule.viewDate = new Date()
-                }
-            }
-
-            Rectangle {
-                width: 28; height: 28; radius: 14
-                color: nextMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent"
-                Behavior on color { ColorAnimation { duration: 100 } }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰅂"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
-                    color: nextMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
-                }
-                MouseArea {
-                    id: nextMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: calModule.changeMonth(1)
-                }
+        Tabs {
+            id: tabsBar
+            x: calRoot.pad
+            y: calRoot.pad - Theme.dp(6)
+            width: parent.width - calRoot.pad * 2
+            inline: true
+            options: calRoot.tabs
+            current: calRoot.tab
+            onPicked: (k) => {
+                calRoot.showTab(k);
             }
         }
-    }
 
-    // Day of Week Header
-    RowLayout {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 16
-        spacing: 8
+        Item {
+            id: viewport
+            anchors.top: tabsBar.bottom
+            anchors.topMargin: Theme.dp(10)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: calRoot.pad
+            anchors.rightMargin: calRoot.pad
+            height: Theme.dp(404)
+            clip: true
 
-        Repeater {
-            model: calModule.dayNames
             Item {
-                required property int index
-                required property string modelData
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                id: pages
+                x: -calRoot.tabIndex * viewport.width
+                width: viewport.width * calRoot.tabs.length
+                height: viewport.height
 
-                Text {
-                    anchors.centerIn: parent
-                    text: modelData
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: (index >= 5) ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_secondary ?? "#565f89")
-                    opacity: (index >= 5) ? 0.7 : 0.4
+                Behavior on x {
+                    enabled: calRoot.tabSwitching
+                    NumberAnimation {
+                        duration: Theme.durDefaultSpatial
+                        easing.type: Easing.Bezier
+                        easing.bezierCurve: Theme.curveDefaultSpatial
+                    }
+                }
+
+                ClockToday {
+                    x: 0 * viewport.width
+                    width: viewport.width
+                    height: viewport.height
+                    host: calRoot
+                    visible: calRoot.tabIndex === 0 || calRoot.tabSwitching
+                    onAddRequested: {
+                        calRoot.showTab("calendar");
+                        calendarPage.selectToday();
+                        calendarPage.focusName();
+                    }
+                }
+
+                ClockCalendar {
+                    id: calendarPage
+                    x: 1 * viewport.width
+                    width: viewport.width
+                    height: viewport.height
+                    host: calRoot
+                    visible: calRoot.tabIndex === 1 || calRoot.tabSwitching
+                }
+
+                ClockTimers {
+                    id: timersPage
+                    x: 2 * viewport.width
+                    width: viewport.width
+                    height: viewport.height
+                    host: calRoot
+                    visible: calRoot.tabIndex === 2 || calRoot.tabSwitching
+                }
+
+                ClockStopwatch {
+                    id: stopwatchPage
+                    x: 3 * viewport.width
+                    width: viewport.width
+                    height: viewport.height
+                    host: calRoot
+                    visible: calRoot.tabIndex === 3 || calRoot.tabSwitching
+                }
+
+                ClockWorld {
+                    id: worldPage
+                    x: 4 * viewport.width
+                    width: viewport.width
+                    height: viewport.height
+                    host: calRoot
+                    visible: calRoot.tabIndex === 4 || calRoot.tabSwitching
                 }
             }
         }
     }
 
-    // Clean Minimal Calendar Grid
-    GridLayout {
-        id: calGrid
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        columns: 7
-        rows: 6
-        columnSpacing: 8
-        rowSpacing: 8
-
-        readonly property int totalDays: calModule.getDaysInMonth(calModule.viewDate.getFullYear(), calModule.viewDate.getMonth())
-        readonly property int startOffset: calModule.getFirstDayOffset(calModule.viewDate.getFullYear(), calModule.viewDate.getMonth())
-
-        Repeater {
-            model: 42
-            delegate: Item {
-                required property int index
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-
-                property int dayNum: index - calGrid.startOffset + 1
-                property int prevMonthDays: calModule.getDaysInMonth(
-                    calModule.viewDate.getMonth() === 0 ? calModule.viewDate.getFullYear() - 1 : calModule.viewDate.getFullYear(),
-                    calModule.viewDate.getMonth() === 0 ? 11 : calModule.viewDate.getMonth() - 1
-                )
-                property bool isValidDay: dayNum >= 1 && dayNum <= calGrid.totalDays
-                property int displayDay: isValidDay ? dayNum : (dayNum <= 0 ? prevMonthDays + dayNum : dayNum - calGrid.totalDays)
-                
-                property bool isToday: isValidDay && 
-                                       dayNum === calModule.today.getDate() && 
-                                       calModule.viewDate.getMonth() === calModule.today.getMonth() && 
-                                       calModule.viewDate.getFullYear() === calModule.today.getFullYear()
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height)
-                    height: width
-                    radius: 6
-                    scale: cellMouse.containsMouse ? (parent.isValidDay ? 1.05 : 1.02) : 1.0
-
-                    color: parent.isToday 
-                        ? (Theme.colors.accent ?? "#7aa2f7") 
-                        : (cellMouse.containsMouse ? (Theme.colors.hover_bg ?? "#24283b") : "transparent")
-                    
-                    Behavior on color { ColorAnimation { duration: 150 } }
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: parent.parent.displayDay
-                        font.pixelSize: 13
-                        font.bold: parent.parent.isToday
-                        opacity: parent.parent.isValidDay ? (cellMouse.containsMouse ? 1.0 : 0.9) : (cellMouse.containsMouse ? 0.6 : 0.3)
-                        color: parent.parent.isToday 
-                            ? (Theme.colors.bg ?? "#000000") 
-                            : (cellMouse.containsMouse ? (Theme.colors.accent ?? "#7aa2f7") : (Theme.colors.text_primary ?? "white"))
-                    }
-
-                    MouseArea {
-                        id: cellMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (!parent.parent.isValidDay) {
-                                calModule.changeMonth(parent.parent.dayNum <= 0 ? -1 : 1);
-                            }
-                        }
-                    }
-                }
-            }
+    Component.onCompleted: {
+        if (calendarPage) {
+            calendarPage.startVisit();
         }
     }
 }

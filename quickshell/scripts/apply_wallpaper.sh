@@ -3,13 +3,15 @@ set -e
 
 TARGET="$1"
 TRANSITION="${2:-simple}"
-POSTER_ARG="$3"
+POSTER_ARG="${3:-}"
 
 ASSETS_DIR="$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets"
 STATE_FILE="$HOME/.config/active-wallpaper-engine"
 POSTER_DIR="$HOME/.cache/wallpaper-engine-posters"
 WE_THUMBS="$HOME/.cache/skwd-wall-v2/we-thumbs"
-PRIMARY_OUTPUT="eDP-1"
+PRIMARY_OUTPUT="${WALLPAPER_ENGINE_OUTPUT:-$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name' | head -1)}"
+PALETTE="$(dirname "$(realpath -- "${BASH_SOURCE[0]}")")/matugen/update.py"
+ACTIVE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/active-theme"
 
 if [ -z "$TARGET" ]; then
     exit 1
@@ -69,9 +71,9 @@ if [ "$is_we" = true ]; then
 
     # 2. Present Crisp High-Res Poster to AWWW (zero black screen, instant smooth transition)
     if [ -n "$HQ_POSTER" ] && [ -f "$HQ_POSTER" ]; then
-        mkdir -p "$HOME/.config/active-theme"
-        ln -sf "$HQ_POSTER" "$HOME/.config/active-theme/current-wallpaper" 2>/dev/null || true
-        echo "$HQ_POSTER" > "$HOME/.config/active-theme/current-wallpaper.txt" 2>/dev/null || true
+        mkdir -p "$ACTIVE_DIR"
+        ln -sf "$HQ_POSTER" "$ACTIVE_DIR/current-wallpaper" 2>/dev/null || true
+        echo "$HQ_POSTER" > "$ACTIVE_DIR/current-wallpaper.txt" 2>/dev/null || true
 
         ensure_awww
         awww img "$HQ_POSTER" \
@@ -81,10 +83,16 @@ if [ "$is_we" = true ]; then
             --transition-bezier 0.25,0.1,0.25,1.0 || true
     fi
 
+    if [[ -n "$HQ_POSTER" ]]; then
+        python3 "$PALETTE" "$HQ_POSTER" || true
+    fi
+
     # 3. Launch Wallpaper Engine (OpenGL / EGL layer-shell with nohup and disown)
+    output_args=()
+    [[ -z "$PRIMARY_OUTPUT" ]] || output_args=(--screen-root "$PRIMARY_OUTPUT")
     nohup linux-wallpaperengine \
         --assets-dir "$ASSETS_DIR" \
-        --screen-root "$PRIMARY_OUTPUT" \
+        "${output_args[@]}" \
         --silent \
         --fps 60 \
         "$ITEM_DIR" </dev/null >/tmp/wallpaper-engine.log 2>&1 &
@@ -102,9 +110,9 @@ else
     killall -9 linux-wallpaperengine 2>/dev/null || true
     rm -f "$STATE_FILE" 2>/dev/null || true
 
-    mkdir -p "$HOME/.config/active-theme"
-    ln -sf "$TARGET" "$HOME/.config/active-theme/current-wallpaper" 2>/dev/null || true
-    echo "$TARGET" > "$HOME/.config/active-theme/current-wallpaper.txt" 2>/dev/null || true
+    mkdir -p "$ACTIVE_DIR"
+    ln -sf "$TARGET" "$ACTIVE_DIR/current-wallpaper" 2>/dev/null || true
+    echo "$TARGET" > "$ACTIVE_DIR/current-wallpaper.txt" 2>/dev/null || true
 
     ensure_awww
     awww img "$TARGET" \
@@ -112,4 +120,5 @@ else
         --transition-fps 144 \
         --transition-step 240 \
         --transition-bezier 0.25,0.1,0.25,1.0
+    python3 "$PALETTE" "$TARGET" || true
 fi
