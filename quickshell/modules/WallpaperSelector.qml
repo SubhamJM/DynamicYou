@@ -7,6 +7,7 @@ import qs
 import qs.lucidui
 import qs.luciddocks
 import qs.lucidprefs as LP
+import "../"
 
 FocusScope {
     id: wallModule
@@ -28,8 +29,12 @@ FocusScope {
 
     property string sortMode: "recent" // "recent" (default) | "oldest" | "name_asc" | "name_desc" | "shuffle"
     property bool sortDropdownOpen: false
+    property int filterGeneration: 0
 
     function filterWallpapers() {
+        const generation = ++wallModule.filterGeneration;
+        const selectedPath = wallModule.userInteracted && wallStrip.currentIndex >= 0 && wallStrip.currentIndex < displayModel.count
+            ? displayModel.get(wallStrip.currentIndex).path : "";
         displayModel.clear();
         var q = wallModule.searchText.trim().toLowerCase();
         if (q.startsWith(">wallpaper")) {
@@ -39,7 +44,7 @@ FocusScope {
         }
 
         var matched = [];
-        var actWall = wallModule.lastAppliedWallpaper;
+        var actWall = selectedPath || wallModule.lastAppliedWallpaper;
 
         for (var i = 0; i < fullWallpaperModel.count; i++) {
             var item = fullWallpaperModel.get(i);
@@ -84,7 +89,7 @@ FocusScope {
         var targetIdx = 0;
         for (var m = 0; m < matched.length; m++) {
             displayModel.append(matched[m]);
-            if (actWall !== "" && (matched[m].path === actWall || actWall.endsWith(matched[m].name))) {
+            if (actWall !== "" && matched[m].path === actWall) {
                 targetIdx = m;
             }
         }
@@ -92,10 +97,11 @@ FocusScope {
         if (displayModel.count > 0 && wallStrip) {
             if (!wallModule.userInteracted) {
                 Qt.callLater(() => {
-                    wallStrip.setIndexImmediate(targetIdx);
+                    if (generation === wallModule.filterGeneration && !wallModule.userInteracted && targetIdx < displayModel.count)
+                        wallStrip.setIndexImmediate(targetIdx);
                 });
             } else {
-                wallStrip.currentIndex = Math.max(0, Math.min(displayModel.count - 1, wallStrip.currentIndex));
+                wallStrip.setIndexImmediate(targetIdx);
             }
         }
     }
@@ -156,6 +162,7 @@ FocusScope {
 
     function loadCachedWallpapers() {
         if (typeof root !== "undefined" && root.cachedWallpapers && root.cachedWallpapers.length > 0) {
+            if (root.cachedActiveWallpaper) wallModule.lastAppliedWallpaper = root.cachedActiveWallpaper;
             if (fullWallpaperModel.count === 0) {
                 fullWallpaperModel.clear();
                 for (var j = 0; j < root.cachedWallpapers.length; j++) {
@@ -169,15 +176,6 @@ FocusScope {
                     });
                 }
                 wallModule.filterWallpapers();
-                var actWall = root.cachedActiveWallpaper || wallModule.lastAppliedWallpaper;
-                if (actWall !== "" && displayModel.count > 0 && wallStrip) {
-                    for (var k = 0; k < displayModel.count; k++) {
-                        if (displayModel.get(k).path === actWall || actWall.endsWith(displayModel.get(k).name)) {
-                            wallStrip.setIndexImmediate(k);
-                            break;
-                        }
-                    }
-                }
             }
         }
     }
@@ -302,6 +300,8 @@ if not files:
                 break
 
 files_with_mtime = []
+if active_wall and os.path.isfile(active_wall) and active_wall not in files:
+    files.append(active_wall)
 for f in set(files):
     if os.path.isfile(f):
         try:
@@ -340,7 +340,6 @@ for f, mtime in files_with_mtime:
                 var lines = this.text.trim().split("\n");
                 fullWallpaperModel.clear();
                 var activeFromQuery = "";
-                var activeIdx = 0;
 
                 for (var i = 0; i < lines.length; i++) {
                     var parts = lines[i].split("|||");
@@ -351,9 +350,6 @@ for f, mtime in files_with_mtime:
                         var act = parts.length >= 4 ? parts[3].trim() : "";
                         var mtime = parts.length >= 5 ? parseInt(parts[4]) : 0;
                         if (act !== "") activeFromQuery = act;
-
-                        var isAct = (activeFromQuery !== "" && (fPath === activeFromQuery || activeFromQuery.endsWith(name)));
-                        if (isAct) activeIdx = fullWallpaperModel.count;
 
                         fullWallpaperModel.append({
                             "name": name,
@@ -380,13 +376,6 @@ for f, mtime in files_with_mtime:
 
                 wallModule.filterWallpapers();
 
-                if (!wallModule.userInteracted && displayModel.count > 0 && wallStrip) {
-                    Qt.callLater(() => {
-                        wallStrip.setIndexImmediate(activeIdx);
-                        if (searchInput) searchInput.forceActiveFocus();
-                    });
-                }
-
                 // Trigger background thumbnail caching if needed
                 thumbsRunner.running = true;
             }
@@ -398,7 +387,7 @@ for f, mtime in files_with_mtime:
         id: thumbsRunner
         running: false
         command: [
-            Quickshell.shellPath("luciddocks/wallpaper-thumbs.sh"),
+            Quickshell.env("HOME") + "/.config/quickshell/luciddocks/wallpaper-thumbs.sh",
             Quickshell.env("HOME") + "/Pictures/Wallpapers"
         ]
     }
@@ -411,7 +400,7 @@ for f, mtime in files_with_mtime:
         }
         var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
         Quickshell.execDetached([
-            Quickshell.shellPath("scripts/apply_wallpaper.sh"),
+            Quickshell.env("HOME") + "/.config/quickshell/scripts/apply_wallpaper.sh",
             path,
             trans
         ]);
@@ -435,87 +424,102 @@ for f, mtime in files_with_mtime:
             anchors.topMargin: 12
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 20
-            anchors.rightMargin: 20
-            height: 34
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
+            height: 36
             z: 20
 
-            // Left Stack: Back Button, Title, Themes Button
+            // Left Stack: Back Button, Title, Count Badge, Themes Button
             RowLayout {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 10
 
-                // Back Button
-                Rectangle {
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: backMouse.pressed ? Qt.rgba(255, 255, 255, 0.16) : (backMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "arrow_back"
-                        size: 20
-                        color: backMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
+                IrisIconButton {
+                    buttonSize: 32
+                    buttonRadius: 16
+                    flat: true
+                    icon: "arrow_back"
+                    iconSize: 18
+                    iconColor: Theme.alpha(Theme.text, 0.75)
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Back to idle"
+                    onClicked: {
+                        if (typeof root !== "undefined") root.collapseToIdle();
                     }
+                }
 
-                    MouseArea {
-                        id: backMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (typeof root !== "undefined") root.collapseToIdle();
+                Text {
+                    text: "Wallpapers"
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    color: Theme.text
+                }
+
+                // Wallpaper Count Pill
+                Rectangle {
+                    visible: displayModel.count > 0
+                    Layout.preferredHeight: 22
+                    Layout.preferredWidth: countRow.implicitWidth + 14
+                    radius: 11
+                    color: Theme.alpha(Theme.text, 0.08)
+                    border.width: 0
+
+                    Row {
+                        id: countRow
+                        anchors.centerIn: parent
+                        spacing: 3
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: displayModel.count.toString()
+                            font.family: Theme.fontFamilyBody
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            font.features: ({ "tnum": 1 })
+                            color: Theme.subtext
                         }
                     }
                 }
 
-                // Title
-                Text {
-                    text: "Wallpapers"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                    color: "#ffffff"
-                }
-
-                // Switch to Themes Button
+                // Switch to Themes Button (M3 Tonal Action Pill)
                 Rectangle {
-                    Layout.preferredHeight: 28
-                    Layout.preferredWidth: themeBtnRow.implicitWidth + 20
-                    radius: 14
-                    color: themeBtnMouse.pressed ? Qt.rgba(255, 255, 255, 0.18) : (themeBtnMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06))
-                    border.width: 1
-                    border.color: themeBtnMouse.containsMouse ? Theme.accent : Qt.rgba(255, 255, 255, 0.12)
+                    id: themeBtn
+                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: themeRow.implicitWidth + 24
+                    radius: 10
+                    color: themeMouse.pressed
+                        ? Theme.alpha(Theme.accent, 0.25)
+                        : (themeMouse.containsMouse ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.accent, 0.10))
+                    border.width: 0
 
                     Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
                     Row {
-                        id: themeBtnRow
+                        id: themeRow
                         anchors.centerIn: parent
-                        spacing: 5
+                        spacing: 6
 
-                        Icon {
+                        MaterialSymbol {
                             anchors.verticalCenter: parent.verticalCenter
-                            name: "palette"
-                            size: 14
+                            text: "palette"
+                            iconSize: 15
                             color: Theme.accent
                         }
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Themes"
-                            font.family: "Noto Sans"
+                            font.family: Theme.fontFamilyBody
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
-                            color: "#ffffff"
+                            color: Theme.text
                         }
                     }
 
                     MouseArea {
-                        id: themeBtnMouse
+                        id: themeMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -526,91 +530,90 @@ for f, mtime in files_with_mtime:
                 }
             }
 
-            // Right Stack: Start Arrow, Last Arrow, Sort Dropdown Button
+            // Right Stack: Start Arrow, Random/Shuffle, Last Arrow, Sort Dropdown Button
             RowLayout {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+                spacing: 6
 
-                // Jump to Start Arrow Button (|<<)
-                Rectangle {
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: firstMouse.pressed ? Qt.rgba(255, 255, 255, 0.16) : (firstMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "skip_previous"
-                        size: 20
-                        color: firstMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
-                    }
-
-                    MouseArea {
-                        id: firstMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (displayModel.count > 0 && wallStrip) {
-                                wallModule.userInteracted = true;
-                                wallStrip.setIndexImmediate(0);
-                            }
+                // Jump to Start
+                IrisIconButton {
+                    buttonSize: 32
+                    buttonRadius: 16
+                    flat: true
+                    icon: "first_page"
+                    iconSize: 18
+                    iconColor: Theme.alpha(Theme.text, 0.72)
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "First Wallpaper"
+                    onClicked: {
+                        if (displayModel.count > 0 && wallStrip) {
+                            wallModule.userInteracted = true;
+                            wallStrip.setIndexImmediate(0);
                         }
                     }
                 }
 
-                // Jump to Last Arrow Button (>>|)
-                Rectangle {
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: lastMouse.pressed ? Qt.rgba(255, 255, 255, 0.16) : (lastMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "skip_next"
-                        size: 20
-                        color: lastMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
-                    }
-
-                    MouseArea {
-                        id: lastMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (displayModel.count > 0 && wallStrip) {
-                                wallModule.userInteracted = true;
-                                wallStrip.setIndexImmediate(displayModel.count - 1);
-                            }
+                // Random / Shuffle Wallpaper
+                IrisIconButton {
+                    buttonSize: 32
+                    buttonRadius: 16
+                    flat: true
+                    icon: "casino"
+                    iconSize: 18
+                    iconColor: Theme.accent
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Random Wallpaper"
+                    onClicked: {
+                        if (displayModel.count > 0 && wallStrip) {
+                            wallModule.userInteracted = true;
+                            var randIdx = Math.floor(Math.random() * displayModel.count);
+                            wallStrip.setIndexImmediate(randIdx);
                         }
                     }
                 }
 
-                // Sort Dropdown Button
+                // Jump to Last
+                IrisIconButton {
+                    buttonSize: 32
+                    buttonRadius: 16
+                    flat: true
+                    icon: "last_page"
+                    iconSize: 18
+                    iconColor: Theme.alpha(Theme.text, 0.72)
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Last Wallpaper"
+                    onClicked: {
+                        if (displayModel.count > 0 && wallStrip) {
+                            wallModule.userInteracted = true;
+                            wallStrip.setIndexImmediate(displayModel.count - 1);
+                        }
+                    }
+                }
+
+                // Sort Dropdown Button (M3 Tonal Pill)
                 Rectangle {
                     id: sortButton
                     Layout.preferredHeight: 32
-                    Layout.preferredWidth: sortBtnRow.implicitWidth + 20
-                    radius: 16
-                    color: sortBtnMouse.containsMouse || wallModule.sortDropdownOpen ? Qt.rgba(255, 255, 255, 0.15) : Qt.rgba(255, 255, 255, 0.07)
-                    border.width: 1
-                    border.color: wallModule.sortDropdownOpen ? Theme.accent : Qt.rgba(255, 255, 255, 0.15)
+                    Layout.preferredWidth: sortRow.implicitWidth + 24
+                    radius: 10
+                    color: wallModule.sortDropdownOpen
+                        ? Theme.accent
+                        : (sortMouse.containsMouse ? Theme.alpha(Theme.text, 0.12) : Theme.alpha(Theme.text, 0.07))
+                    border.width: 0
 
                     Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
                     Row {
-                        id: sortBtnRow
+                        id: sortRow
                         anchors.centerIn: parent
                         spacing: 6
 
-                        Icon {
+                        MaterialSymbol {
                             anchors.verticalCenter: parent.verticalCenter
-                            name: "sort"
-                            size: 16
-                            color: Theme.accent
+                            text: "sort"
+                            iconSize: 15
+                            color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.accent
                         }
 
                         Text {
@@ -622,22 +625,22 @@ for f, mtime in files_with_mtime:
                                 if (wallModule.sortMode === "shuffle") return "Shuffle";
                                 return "Recent";
                             }
-                            font.family: "Noto Sans"
+                            font.family: Theme.fontFamilyBody
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
-                            color: "#ffffff"
+                            color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.text
                         }
 
-                        Icon {
+                        MaterialSymbol {
                             anchors.verticalCenter: parent.verticalCenter
-                            name: wallModule.sortDropdownOpen ? "keyboard_arrow_up" : "keyboard_arrow_down"
-                            size: 16
-                            color: Qt.rgba(255, 255, 255, 0.70)
+                            text: wallModule.sortDropdownOpen ? "expand_less" : "expand_more"
+                            iconSize: 16
+                            color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.subtext
                         }
                     }
 
                     MouseArea {
-                        id: sortBtnMouse
+                        id: sortMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -648,7 +651,7 @@ for f, mtime in files_with_mtime:
         }
 
         // ------------------------------------------
-        // Transparent Dismiss Overlay (click outside to close dropdown)
+        // Transparent Dismiss Overlay
         // ------------------------------------------
         MouseArea {
             anchors.fill: parent
@@ -658,7 +661,7 @@ for f, mtime in files_with_mtime:
         }
 
         // ------------------------------------------
-        // Real Sort Dropdown Card (Authentic shell dropdown)
+        // Real Sort Dropdown Card
         // ------------------------------------------
         Rectangle {
             id: sortDropdownCard
@@ -669,9 +672,8 @@ for f, mtime in files_with_mtime:
             width: 190
             height: sortCol.implicitHeight + 12
             radius: 14
-            color: "#181a20"
-            border.width: 1
-            border.color: Qt.rgba(255, 255, 255, 0.16)
+            color: Theme.colors.card_bg || "#181a20"
+            border.width: 0
             visible: wallModule.sortDropdownOpen
 
             Column {
@@ -686,19 +688,25 @@ for f, mtime in files_with_mtime:
                     model: [
                         { mode: "recent", label: "Most Recent", icon: "schedule" },
                         { mode: "oldest", label: "Oldest First", icon: "history" },
-                        { mode: "name_asc", label: "Name (A to Z)", icon: "sort" },
-                        { mode: "name_desc", label: "Name (Z to A)", icon: "sort" },
+                        { mode: "name_asc", label: "Name (A to Z)", icon: "sort_by_alpha" },
+                        { mode: "name_desc", label: "Name (Z to A)", icon: "sort_by_alpha" },
                         { mode: "shuffle", label: "Random / Shuffle", icon: "shuffle" }
                     ]
 
                     delegate: Rectangle {
+                        id: sortItemRect
                         required property var modelData
                         readonly property bool active: wallModule.sortMode === modelData.mode
 
-                        width: parent.width
+                        width: sortCol.width
                         height: 34
                         radius: 8
-                        color: rowMouse.pressed ? Qt.rgba(255, 255, 255, 0.18) : (rowMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : "transparent")
+                        color: sortItemRect.active
+                            ? Theme.alpha(Theme.accent, 0.16)
+                            : (itemMouse.containsMouse ? Theme.alpha(Theme.text, 0.08) : "transparent")
+                        border.width: 0
+
+                        Behavior on color { ColorAnimation { duration: 100 } }
 
                         RowLayout {
                             anchors.fill: parent
@@ -706,37 +714,37 @@ for f, mtime in files_with_mtime:
                             anchors.rightMargin: 10
                             spacing: 8
 
-                            Icon {
-                                name: modelData.icon
-                                size: 16
-                                color: active ? Theme.accent : Qt.rgba(255, 255, 255, 0.65)
+                            MaterialSymbol {
+                                text: sortItemRect.modelData.icon
+                                iconSize: 16
+                                color: sortItemRect.active ? Theme.accent : Theme.subtext
                             }
 
                             Text {
                                 Layout.fillWidth: true
-                                text: modelData.label
-                                font.family: "Noto Sans"
+                                text: sortItemRect.modelData.label
+                                font.family: Theme.fontFamilyBody
                                 font.pixelSize: 12
-                                font.weight: active ? Font.Bold : Font.Normal
-                                color: active ? Theme.accent : "#ffffff"
+                                font.weight: sortItemRect.active ? Font.Bold : Font.Normal
+                                color: sortItemRect.active ? Theme.accent : Theme.text
                                 elide: Text.ElideRight
                             }
 
-                            Icon {
-                                visible: active
-                                name: "check"
-                                size: 16
+                            MaterialSymbol {
+                                visible: sortItemRect.active
+                                text: "check"
+                                iconSize: 16
                                 color: Theme.accent
                             }
                         }
 
                         MouseArea {
-                            id: rowMouse
+                            id: itemMouse
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                wallModule.sortMode = modelData.mode;
+                                wallModule.sortMode = sortItemRect.modelData.mode;
                                 wallModule.sortDropdownOpen = false;
                                 wallModule.filterWallpapers();
                             }
@@ -752,35 +760,27 @@ for f, mtime in files_with_mtime:
         Item {
             id: stripContainer
             anchors.top: topHeaderBar.bottom
-            anchors.topMargin: 4
+            anchors.topMargin: 8
             anchors.bottom: searchBar.top
-            anchors.bottomMargin: 8
+            anchors.bottomMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
             width: 880
             clip: true
 
-            WallpaperStrip {
+            LucidWallpaperStrip {
                 id: wallStrip
                 anchors.fill: parent
                 model: displayModel
+                onInteracted: wallModule.userInteracted = true
                 appliedPath: wallModule.lastAppliedWallpaper
-
-                heroW: 320
-                heroH: 185
-                midW: 225
-                midH: 130
-                smallW: 140
-                smallH: 80
-                tinyW: 90
-                tinyH: 52
-                itemGap: 12
 
                 onChosen: (path) => wallModule.applyWallpaperPath(path)
             }
+
         }
 
         // ------------------------------------------
-        // Bottom: Minimal Completely Borderless Search Bar
+        // Bottom: Material 3 Styled Search Bar
         // ------------------------------------------
         Rectangle {
             id: searchBar
@@ -788,11 +788,11 @@ for f, mtime in files_with_mtime:
             anchors.bottomMargin: 14
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 20
-            anchors.rightMargin: 20
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
             height: 44
-            radius: 22
-            color: searchInput.activeFocus ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.07)
+            radius: 14
+            color: searchInput.activeFocus ? Theme.alpha(Theme.text, 0.10) : Theme.alpha(Theme.text, 0.06)
             border.width: 0
             border.color: "transparent"
 
@@ -810,8 +810,14 @@ for f, mtime in files_with_mtime:
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 8
+                anchors.rightMargin: 14
+                spacing: 10
+
+                MaterialSymbol {
+                    text: "search"
+                    iconSize: 18
+                    color: searchInput.activeFocus ? Theme.accent : Theme.alpha(Theme.text, 0.45)
+                }
 
                 // Input + Ghost Placeholder Container
                 Item {
@@ -822,10 +828,10 @@ for f, mtime in files_with_mtime:
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
                         visible: searchInput.text === ""
-                        text: ">wallpaper"
+                        text: "Search wallpapers…"
                         font.family: Theme.fontFamilyBody
                         font.pixelSize: 14
-                        color: Qt.rgba(255, 255, 255, 0.65)
+                        color: Theme.alpha(Theme.text, 0.40)
                     }
 
                     TextInput {
@@ -834,7 +840,7 @@ for f, mtime in files_with_mtime:
                         verticalAlignment: TextInput.AlignVCenter
                         font.family: Theme.fontFamilyBody
                         font.pixelSize: 14
-                        color: "#ffffff"
+                        color: Theme.text
                         selectionColor: Theme.accent
                         selectedTextColor: Theme.fgAccent
                         clip: true
@@ -894,31 +900,51 @@ for f, mtime in files_with_mtime:
                     }
                 }
 
-                // Clear button
+                // Hint Chip when empty
                 Rectangle {
-                    visible: searchInput.text !== ""
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    Layout.alignment: Qt.AlignVCenter
-                    radius: 12
-                    color: clearMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : "transparent"
+                    visible: searchInput.text === ""
+                    Layout.preferredHeight: 22
+                    Layout.preferredWidth: tabHintRow.implicitWidth + 12
+                    radius: 7
+                    color: Theme.alpha(Theme.text, 0.08)
 
-                    Icon {
+                    Row {
+                        id: tabHintRow
                         anchors.centerIn: parent
-                        name: "close"
-                        size: 16
-                        color: "#ffffff"
-                    }
+                        spacing: 4
 
-                    MouseArea {
-                        id: clearMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            searchInput.text = "";
-                            searchInput.forceActiveFocus();
+                        MaterialSymbol {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "keyboard_tab"
+                            iconSize: 12
+                            color: Theme.subtext
                         }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Themes"
+                            font.family: Theme.fontFamilyBody
+                            font.pixelSize: 10
+                            font.weight: Font.Medium
+                            color: Theme.subtext
+                        }
+                    }
+                }
+
+                // Clear button when text present
+                IrisIconButton {
+                    visible: searchInput.text !== ""
+                    buttonSize: 26
+                    buttonRadius: 13
+                    flat: true
+                    icon: "close"
+                    iconSize: 14
+                    iconColor: Theme.subtext
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Clear search"
+                    onClicked: {
+                        searchInput.text = "";
+                        searchInput.forceActiveFocus();
                     }
                 }
             }

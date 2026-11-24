@@ -20,9 +20,7 @@ Item {
 
         anchors.fill: parent
         radius: WifiUi.Theme.pill(height)
-        color: sw.checked ? WifiUi.Theme.primary : WifiUi.Theme.bgSunken
-        border.width: sw.checked ? 0 : 2
-        border.color: WifiUi.Theme.outlineStrong
+        color: sw.checked ? WifiUi.Theme.primary : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.12)
 
         Behavior on color {
             ColorAnimation {

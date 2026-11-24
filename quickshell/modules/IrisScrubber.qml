@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
@@ -7,18 +9,22 @@ Item {
     property real value: 0.0
     property bool seekable: true
     property color fillColor: "#a8c7fa"
-    property color trackColor: Qt.rgba(255, 255, 255, 0.12)
+    property color trackColor: Qt.rgba(255, 255, 255, 0.14)
     signal seekRequested(real value)
     signal moved(real value)
     property bool knob: false
     property real stepSize: 0.05
     activeFocusOnTab: root.seekable
 
-    // Material 3 Expressive Wavy Progress Bar properties
+    // Material 3 / Lucid Expressive Waveform Progress properties
     property bool wavy: false
     property bool isPlaying: false
-    property real waveAmplitude: 2.8
-    property real waveFrequency: 0.048
+    property real wavelength: 26
+    readonly property real trackThickness: 4
+    readonly property real handleWidth: 4
+    readonly property real trackGap: 6
+    readonly property real stopIndicator: 4
+    readonly property real trackInset: 8
 
     property real dragValue: -1
     readonly property bool engaged: root.seekable && (pointer.containsMouse || pointer.pressed || root.activeFocus)
@@ -26,34 +32,36 @@ Item {
     readonly property bool isDragging: pointer.pressed && root.dragValue >= 0
 
     implicitWidth: 200
-    implicitHeight: 22
+    implicitHeight: 24
     Layout.preferredWidth: implicitWidth
     Layout.preferredHeight: implicitHeight
     height: implicitHeight
 
     Accessible.role: Accessible.Slider
-    Keys.onPressed: event => {
-        if (!root.seekable) return
-        let next = root.shownValue
-        if (event.key === Qt.Key_Right || event.key === Qt.Key_Up) next += root.stepSize
-        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) next -= root.stepSize
-        else if (event.key === Qt.Key_Home) next = 0
-        else if (event.key === Qt.Key_End) next = 1
-        else return
-        next = Math.max(0, Math.min(1, next))
-        root.moved(next)
-        root.seekRequested(next)
-        event.accepted = true
+    Keys.onPressed: (event) => {
+        if (!root.seekable) return;
+        let next = root.shownValue;
+        if (event.key === Qt.Key_Right || event.key === Qt.Key_Up) next += root.stepSize;
+        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) next -= root.stepSize;
+        else if (event.key === Qt.Key_Home) next = 0;
+        else if (event.key === Qt.Key_End) next = 1;
+        else return;
+        next = Math.max(0, Math.min(1, next));
+        root.moved(next);
+        root.seekRequested(next);
+        event.accepted = true;
     }
 
-    // Standard Flat Track (visible when wavy is false)
+    // ----------------------------------------------------
+    // FLAT TRACK (Used when wavy === false, e.g. stream volume sliders)
+    // ----------------------------------------------------
     Item {
-        id: track
+        id: flatTrack
         visible: !root.wavy
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        height: root.engaged ? 8 : 4
+        height: root.engaged ? 6 : 4
         Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
 
         Rectangle {
@@ -61,33 +69,56 @@ Item {
             radius: height / 2
             color: root.trackColor
         }
+
         Item {
-            width: Math.max(0, Math.min(track.width, track.width * root.shownValue))
-            height: track.height
+            width: Math.max(0, Math.min(flatTrack.width, flatTrack.width * root.shownValue))
+            height: flatTrack.height
             clip: true
             Rectangle {
-                width: track.width
-                height: track.height
+                width: flatTrack.width
+                height: flatTrack.height
                 radius: height / 2
                 color: root.fillColor
             }
         }
+
+        Rectangle {
+            id: flatKnob
+            visible: root.knob
+            width: root.engaged ? 14 : 10
+            height: width
+            radius: width / 2
+            anchors.verticalCenter: parent.verticalCenter
+            x: Math.max(0, Math.min(flatTrack.width - width, flatTrack.width * root.shownValue - width / 2))
+            color: "#ffffff"
+            Behavior on width { NumberAnimation { duration: 100 } }
+        }
     }
 
-    // Material Wave Canvas (visible when wavy is true)
+    // ----------------------------------------------------
+    // LUCID WAVE CANVAS (Used when wavy === true)
+    // ----------------------------------------------------
     Canvas {
         id: waveCanvas
         anchors.fill: parent
         visible: root.wavy
         antialiasing: true
 
-        property real wavePhase: 0
-        property real currentAmplitude: (root.wavy && root.isPlaying) ? root.waveAmplitude : 0.0
-        Behavior on currentAmplitude {
-            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+        property real animatedProgress: root.shownValue
+        property real handleHeight: root.engaged ? 18 : 14
+        property real amplitude: (!root.wavy || !root.isPlaying) ? 0.0 : (root.engaged ? 6.0 : 5.0)
+
+        Behavior on handleHeight {
+            NumberAnimation { duration: 150; easing.type: Easing.OutBack }
         }
 
-        onCurrentAmplitudeChanged: requestPaint()
+        Behavior on amplitude {
+            NumberAnimation { duration: 250; easing.type: Easing.OutQuad }
+        }
+
+        onAnimatedProgressChanged: requestPaint()
+        onHandleHeightChanged: requestPaint()
+        onAmplitudeChanged: requestPaint()
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
 
@@ -97,81 +128,101 @@ Item {
             function onFillColorChanged() { waveCanvas.requestPaint(); }
             function onTrackColorChanged() { waveCanvas.requestPaint(); }
             function onEngagedChanged() { waveCanvas.requestPaint(); }
+            function onIsPlayingChanged() { waveCanvas.requestPaint(); }
         }
 
-        Timer {
-            id: wavePhaseTimer
-            interval: 16 // 60fps smooth animation
-            running: root.wavy && root.visible && waveCanvas.currentAmplitude > 0.05
-            repeat: true
-            onTriggered: {
-                waveCanvas.wavePhase += 0.085;
-                if (waveCanvas.wavePhase > 6.28318) waveCanvas.wavePhase -= 6.28318;
-                waveCanvas.requestPaint();
-            }
+        // Smooth 60 FPS animation ticker while music is playing or amplitude is returning to rest
+        FrameAnimation {
+            running: root.wavy && root.visible && (root.isPlaying || waveCanvas.amplitude > 0.02)
+            onTriggered: waveCanvas.requestPaint()
+        }
+
+        function smoothstep(t) {
+            t = Math.max(0, Math.min(1, t));
+            return t * t * (3 - 2 * t);
+        }
+
+        function envelope(x, inset, rampLen, endX) {
+            const fromStart = smoothstep((x - inset) / rampLen);
+            const fromEnd = smoothstep((endX - x) / (rampLen * 0.35));
+            const progress = Math.max(0, Math.min(1, (x - inset) / Math.max(1, endX - inset)));
+            const height = 0.38 + 0.62 * smoothstep(progress);
+            // Mix slow, incommensurate cycles to vary consecutive peaks smoothly.
+            const variation = 0.72 + 0.17 * Math.sin(x * 0.047 + 1.2)
+                + 0.11 * Math.sin(x * 0.091 + 2.8);
+            return Math.min(fromStart, fromEnd) * height * variation;
+        }
+
+        function roundedBar(ctx, x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.roundedRect(x, y, w, h, w / 2, w / 2);
+            ctx.fill();
         }
 
         onPaint: {
             const ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
 
-            const centerY = height / 2;
-            const fillW = Math.max(0, Math.min(width, width * root.shownValue));
-            const lw = root.engaged ? 5.5 : 4.0;
+            const midY = height / 2;
+            const inset = root.trackInset;
+            const usableWidth = width - inset * 2;
+            const handleX = inset + Math.max(0, Math.min(usableWidth, usableWidth * animatedProgress));
+            const activeEnd = handleX - root.trackGap - root.handleWidth / 2;
+            const inactiveStart = handleX + root.trackGap + root.handleWidth / 2;
+            const rampLen = root.wavelength * 1.4;
 
-            // 1. Draw remaining track
-            if (fillW < width) {
-                ctx.strokeStyle = root.trackColor;
-                ctx.lineWidth = root.engaged ? 4.5 : 3.5;
-                ctx.lineCap = "round";
-                ctx.beginPath();
-                const startX = Math.min(width - 2, fillW + (root.knob ? 7 : 3));
-                ctx.moveTo(startX, centerY);
-                ctx.lineTo(width - 2, centerY);
-                ctx.stroke();
-            }
+            // Half a wavelength per second; seamless loop
+            const shift = (Date.now() % 600000) / 1000 * root.wavelength * 0.5;
 
-            // 2. Draw elapsed progress (animated sine wave when playing, smooth flat bar when paused)
-            if (fillW > 1) {
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            // 1. Draw Active Wave Track
+            if (activeEnd - inset > root.trackThickness) {
                 ctx.strokeStyle = root.fillColor;
-                ctx.lineWidth = lw;
-                ctx.lineCap = "round";
+                ctx.lineWidth = root.trackThickness;
                 ctx.beginPath();
-                ctx.moveTo(2, centerY);
-
-                if (currentAmplitude > 0.05) {
-                    const step = 2;
-                    for (let x = 2; x <= fillW; x += step) {
-                        const y = centerY + Math.sin(x * root.waveFrequency + wavePhase) * currentAmplitude;
-                        ctx.lineTo(x, y);
+                if (amplitude > 0.05) {
+                    for (let x = inset; x <= activeEnd; x++) {
+                        const y = midY + Math.sin(((x - shift) / root.wavelength) * Math.PI * 2) * amplitude * envelope(x, inset, rampLen, activeEnd);
+                        if (x === inset) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
                     }
                 } else {
-                    ctx.lineTo(fillW, centerY);
+                    ctx.moveTo(inset, midY);
+                    ctx.lineTo(activeEnd, midY);
                 }
                 ctx.stroke();
             }
+
+            // 2. Draw Inactive Remaining Track
+            const trackEnd = width - inset - root.stopIndicator * 2;
+            if (trackEnd - inactiveStart > root.trackThickness) {
+                ctx.strokeStyle = root.trackColor;
+                ctx.lineWidth = root.trackThickness;
+                ctx.beginPath();
+                ctx.moveTo(inactiveStart, midY);
+                ctx.lineTo(trackEnd, midY);
+                ctx.stroke();
+            }
+
+            // 3. Stop indicator at end of inactive track
+            ctx.fillStyle = root.fillColor;
+            ctx.globalAlpha = animatedProgress > 0.97 ? 0 : 0.45;
+            ctx.beginPath();
+            ctx.arc(width - inset - root.stopIndicator / 2, midY, root.stopIndicator / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+
+            // 4. Rounded Vertical Pill Handle
+            roundedBar(ctx, handleX - root.handleWidth / 2, midY - handleHeight / 2, root.handleWidth, handleHeight, root.fillColor);
         }
     }
 
-    // Playhead Scrubber Knob Dot
-    Rectangle {
-        id: knobDot
-        visible: root.knob
-        width: root.engaged ? 15 : 11
-        height: width
-        radius: width / 2
-        x: Math.max(0, Math.min(root.width - width, root.width * root.shownValue - width / 2))
-        y: (root.wavy && waveCanvas.currentAmplitude > 0.05)
-            ? (root.height / 2 - height / 2 + Math.sin(root.shownValue * root.width * root.waveFrequency + waveCanvas.wavePhase) * waveCanvas.currentAmplitude)
-            : (root.height / 2 - height / 2)
-        color: "#ffffff"
-        border.width: 1
-        border.color: Qt.rgba(0, 0, 0, 0.20)
-
-        Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-        Behavior on height { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-    }
-
+    // ----------------------------------------------------
+    // POINTER INTERACTION
+    // ----------------------------------------------------
     MouseArea {
         id: pointer
         anchors.fill: parent
@@ -180,19 +231,25 @@ Item {
         enabled: root.seekable
         hoverEnabled: true
         cursorShape: root.seekable ? Qt.PointingHandCursor : Qt.ArrowCursor
-        function valueAt(px) { return Math.max(0, Math.min(1, px / Math.max(1, width))) }
-        onPressed: mouse => {
+
+        function valueAt(px) {
+            const inset = root.wavy ? root.trackInset : 0;
+            const usable = Math.max(1, width - inset * 2);
+            return Math.max(0, Math.min(1, (px - inset) / usable));
+        }
+
+        onPressed: (mouse) => {
             root.forceActiveFocus();
             root.dragValue = valueAt(mouse.x);
             root.moved(root.dragValue);
         }
-        onPositionChanged: mouse => {
+        onPositionChanged: (mouse) => {
             if (pressed) {
                 root.dragValue = valueAt(mouse.x);
                 root.moved(root.dragValue);
             }
         }
-        onReleased: {
+        onReleased: (mouse) => {
             if (root.dragValue >= 0) {
                 root.seekRequested(root.dragValue);
                 root.moved(root.dragValue);
@@ -201,8 +258,9 @@ Item {
         }
         onCanceled: root.dragValue = -1
         preventStealing: true
+
         property real wheelAccumulator: 0
-        onWheel: wheel => {
+        onWheel: (wheel) => {
             const delta = (wheel.angleDelta.y || wheel.angleDelta.x) || (wheel.pixelDelta.y || wheel.pixelDelta.x) * 4;
             pointer.wheelAccumulator += delta;
             const steps = Math.trunc(pointer.wheelAccumulator / 120);

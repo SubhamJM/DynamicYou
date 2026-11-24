@@ -1,25 +1,10 @@
--- See https://wiki.hypr.land/Configuring/Basics/Autostart/
-
--- Autostart necessary processes (like notifications daemons, status bars, etc.)
--- Or execute your favorite apps at launch like this:
---
-hl.on("hyprland.start", function () 
---   hl.exec_cmd(terminal)
---   hl.exec_cmd("nm-applet")
---   hl.exec_cmd("waybar & hyprpaper & firefox")
+hl.on("hyprland.start", function()
+    hl.exec_cmd([=[command -v dbus-update-activation-environment >/dev/null && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE]=])
     hl.exec_cmd([=[bash "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/init-wallpaper.sh"]=])
-	hl.exec_cmd("env MALLOC_ARENA_MAX=2 MALLOC_TRIM_THRESHOLD_=131072 qs -n")
-	hl.exec_cmd("systemctl --user start hyprpolkitagent")
-	hl.exec_cmd("bash -c \"wl-paste --type text --watch cliphist store &\"")
-    hl.exec_cmd("bash -c \"wl-paste --type image --watch cliphist store &\"")
-	
---  to make the things more stable....
-	hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("hypridle")
-    hl.exec_cmd("dbus-update-activation-environment --all")
-    hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP") -- Some fix idk
-
+    hl.exec_cmd([=[env MALLOC_ARENA_MAX=2 MALLOC_TRIM_THRESHOLD_=131072 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/scripts/launch-quickshell.py" -n]=])
+    hl.exec_cmd("systemctl --user start hyprpolkitagent")
+    hl.exec_cmd("wl-paste --type text --watch cliphist store")
+    hl.exec_cmd("wl-paste --type image --watch cliphist store")
+    hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
+    hl.exec_cmd("command -v hyprlock >/dev/null && hypridle")
 end)
-
-
-

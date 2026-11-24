@@ -4,13 +4,10 @@
 TARGET_THEME="${1:?usage: apply-theme.sh <theme>}"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
 THEMES_DIR="$CONFIG_DIR/themes"
-if [[ ! -d "$THEMES_DIR" && -d "$HOME/git/MyLinuxSetup/themes" ]]; then
-    THEMES_DIR="$HOME/git/MyLinuxSetup/themes"
-fi
 ACTIVE_DIR="$CONFIG_DIR/active-theme"
 
 # Ensure target active directory exists
-mkdir -p "$ACTIVE_DIR"
+mkdir -p "$ACTIVE_DIR" || exit 1
 
 # Resolve target theme case-insensitively if exact folder not found
 if [[ ! -d "$THEMES_DIR/$TARGET_THEME" ]]; then
@@ -27,8 +24,8 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
     [[ -f "$THEMES_DIR/$TARGET_THEME/hyprland-colors.conf" ]] && ln -sf "$THEMES_DIR/$TARGET_THEME/hyprland-colors.conf" "$ACTIVE_DIR/hyprland-colors.conf"
     [[ -f "$THEMES_DIR/$TARGET_THEME/hypr-colors.lua" ]] && ln -sf "$THEMES_DIR/$TARGET_THEME/hypr-colors.lua" "$ACTIVE_DIR/hypr-colors.lua"
     ln -sf "$THEMES_DIR/$TARGET_THEME/kitty-colors.conf" "$ACTIVE_DIR/kitty-colors.conf"
-    ln -sf "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" "$ACTIVE_DIR/quickshell-colors.json"
-    ln -sf "$THEMES_DIR/$TARGET_THEME/theme-name.txt" "$ACTIVE_DIR/theme-name.txt"
+    ln -sf "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" "$ACTIVE_DIR/quickshell-colors.json" || exit 1
+    ln -sf "$THEMES_DIR/$TARGET_THEME/theme-name.txt" "$ACTIVE_DIR/theme-name.txt" || exit 1
     ln -sf "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" "$ACTIVE_DIR/starship-colors.toml"
 
     # --- 5. Generate Hyprlock colors ---
@@ -85,16 +82,14 @@ EOF
     # Apply wallpaper promptly
     RANDOM_WALLPAPER=""
     if [[ -n "$WALLPAPER_DIR" && -d "$WALLPAPER_DIR" ]]; then
-        RANDOM_WALLPAPER=$(find "$WALLPAPER_DIR" -maxdepth 2 -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.webp" \) | shuf -n 1)
+        RANDOM_WALLPAPER=$(find -H "$WALLPAPER_DIR" -maxdepth 2 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) | shuf -n 1)
     fi
     # Global fallback if theme folder had no matching wallpapers
     if [[ -z "$RANDOM_WALLPAPER" ]]; then
-        for fallback_dir in "$HOME/Pictures/Wallpapers"; do
-            if [[ -d "$fallback_dir" ]]; then
-                RANDOM_WALLPAPER=$(find -L "$fallback_dir" -maxdepth 3 -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.webp" \) | shuf -n 1)
-                [[ -n "$RANDOM_WALLPAPER" ]] && break
-            fi
-        done
+        library="$HOME/Pictures/Wallpapers"
+        if [[ -d "$library" ]]; then
+            RANDOM_WALLPAPER=$(find -H "$library" -maxdepth 3 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \) | shuf -n 1)
+        fi
     fi
 
     if [[ -n "$RANDOM_WALLPAPER" ]]; then
@@ -117,15 +112,16 @@ EOF
         fi
     fi
 
-    # Render from the selected wallpaper after the preset has set its fallbacks.
-    PALETTE="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/scripts/matugen/update.py"
-    if [[ -f "$PALETTE" && -n "$RANDOM_WALLPAPER" ]]; then
-        python3 "$PALETTE" "$RANDOM_WALLPAPER" || hyprctl reload 2>/dev/null || true
+    if [[ -n "$RANDOM_WALLPAPER" ]]; then
+        PALETTE="$CONFIG_DIR/quickshell/scripts/matugen/update.py"
+        if [[ -f "$PALETTE" ]]; then
+            python3 "$PALETTE" "$RANDOM_WALLPAPER" || hyprctl reload 2>/dev/null || true
+        fi
     fi
-
     qs ipc call notch reloadTheme >/dev/null 2>&1 &
 
-    notify-send "Theme Applied" "Activated $TARGET_THEME"
+    notify-send "Theme Applied" "Activated $TARGET_THEME" || true
 else
     notify-send "Error" "Theme $TARGET_THEME does not exist."
+    exit 1
 fi

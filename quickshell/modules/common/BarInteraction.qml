@@ -18,7 +18,7 @@ Singleton {
     // Popups open on tap and stay until dismissed, instead of tracking the pointer.
     readonly property bool clickToShow: PanelFamily.touchFirst
         || (Config.options?.bar?.tooltips?.clickToShow ?? false)
-        || GlobalStates.anyBarPopupOpen
+        || (GlobalStates.anyBarPopupOpen ?? false)
 
     // In click-to-show the left click belongs to the popup, so widgets that cycle through
     // their items on click (keyboard layout, Bluetooth devices, sports) cycle on the right
@@ -33,7 +33,7 @@ Singleton {
     // only applies where a pointer can also right-click, hover or use a keybind.
     readonly property bool enablePopups: PanelFamily.touchFirst
         || (Config.options?.bar?.tooltips?.enablePopups ?? true)
-        || GlobalStates.anyBarPopupOpen
+        || (GlobalStates.anyBarPopupOpen ?? false)
 
     // The corner style actually in effect. The tablet family renders no dynamic island,
     // so a stored cornerStyle of 3 would give it the island's visual language — a notch

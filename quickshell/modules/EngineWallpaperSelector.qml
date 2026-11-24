@@ -132,7 +132,7 @@ FocusScope {
         }
 
         var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
-        var scriptPath = Quickshell.shellPath("scripts/apply_wallpaper.sh");
+        var scriptPath = Quickshell.env("HOME") + "/.config/quickshell/scripts/apply_wallpaper.sh";
         var poster = item.poster || item.preview || "";
 
         Quickshell.execDetached([
@@ -572,7 +572,7 @@ FocusScope {
                             anchors.fill: parent
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
-                            cache: true
+                            cache: false
                             sourceSize: Qt.size(400, 260)
                             source: {
                                 if (!cardItem.itemPreview) return "";

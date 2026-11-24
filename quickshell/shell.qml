@@ -3,6 +3,10 @@
 //@ pragma DefaultEnv QSG_RENDER_LOOP=threaded
 //@ pragma DefaultEnv QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
 //@ pragma Env QSG_DISTANCEFIELD_ANTIALIASING=gray
+//@ pragma DefaultEnv __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+//@ pragma DefaultEnv MALLOC_ARENA_MAX=2
+//@ pragma DefaultEnv MALLOC_TRIM_THRESHOLD_=131072
+//@ pragma DefaultEnv MALLOC_MMAP_THRESHOLD_=131072
 
 import Quickshell
 import Quickshell.Hyprland
@@ -12,13 +16,28 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
-import Quickshell.Bluetooth
 import Quickshell.Services.Notifications
 import "./modules"
 import "./" // Imports NotchConfig singleton
 
 ShellRoot {
     id: root
+
+    readonly property alias hotspot: hotspotController
+    readonly property alias notepadStore: notesData
+    readonly property bool hotspotPanelOpen: activeMode === "wifi" && wifiMod?.activeTab === "hotspot"
+    readonly property bool notesPinned: activeMode === "notes" && (notesMod?.isPinned ?? false)
+
+    NotepadStore { id: notesData }
+
+    HotspotController {
+        id: hotspotController
+        monitoring: root.hotspotPanelOpen || root.activeMode === "utility" || root.activeMode === "tooldeck"
+        onOperationFailedChanged: {
+            if (operationFailed && !root.hotspotPanelOpen)
+                Quickshell.execDetached(["notify-send", "Hotspot", feedback]);
+        }
+    }
 
     property string activeMode: "idle"
     property bool settingsOpen: false
@@ -58,7 +77,7 @@ ShellRoot {
     Timer {
         id: screenRecordTimer
         interval: 1000
-        running: root.isScreenRecording
+        running: root.isScreenRecording && !root.isScreenRecordingPaused
         repeat: true
         onTriggered: root.screenRecordSeconds++
     }
@@ -88,10 +107,10 @@ ShellRoot {
 
     Timer {
         id: globalRecordPollTimer
-        interval: 1500
+        interval: root.isScreenRecording ? 1000 : 8000
         running: true
         repeat: true
-        triggeredOnStart: true
+        triggeredOnStart: false
         onTriggered: {
             if (!globalRecordChecker.running) {
                 globalRecordChecker.running = true;
@@ -139,24 +158,35 @@ ShellRoot {
         id: globalNotifModel
     }
 
-    // Notification Island Banner State
-    property string notifPopupSummary: ""
-    property string notifPopupBody: ""
-    property string notifPopupApp: ""
-    property bool isNotifPopupActive: notifPopupSummary !== ""
+    property var notificationBanner: null
+    property bool isNotifPopupActive: false
+    property bool notificationBannerHovered: false
+
+    function notificationPreview(text) {
+        return text.replace(/<\/?(?:a|b|br|em|i|img|p|s|span|strong|u)(?:\s[^>]*?)?\s*\/?>/gi, " ")
+            .replace(/&(?:amp|lt|gt|quot|apos);/g, token => ({
+                "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'"
+            })[token])
+            .replace(/\s+/g, " ").trim();
+    }
+
+    function dismissNotificationBanner() {
+        notifPopupTimer.stop();
+        root.isNotifPopupActive = false;
+        root.notificationBannerHovered = false;
+    }
+
+    function setNotificationBannerHovered(hovered) {
+        if (!root.isNotifPopupActive || hovered === root.notificationBannerHovered) return;
+        root.notificationBannerHovered = hovered;
+        if (hovered) notifPopupTimer.stop();
+        else notifPopupTimer.restart();
+    }
 
     Timer {
         id: notifPopupTimer
         interval: NotchConfig.timerNotifPopup
-        repeat: false
-        onTriggered: {
-            root.notifPopupSummary = "";
-            root.notifPopupBody = "";
-            root.notifPopupApp = "";
-            if (root.activeMode === "idle" && !notchHoverHandler.hovered) {
-                root.collapseToIdle();
-            }
-        }
+        onTriggered: root.dismissNotificationBanner()
     }
 
     // Screenshot Island State (Section 4.1 Screenshot Annotation Hub)
@@ -195,133 +225,6 @@ ShellRoot {
         root.screenshotIslandStatus = "";
         root.screenshotIslandPath = filePath;
         screenshotIslandTimer.restart();
-        if (root.activeMode !== "idle" && root.activeMode !== "hover") {
-            root.collapseToIdle();
-        }
-    }
-
-    // ========================================================
-    // SECTION 4.4: DYNAMIC ISLAND POMODORO & FOCUS TIMER STATE
-    // ========================================================
-    property bool pomoRunning: false
-    property bool pomoPaused: false
-    property int pomoSecondsRemaining: 0
-    property int pomoTotalSeconds: 0
-    property string pomoMode: "focus" // "focus", "short_break", "long_break"
-    property string pomoTag: "Focus Sprint"
-    property bool pomoDndWasActive: false
-    property bool pomoDndAutoActivated: false
-    property bool isPomoFinishedIslandActive: false
-    property string pomoFinishedTitle: ""
-    property string pomoFinishedMessage: ""
-
-    function formatPomoTime(sec) {
-        var s = Math.max(0, sec || 0);
-        var m = Math.floor(s / 60);
-        var remSec = s % 60;
-        return (m < 10 ? "0" : "") + m + ":" + (remSec < 10 ? "0" : "") + remSec;
-    }
-
-    Timer {
-        id: pomoTicker
-        interval: 1000
-        repeat: true
-        running: root.pomoRunning && !root.pomoPaused
-        onTriggered: {
-            if (root.pomoSecondsRemaining > 0) {
-                root.pomoSecondsRemaining--;
-                if (root.pomoSecondsRemaining <= 0) {
-                    root.completePomodoro();
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: pomoFinishedAutoDismissTimer
-        interval: 10000
-        repeat: false
-        onTriggered: {
-            root.isPomoFinishedIslandActive = false;
-            root.pomoFinishedTitle = "";
-            root.pomoFinishedMessage = "";
-            if (root.activeMode === "idle" && typeof notchHoverHandler !== "undefined" && !notchHoverHandler.hovered) {
-                root.collapseToIdle();
-            }
-        }
-    }
-
-    function startPomodoro(minutes, mode, tag) {
-        var mins = parseInt(minutes) || 25;
-        var m = mode || "focus";
-        root.pomoMode = m;
-        root.pomoTag = tag || (m === "focus" ? "Focus Sprint" : (m === "short_break" ? "Short Break" : "Long Break"));
-        root.pomoTotalSeconds = mins * 60;
-        root.pomoSecondsRemaining = mins * 60;
-        root.pomoRunning = true;
-        root.pomoPaused = false;
-        root.isPomoFinishedIslandActive = false;
-
-        if (m === "focus") {
-            root.pomoDndWasActive = root.dndEnabled;
-            if (!root.dndEnabled) {
-                root.dndEnabled = true;
-                root.pomoDndAutoActivated = true;
-            }
-        }
-
-        Quickshell.execDetached(["notify-send", "-a", "Pomodoro", root.pomoTag + " Started (" + mins + "m)", m === "focus" ? "Distraction-Free Focus mode active (DND enabled)" : "Enjoy your rest!"]);
-    }
-
-    function pausePomodoro() {
-        if (root.pomoRunning) {
-            root.pomoPaused = true;
-        }
-    }
-
-    function resumePomodoro() {
-        if (root.pomoRunning) {
-            root.pomoPaused = false;
-        }
-    }
-
-    function togglePomodoroPause() {
-        if (!root.pomoRunning) {
-            root.startPomodoro(25, "focus");
-        } else {
-            root.pomoPaused = !root.pomoPaused;
-        }
-    }
-
-    function stopPomodoro() {
-        root.pomoRunning = false;
-        root.pomoPaused = false;
-        root.pomoSecondsRemaining = 0;
-        root.pomoTotalSeconds = 0;
-        if (root.pomoDndAutoActivated) {
-            root.dndEnabled = root.pomoDndWasActive;
-            root.pomoDndAutoActivated = false;
-        }
-    }
-
-    function completePomodoro() {
-        root.pomoRunning = false;
-        root.pomoPaused = false;
-        if (root.pomoDndAutoActivated) {
-            root.dndEnabled = root.pomoDndWasActive;
-            root.pomoDndAutoActivated = false;
-        }
-
-        Quickshell.execDetached(["sh", "-c", "command -v canberra-gtk-play >/dev/null && canberra-gtk-play -i complete || paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || aplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null"]);
-
-        var wasFocus = (root.pomoMode === "focus");
-        root.pomoFinishedTitle = wasFocus ? "Focus Sprint Complete!" : "Break Finished!";
-        root.pomoFinishedMessage = wasFocus ? "Outstanding focus! Take a well-earned break." : "Break is over. Ready to lock back in?";
-        root.isPomoFinishedIslandActive = true;
-        pomoFinishedAutoDismissTimer.restart();
-
-        Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "Pomodoro", root.pomoFinishedTitle, root.pomoFinishedMessage]);
-
         if (root.activeMode !== "idle" && root.activeMode !== "hover") {
             root.collapseToIdle();
         }
@@ -373,16 +276,24 @@ ShellRoot {
             }
 
             if (root.isServerReady && !root.dndEnabled) {
-                root.notifPopupSummary = summaryText !== "" ? summaryText : appNameText;
-                root.notifPopupBody = bodyText;
-                root.notifPopupApp = appNameText;
-                notifPopupTimer.restart();
+                const app = root.notificationPreview(appNameText) || "System";
+                root.notificationBanner = {
+                    summary: root.notificationPreview(summaryText) || app,
+                    body: root.notificationPreview(bodyText),
+                    app,
+                    icon: appIconText || notification.desktopEntry || "",
+                    critical: notification.urgency === NotificationUrgency.Critical
+                };
+                root.isNotifPopupActive = true;
+                if (!root.notificationBannerHovered) notifPopupTimer.restart();
             }
         }
     }
 
     readonly property bool isDashMode: activeMode === "idle" || activeMode === "hover"
     readonly property bool isExpanding: !isDashMode && activeMode !== "osd"
+    readonly property bool expandedContentReady: isExpanding && modulesContainer.contentBlend >= 0.98
+        && modulesContainer.revealProgress >= 0.98 && modulesContainer.pageBlend >= 0.98
     readonly property color notchSurfaceColor: Theme.colors.bg ?? "#000000"
     readonly property bool isPopupMode: activeMode !== "idle" && activeMode !== "osd"
 
@@ -397,8 +308,11 @@ ShellRoot {
 
     function openSettings(page) {
         root.collapseToIdle();
-        if (page && page.length > 0 && typeof settingsModal !== "undefined" && settingsModal) {
-            settingsModal.setPage(page);
+        if (page && page.length > 0) {
+            root.initialSettingsPage = page;
+            if (settingsModalLoader.item && typeof settingsModalLoader.item.setPage === "function") {
+                settingsModalLoader.item.setPage(page);
+            }
         }
         root.settingsOpen = true;
     }
@@ -433,6 +347,8 @@ ShellRoot {
 
     // Persistent caches for instant zero-latency module rendering across the entire shell
     property var cachedApps: []
+    property bool desktopEntriesIndexed: false
+    property Component launcherDefinition: null
     property var cachedWallpapers: []
     property string cachedActiveWallpaper: ""
     property var cachedBatteryTelemetry: null
@@ -440,13 +356,12 @@ ShellRoot {
 
     Timer {
         id: moduleUnloadTimer
-        interval: 60000 // 60s grace period prevents cold reload lag while releasing memory promptly
+        interval: 8000 // 8s grace period: promptly unloads modules and releases memory
         repeat: false
         onTriggered: {
             if (root.activeMode === "idle" || root.activeMode === "hover" || root.activeMode === "osd") {
-                if (root.loadedExpandedMode !== "launcher") {
-                    root.loadedExpandedMode = "";
-                }
+                root.loadedExpandedMode = "";
+                gc();
             }
         }
     }
@@ -477,7 +392,7 @@ ShellRoot {
 
     function syncDesktopEntries() {
         var rawApps = DesktopEntries.applications.values;
-        if (!rawApps || rawApps.length === 0) return;
+        if (!rawApps) return;
         var list = [];
         for (var i = 0; i < rawApps.length; i++) {
             var entry = rawApps[i];
@@ -511,20 +426,26 @@ ShellRoot {
         }
         list.sort(function(a, b) { return a.name.localeCompare(b.name); });
         root.cachedApps = list;
-        if (root.launcherMod) {
-            root.launcherMod.allApps = list;
-            root.launcherMod.updateSuggestions();
-            if (root.launcherMod.searchInput.text.trim() !== "") {
-                root.launcherMod.processSearch(root.launcherMod.searchInput.text);
-            }
+        root.desktopEntriesIndexed = true;
+    }
+
+    // Warm the app index and compiled QML after the bar has drawn. The launcher
+    // instance still follows the normal module unload timer.
+    Timer {
+        interval: 450
+        running: true
+        onTriggered: {
+            if (!root.desktopEntriesIndexed) root.syncDesktopEntries();
+            root.launcherDefinition = Qt.createComponent(root.getModuleSource("launcher"), Component.Asynchronous);
         }
     }
 
-    Component.onCompleted: {
-        root.syncDesktopEntries();
+    // Background Global Wallpaper Scanner
+    function refreshWallpaperCache() {
+        root.cachedWallpapers = [];
+        globalWallpaperScanTimer.restart();
     }
 
-    // Background Global Wallpaper Scanner
     Process {
         id: globalWallpaperScanner
         running: false
@@ -615,6 +536,7 @@ for f in sorted_files:
             case "launcher":      return Qt.resolvedUrl("modules/Launcher.qml");
             case "theme":         return Qt.resolvedUrl("modules/ThemeSelector.qml");
             case "wallpaper":     return Qt.resolvedUrl("modules/WallpaperSelector.qml");
+            case "wallsort":      return Qt.resolvedUrl("modules/WallpaperSorterModule.qml");
             case "lockscreen":     return Qt.resolvedUrl("modules/ThemeWallpaperSelector.qml");
             case "engine":        return Qt.resolvedUrl("modules/EngineWallpaperSelector.qml");
             case "transition":    return Qt.resolvedUrl("modules/TransitionSelector.qml");
@@ -637,9 +559,11 @@ for f in sorted_files:
     }
 
     // Dynamic Module Aliases (Null-safe; points to moduleLoader.item when active)
+    readonly property var dashMod:       dashLoader ? dashLoader.item : null
     readonly property var launcherMod:   (root.loadedExpandedMode === "launcher") ? moduleLoader.item : null
     readonly property var themeMod:      (root.loadedExpandedMode === "theme") ? moduleLoader.item : null
     readonly property var wallMod:       (root.loadedExpandedMode === "wallpaper") ? moduleLoader.item : null
+    readonly property var wallSortMod:   (root.loadedExpandedMode === "wallsort") ? moduleLoader.item : null
     readonly property var engineMod:     (root.loadedExpandedMode === "engine") ? moduleLoader.item : null
     readonly property var transMod:      (root.loadedExpandedMode === "transition") ? moduleLoader.item : null
     readonly property var btMod:         (root.loadedExpandedMode === "bluetooth") ? moduleLoader.item : null
@@ -657,7 +581,16 @@ for f in sorted_files:
     readonly property var cheatsheetMod: (root.loadedExpandedMode === "cheatsheet") ? moduleLoader.item : null
     readonly property var taskMgrMod:    (root.loadedExpandedMode === "taskmanager") ? moduleLoader.item : null
 
+    function openClockTab(tab) {
+        if (root.activeMode !== "calendar") root.switchMode("calendar", true);
+        if (root.calMod) root.calMod.showTab(tab);
+    }
+
     function openUtility(section = "", fromShortcut = false) {
+        if (section === "pomo") {
+            root.openClockTab("timer");
+            return;
+        }
         root.isWorkspacePeeking = false;
         if (root.activeMode === "utility" && root.utilMod && root.utilMod.activeSection === section) {
             root.collapseToIdle();
@@ -695,6 +628,7 @@ for f in sorted_files:
     }
 
     onActiveModeChanged: {
+        const launcherWasLoaded = root.launcherMod !== null;
         if (activeMode !== "idle" && activeMode !== "hover" && activeMode !== "osd") {
             root.previousExpandedMode = activeMode;
             moduleUnloadTimer.stop();
@@ -710,15 +644,10 @@ for f in sorted_files:
                 root.wifiMod.activeTab = "wifi";
                 root.wifiMod.refreshStatus();
             }
-        } else if (activeMode === "bluetooth" && typeof Bluetooth !== "undefined" && Bluetooth.defaultAdapter) {
-            Bluetooth.defaultAdapter.discovering = true;
-        } else if (typeof Bluetooth !== "undefined" && Bluetooth.defaultAdapter) {
-            Bluetooth.defaultAdapter.discovering = false;
         }
 
         if (activeMode === "launcher") {
-            if (root.cachedApps.length === 0 && !globalAppScanner.running) globalAppScanner.running = true;
-            if (root.launcherMod) root.launcherMod.onOpened();
+            if (launcherWasLoaded && root.launcherMod) root.launcherMod.onOpened();
         } else if (activeMode === "lockscreen") {
             Qt.callLater(() => {
                 if (root.activeMode === "lockscreen" && moduleLoader.item)
@@ -756,6 +685,10 @@ for f in sorted_files:
             calculatedWidth = (root.calMod && root.calMod.targetWidth > 0)
                 ? root.calMod.targetWidth
                 : (NotchConfig.modeDimensions["calendar"] ? NotchConfig.modeDimensions["calendar"].width : 720);
+        } else if (activeMode === "clipboard") {
+            calculatedWidth = (root.clipMod && root.clipMod.targetWidth > 0)
+                ? root.clipMod.targetWidth
+                : (NotchConfig.modeDimensions["clipboard"] ? NotchConfig.modeDimensions["clipboard"].width : 480);
         } else {
             var dim = NotchConfig.modeDimensions[activeMode];
             calculatedWidth = (dim && dim.width !== undefined) ? dim.width : NotchConfig.modeDimensions["idle"].width;
@@ -766,12 +699,10 @@ for f in sorted_files:
     
     readonly property int targetHeight: {
         var calculatedHeight = 32;
-        if (root.isPomoFinishedIslandActive && root.isDashMode) {
-            calculatedHeight = 44;
-        } else if (root.isScreenshotIslandActive && root.isDashMode) {
+        if (root.isScreenshotIslandActive && root.isDashMode) {
             calculatedHeight = 44;
         } else if (root.isNotifPopupActive && root.isDashMode) {
-            calculatedHeight = 42;
+            calculatedHeight = dashMod ? dashMod.notificationHeight : NotchConfig.heightNotifBanner;
         } else if (activeMode === "cheatsheet" && root.cheatsheetMod && root.cheatsheetMod.isAddingMode) {
             calculatedHeight = 500;
         } else if (activeMode === "launcher") {
@@ -782,13 +713,21 @@ for f in sorted_files:
             calculatedHeight = (root.calMod && root.calMod.targetHeight > 0)
                 ? root.calMod.targetHeight
                 : (NotchConfig.modeDimensions["calendar"] ? NotchConfig.modeDimensions["calendar"].height : 490);
-        } else if (activeMode === "transition" || activeMode === "powermenu" || activeMode === "battery" || activeMode === "notes" || activeMode === "cheatsheet") {
+        } else if (activeMode === "battery") {
+            calculatedHeight = (root.battMod && root.battMod.calculatedHeight)
+                ? root.battMod.calculatedHeight
+                : (NotchConfig.modeDimensions["battery"] ? NotchConfig.modeDimensions["battery"].height : 382);
+        } else if (activeMode === "notes") {
+            calculatedHeight = (root.notesMod && root.notesMod.isWideMode) ? 520 : 480;
+        } else if (activeMode === "transition" || activeMode === "powermenu" || activeMode === "cheatsheet") {
             var mDim = NotchConfig.modeDimensions[activeMode];
             calculatedHeight = (mDim && mDim.height !== undefined) ? mDim.height : 220;
         } else if (activeMode === "notifications") {
             calculatedHeight = NotchConfig.calculateNotificationsHeight(globalNotifModel.count);
         } else if (activeMode === "clipboard") {
-            calculatedHeight = NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
+            calculatedHeight = (root.clipMod && root.clipMod.calculatedHeight > 0)
+                ? root.clipMod.calculatedHeight
+                : NotchConfig.calculateClipboardHeight(root.clipMod ? root.clipMod.calculatedCount : 0);
         } else if (activeMode === "recorder") {
             calculatedHeight = root.recMod 
                 ? root.recMod.calculatedHeight
@@ -805,7 +744,8 @@ for f in sorted_files:
                     : 380);
         } else if (activeMode === "utility") {
             calculatedHeight = root.utilMod
-                ? NotchConfig.calculateUtilityHeight(root.utilMod.activeSection)
+                ? (root.utilMod.activeSection === "audio" ? root.utilMod.audioPanelHeight
+                    : NotchConfig.calculateUtilityHeight(root.utilMod.activeSection))
                 : 400;
         } else if (activeMode === "music") {
             calculatedHeight = (root.musicMod && root.musicMod.calculatedHeight) ? root.musicMod.calculatedHeight : 265;
@@ -826,7 +766,7 @@ for f in sorted_files:
     } 
 
     readonly property int targetRadius: {
-        if ((dashMod && dashMod.isIslandActive) || (root.isNotifPopupActive && root.isDashMode) || (root.isScreenshotIslandActive && root.isDashMode) || (root.isPomoFinishedIslandActive && root.isDashMode)) {
+        if ((dashMod && dashMod.isIslandActive) || (root.isNotifPopupActive && root.isDashMode) || (root.isScreenshotIslandActive && root.isDashMode)) {
             return 21;
         }
         if (activeMode === "idle") {
@@ -930,10 +870,10 @@ for f in sorted_files:
 
     Timer {
         id: fullscreenPollTimer
-        interval: 5000
+        interval: 30000 // Fallback poll; Hyprland events handle real-time changes
         running: true
         repeat: true
-        triggeredOnStart: true
+        triggeredOnStart: false
         onTriggered: {
             root.triggerFullscreenCheck();
         }
@@ -1019,7 +959,7 @@ for f in sorted_files:
     }
     GlobalShortcut {
         name: "togglePomo"
-        onPressed: root.togglePomodoroPause()
+        onPressed: Chrono.pomoToggle()
     }
     GlobalShortcut {
         name: "toggleSettings"
@@ -1167,18 +1107,27 @@ for f in sorted_files:
                  + " arIndex=" + (ar ? ar.currentIndex : "null");
         }
         function activate(): string {
+            if (root.activeMode === "clipboard" && root.clipMod && typeof root.clipMod.activateSelected === "function") {
+                return "res=" + root.clipMod.activateSelected();
+            }
             if (root.launcherMod && typeof root.launcherMod.activateSelected === "function") {
                 return "res=" + root.launcherMod.activateSelected();
             }
-            return "no launcherMod";
+            return "no target";
         }
         function navDown(): string {
+            if (root.activeMode === "clipboard" && root.clipMod && typeof root.clipMod.navDown === "function") {
+                return "res=" + root.clipMod.navDown();
+            }
             if (root.launcherMod && root.launcherMod.searchWidget && root.launcherMod.searchWidget.searchKeyRouter) {
                 return "res=" + root.launcherMod.searchWidget.searchKeyRouter.dispatch("navigateDown");
             }
             return "no router";
         }
         function navUp(): string {
+            if (root.activeMode === "clipboard" && root.clipMod && typeof root.clipMod.navUp === "function") {
+                return "res=" + root.clipMod.navUp();
+            }
             if (root.launcherMod && root.launcherMod.searchWidget && root.launcherMod.searchWidget.searchKeyRouter) {
                 return "res=" + root.launcherMod.searchWidget.searchKeyRouter.dispatch("navigateUp");
             }
@@ -1210,17 +1159,19 @@ for f in sorted_files:
         function search(query: string): string {
             root.openedViaShortcut = true;
             var q = query || "";
-            root.pendingSearchQuery = q;
-            if (root.activeMode !== "launcher") {
-                root.switchMode("launcher", true);
-            }
             if (typeof GlobalStates !== "undefined") {
                 GlobalStates.overviewOpen = true;
             }
-            if (root.launcherMod) {
-                root.launcherMod.onOpened();
+            if (root.activeMode === "launcher" && root.launcherMod) {
                 root.launcherMod.processSearch(q);
-                root.pendingSearchQuery = "";
+                root.launcherMod.searchInput.forceActiveFocus();
+            } else {
+                root.pendingSearchQuery = q;
+                root.switchMode("launcher", true);
+                if (root.pendingSearchQuery !== "" && root.launcherMod) {
+                    root.launcherMod.processSearch(root.pendingSearchQuery);
+                    root.pendingSearchQuery = "";
+                }
             }
             return "OK";
         }
@@ -1318,23 +1269,25 @@ for f in sorted_files:
             return root.dndEnabled ? "DND Enabled" : "DND Disabled";
         }
         function startPomo(minutes: int, mode: string): string {
-            root.startPomodoro(minutes, mode);
+            const phase = mode === "short_break" ? "short" : mode === "long_break" ? "long" : "focus";
+            if (phase === "focus") Chrono.pomoRound = 0;
+            Chrono.pomoBegin(phase, minutes > 0 ? minutes : Chrono.phaseMinutes(phase));
             return "OK";
         }
         function stopPomo(): string {
-            root.stopPomodoro();
+            Chrono.pomoStop();
             return "OK";
         }
         function pausePomo(): string {
-            root.pausePomodoro();
+            if (Chrono.pomoRunning) Chrono.pomoToggle();
             return "OK";
         }
         function resumePomo(): string {
-            root.resumePomodoro();
+            if (Chrono.pomoActive && !Chrono.pomoRunning) Chrono.pomoToggle();
             return "OK";
         }
         function togglePomo(): string {
-            root.togglePomodoroPause();
+            Chrono.pomoToggle();
             return "OK";
         }
     }
@@ -1365,16 +1318,16 @@ for f in sorted_files:
     }
 
     // Modern hardware display rounded corners (Liquid Retina aesthetic, 100% click-through)
-    Variants {
-        model: Quickshell.screens
-
-        ScreenCorners {
-            required property var modelData
-            screen: modelData
-            cornerRadius: 16
-            cornerColor: "#000000"
-        }
-    }
+    // Variants {
+    //     model: Quickshell.screens
+    //
+    //     ScreenCorners {
+    //         required property var modelData
+    //         screen: modelData
+    //         cornerRadius: 16
+    //         cornerColor: "#000000"
+    //     }
+    // }
 
     // Main Notch Panel
     PanelWindow {
@@ -1417,6 +1370,8 @@ for f in sorted_files:
                 if (root.settingsOpen) {
                     return fullMaskArea;
                 }
+                if (root.notesPinned) return notchContainer;
+                if (root.wallSortMod && root.wallSortMod.browsingFolder) return notchContainer;
                 if (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "osd") {
                     return fullMaskArea;
                 }
@@ -1428,9 +1383,15 @@ for f in sorted_files:
                 }
                 return notchContainer;
             }
+
+            Region {
+                item: (root.isScreenRecording && recordingBubble.visible) ? recordingBubble : null
+            }
         }
 
-        WlrLayershell.keyboardFocus: (root.settingsOpen || (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "compact" && root.activeMode !== "workspace_peek" && root.activeMode !== "dashboard_peek" && root.activeMode !== "osd"))
+        WlrLayershell.keyboardFocus: root.notesPinned && !root.settingsOpen ? WlrKeyboardFocus.OnDemand
+            : (root.wallSortMod && root.wallSortMod.browsingFolder) ? WlrKeyboardFocus.None
+            : (root.settingsOpen || (root.activeMode !== "idle" && root.activeMode !== "hover" && root.activeMode !== "compact" && root.activeMode !== "workspace_peek" && root.activeMode !== "dashboard_peek" && root.activeMode !== "osd"))
             ? WlrKeyboardFocus.Exclusive
             : WlrKeyboardFocus.None
 
@@ -1484,6 +1445,9 @@ for f in sorted_files:
             anchors.fill: parent
             z: 0
             enabled: root.activeMode !== "idle" && root.activeMode !== "osd"
+                && !(root.activeMode === "wallsort" && root.wallSortMod?.sorting)
+                && !(root.wallSortMod && root.wallSortMod.browsingFolder)
+                && !root.notesPinned
             onClicked: {
                 root.collapseToIdle();
                 if (root.isWindowFullscreen) {
@@ -1535,17 +1499,20 @@ for f in sorted_files:
                 }
             }
 
-            // Notch Shadow System
+            // Notch Shadow System (Tight bounds prevent allocating 1920x1200 full-screen FBO textures)
             Item {
                 id: shadowSilhouette
-                anchors.fill: parent
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: notch.width + (root.cornerCurveRadius * 2) + 16
+                height: notch.height + 16
                 visible: false
 
                 Canvas {
                     id: sLeftWing
                     width: root.cornerCurveRadius; height: root.cornerCurveRadius
                     anchors.top: parent.top; anchors.right: sNotch.left; anchors.rightMargin: -1
-                    renderTarget: Canvas.FramebufferObject
+                    renderTarget: Canvas.Image
                     onPaint: {
                         var ctx = getContext("2d");
                         ctx.reset();
@@ -1575,7 +1542,7 @@ for f in sorted_files:
                     id: sRightWing
                     width: root.cornerCurveRadius; height: root.cornerCurveRadius
                     anchors.top: parent.top; anchors.left: sNotch.right; anchors.leftMargin: -1
-                    renderTarget: Canvas.FramebufferObject
+                    renderTarget: Canvas.Image
                     onPaint: {
                         var ctx = getContext("2d");
                         ctx.reset();
@@ -1631,7 +1598,7 @@ for f in sorted_files:
                 id: leftWing
                 width: root.cornerCurveRadius; height: root.cornerCurveRadius
                 anchors.top: parent.top; anchors.right: notch.left; anchors.rightMargin: -1 
-                renderTarget: Canvas.FramebufferObject
+                renderTarget: Canvas.Image
 
                 Connections { target: Theme; function onThemeReloaded() { leftWing.requestPaint(); } }
                 Connections { target: Theme; function onColorsChanged() { leftWing.requestPaint(); } }
@@ -1658,7 +1625,7 @@ for f in sorted_files:
                 id: rightWing
                 width: root.cornerCurveRadius; height: root.cornerCurveRadius
                 anchors.top: parent.top; anchors.left: notch.right; anchors.leftMargin: -1 
-                renderTarget: Canvas.FramebufferObject
+                renderTarget: Canvas.Image
 
                 Connections { target: Theme; function onThemeReloaded() { rightWing.requestPaint(); } }
                 Connections { target: Theme; function onColorsChanged() { rightWing.requestPaint(); } }
@@ -1701,101 +1668,128 @@ for f in sorted_files:
                 
                 radius: 0
                 bottomLeftRadius: root.targetRadius
-                bottomRightRadius: root.targetRadius
+                bottomRightRadius: bottomLeftRadius
+
+                readonly property int morphDuration: root.isOsdMode ? NotchConfig.animOsdMorph
+                    : root.isExpanding ? NotchConfig.popupOpenDuration(root.targetWidth, root.targetHeight)
+                    : NotchConfig.animNotchExit
+                readonly property var morphCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        duration: notch.morphDuration
                         easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                        easing.bezierCurve: notch.morphCurve
                     }
                 }
                 Behavior on height {
+                    // The disclosure already animates the measured height for these panels.
+                    enabled: !(root.activeMode === "wifi" && root.wifiMod?.resizingRows)
+                        && !(root.activeMode === "bluetooth" && root.btMod?.resizingRows)
                     NumberAnimation {
-                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        duration: notch.morphDuration
                         easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                        easing.bezierCurve: notch.morphCurve
                     }
                 }
                 Behavior on bottomLeftRadius {
                     NumberAnimation {
-                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
+                        duration: notch.morphDuration
                         easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
-                    }
-                }
-                Behavior on bottomRightRadius {
-                    NumberAnimation {
-                        duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
+                        easing.bezierCurve: notch.morphCurve
                     }
                 }
 
-                // 1. Persistent Dash Layer
+                // Keep the clock and dash controls at bar height while the panel expands.
                 Item {
                     id: dashContainer
+                    property int dashHeight: NotchConfig.modeDimensions["idle"].height
+
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    height: root.targetHeight
+                    height: Math.min(notch.height, dashHeight)
                     z: 5
 
-                    opacity: (root.isDashMode && root.activeMode !== "osd") ? 1.0 : 0.0
-                    visible: opacity > 0.01
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: root.isOsdMode ? NotchConfig.animOsdMorph : (root.isExpanding ? NotchConfig.animNotchEnter : NotchConfig.animNotchExit)
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: root.isExpanding ? NotchConfig.curveMorph : NotchConfig.curveAccel
-                        }
+                    Binding {
+                        target: dashContainer
+                        property: "dashHeight"
+                        value: root.targetHeight
+                        when: root.isDashMode
+                        restoreMode: Binding.RestoreNone
                     }
+
+                    opacity: root.isDashMode ? 1.0 : 0.0
+                    visible: opacity > 0.01
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: (root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animDashEnter : NotchConfig.animDashExit
+                            duration: root.isDashMode ? NotchConfig.animDashEnter : NotchConfig.animDashExit
                             easing.type: Easing.OutQuad
                         }
                     }
 
-                    MainDash { 
-                        id: dashMod 
+                    Loader {
+                        id: dashLoader
                         anchors.fill: parent
-                        settingsOpen: root.settingsOpen
-                        onSettingsRequested: {
-                            root.collapseToIdle();
-                            root.settingsOpen = !root.settingsOpen;
+                        asynchronous: false
+                        source: Qt.resolvedUrl("modules/MainDash.qml")
+                        onLoaded: {
+                            if (item) {
+                                item.settingsOpen = Qt.binding(() => root.settingsOpen);
+                                item.settingsRequested.connect(() => {
+                                    root.collapseToIdle();
+                                    root.settingsOpen = !root.settingsOpen;
+                                });
+                            }
                         }
                     }
                 }
 
-                // 2. Expanded Modules Container
+                // Lay out the panel at its destination size and let the surface reveal it.
                 Item {
                     id: modulesContainer
-                    anchors.fill: parent
-                    anchors.leftMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
-                    anchors.rightMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
-                    anchors.topMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
-                    anchors.bottomMargin: (root.activeMode === "music" || root.activeMode === "launcher" || root.activeMode === "wallpaper" || root.activeMode === "utility") ? 0 : 12
+                    property size layoutSize: Qt.size(0, 0)
+                    readonly property bool fullBleed: ["music", "launcher", "wallpaper", "utility"].includes(root.loadedExpandedMode)
+                    readonly property int inset: fullBleed ? 0 : 12
+                    readonly property real revealProgress: NotchConfig.popupReveal(root.loadedExpandedMode,
+                        layoutSize.width, layoutSize.height, inset, notch.width, notch.height)
+                    property real contentBlend: root.isExpanding ? 1 : 0
+                    property real pageBlend: 1
+
+                    anchors.top: parent.top
+                    anchors.topMargin: inset
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.max(0, layoutSize.width - 2 * inset)
+                    height: Math.max(0, layoutSize.height - 2 * inset)
                     z: 2
 
-                    opacity: (!root.isDashMode && root.activeMode !== "osd" && notch.height > 35) ? 1.0 : 0.0
-                    visible: opacity > 0.001
-                    enabled: !root.isDashMode && root.activeMode !== "osd"
-                    scale: (!root.isDashMode && root.activeMode !== "osd" && notch.height > 35) ? 1.0 : 0.97
-                    transformOrigin: Item.Top
+                    Binding {
+                        target: modulesContainer
+                        property: "layoutSize"
+                        value: Qt.size(root.targetWidth, root.targetHeight)
+                        when: root.isExpanding
+                        restoreMode: Binding.RestoreNone
+                    }
 
-                    Behavior on opacity {
+                    opacity: contentBlend * revealProgress * pageBlend
+                    visible: opacity > 0.001
+                    enabled: root.isExpanding
+
+                    Behavior on contentBlend {
                         NumberAnimation {
-                            duration: (!root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animContentEnter : NotchConfig.animContentExit
+                            duration: root.isExpanding ? NotchConfig.animContentEnter : NotchConfig.animContentExit
                             easing.type: Easing.OutCubic
                         }
                     }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: (!root.isDashMode && root.activeMode !== "osd") ? NotchConfig.animNotchEnter : NotchConfig.animContentExit
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: NotchConfig.curveMorph
-                        }
+
+                    NumberAnimation {
+                        id: pageReveal
+                        target: modulesContainer
+                        property: "pageBlend"
+                        from: 0
+                        to: 1
+                        duration: NotchConfig.animContentEnter
+                        easing.type: Easing.OutCubic
                     }
 
                     Loader {
@@ -1805,12 +1799,19 @@ for f in sorted_files:
                         source: root.getModuleSource(root.loadedExpandedMode)
                         onLoaded: {
                             if (!item) return;
+                            if (modulesContainer.contentBlend >= 0.95) {
+                                modulesContainer.pageBlend = 0;
+                                pageReveal.restart();
+                            }
                             if (root.loadedExpandedMode === "launcher") {
+                                if (!root.desktopEntriesIndexed) root.syncDesktopEntries();
                                 if (typeof item.onOpened === "function") item.onOpened();
                                 if (root.pendingSearchQuery !== "") {
                                     item.processSearch(root.pendingSearchQuery);
                                     root.pendingSearchQuery = "";
                                 }
+                            } else if (root.loadedExpandedMode === "theme") {
+                                item.notch = root;
                             } else if (root.loadedExpandedMode === "wifi") {
                                 if (typeof item.refreshStatus === "function") item.refreshStatus();
                             } else if (root.loadedExpandedMode === "utility") {
@@ -1842,9 +1843,11 @@ for f in sorted_files:
                     visible: opacity > 0.001
                     Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
-                    Osd {
-                        id: osdMod
+                    Loader {
+                        id: osdLoader
                         anchors.fill: parent
+                        active: root.activeMode === "osd"
+                        source: (root.activeMode === "osd") ? Qt.resolvedUrl("modules/Osd.qml") : ""
                     }
                 }
 
@@ -1885,6 +1888,113 @@ for f in sorted_files:
             }
         }
 
+        // Inir-style Floating Screen Recording Bubble (Squircle Island next to the bar)
+        Item {
+            id: recordingBubble
+            z: 2
+            visible: opacity > 0.001
+            opacity: root.isScreenRecording ? 1.0 : 0.0
+            scale: root.isScreenRecording ? 1.0 : 0.75
+            transformOrigin: Item.Center
+
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+
+            // Align organically to the right wing of the notch
+            anchors.left: notchContainer.right
+            anchors.leftMargin: 8
+            anchors.top: notchContainer.top
+            anchors.topMargin: (notch.height <= 36) ? Math.max(0, (notch.height - height) / 2) : 2
+
+            width: bubbleContentRow.implicitWidth + 24
+            height: 32
+
+            Rectangle {
+                id: bubbleSilhouette
+                anchors.fill: parent
+                radius: 12
+                color: root.notchSurfaceColor
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: bubbleSilhouette
+                source: bubbleSilhouette
+                z: -1
+                shadowEnabled: NotchConfig.shadowEnabled
+                shadowColor: NotchConfig.shadowColor
+                shadowOpacity: NotchConfig.shadowOpacity
+                shadowBlur: NotchConfig.shadowBlur
+                shadowVerticalOffset: NotchConfig.shadowVerticalOffset
+            }
+
+            Rectangle {
+                id: bubbleBg
+                anchors.fill: parent
+                radius: 12
+                color: root.notchSurfaceColor
+                border.width: 0
+
+                // Subtle hover highlight
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: bubbleMouse.containsMouse
+                        ? (bubbleMouse.pressed ? Qt.rgba(255, 84, 73, 0.22) : Qt.rgba(255, 84, 73, 0.14))
+                        : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+            }
+
+            Row {
+                id: bubbleContentRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                // Pulsing red recording dot
+                Rectangle {
+                    width: 7
+                    height: 7
+                    radius: 3.5
+                    color: root.isScreenRecordingPaused
+                        ? (Theme.colors.warning || "#fbbf24")
+                        : (Theme.colors.error || "#ff5449")
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    SequentialAnimation on opacity {
+                        running: root.isScreenRecording && !root.isScreenRecordingPaused
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.25; duration: 600; easing.type: Easing.InOutQuad }
+                        NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                    }
+                }
+
+                // Live elapsed duration readout
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.formatRecTime(root.screenRecordSeconds)
+                    color: root.isScreenRecordingPaused
+                        ? (Theme.colors.warning || "#fbbf24")
+                        : (Theme.colors.error || "#ff5449")
+                    font.family: "Readex Pro"
+                    font.pixelSize: 12
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                    renderType: Text.NativeRendering
+                }
+            }
+
+            MouseArea {
+                id: bubbleMouse
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: {
+                    root.switchMode("recorder", true);
+                }
+            }
+        }
+
         // Expressive Settings Modal Window (The Goat Architecture)
         Rectangle {
             id: settingsBackdrop
@@ -1903,9 +2013,10 @@ for f in sorted_files:
                 onClicked: root.settingsOpen = false
             }
 
-            SettingsWindow {
-                id: settingsModal
-                activePageId: root.initialSettingsPage
+            Loader {
+                id: settingsModalLoader
+                active: root.settingsOpen
+                asynchronous: true
                 anchors.centerIn: parent
                 width: Math.min(panel.width - 48, 1040)
                 height: Math.min(panel.height - 64, 680)
@@ -1919,7 +2030,15 @@ for f in sorted_files:
                     NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
                 }
 
-                onCloseRequested: root.settingsOpen = false
+                source: root.settingsOpen ? Qt.resolvedUrl("modules/SettingsWindow.qml") : ""
+                onLoaded: {
+                    if (item) {
+                        item.activePageId = root.initialSettingsPage;
+                        if (typeof item.closeRequested !== "undefined") {
+                            item.closeRequested.connect(() => { root.settingsOpen = false; });
+                        }
+                    }
+                }
             }
         }
     }

@@ -20,9 +20,7 @@ Item {
 
         anchors.fill: parent
         radius: BtUi.Theme.pill(height)
-        color: sw.checked ? BtUi.Theme.primary : BtUi.Theme.bgSunken
-        border.width: sw.checked ? 0 : 2
-        border.color: BtUi.Theme.outlineStrong
+        color: sw.checked ? BtUi.Theme.primary : BtUi.Theme.alpha(BtUi.Theme.text, 0.12)
 
         Behavior on color {
             ColorAnimation {

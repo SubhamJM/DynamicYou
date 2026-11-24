@@ -80,8 +80,6 @@ Item {
         anchors.fill: parent
         radius: area.pressed ? Math.min(BtUi.Theme.pill(ib.btnH), BtUi.Theme.rad(10)) : (ib.on && ib.variant !== "standard" ? Math.min(BtUi.Theme.pill(ib.btnH), BtUi.Theme.rad(12)) : BtUi.Theme.pill(ib.btnH))
         color: ib.container
-        border.width: ib.variant === "outlined" && !ib.on ? 1 : 0
-        border.color: BtUi.Theme.outline
 
         Behavior on radius {
             NumberAnimation {

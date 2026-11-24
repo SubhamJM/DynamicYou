@@ -1,650 +1,410 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
-import QtQuick.Controls
-import Quickshell
 import Quickshell.Io
-import Quickshell.Widgets
 import qs
-import qs.lucidui
 import qs.luciddocks
-import "../"
+import qs.lucidui as Lucid
 
 FocusScope {
-    id: themeSelector
+    id: picker
     anchors.fill: parent
     focus: true
-    Keys.forwardTo: (searchInput) ? [searchInput] : []
 
+    property var notch: null
     property alias searchInput: searchInput
-    property var allThemes: []
-    property var filteredThemes: []
-    property int selectedIndex: 0
-
-    function getThemeGlyph(name) {
-        var n = (name || "").toLowerCase();
-        if (n.indexOf("abyss") !== -1) return "water_drop";
-        if (n.indexOf("afterglow") !== -1) return "auto_awesome";
-        if (n.indexOf("astral") !== -1) return "diamond";
-        if (n.indexOf("cloud") !== -1) return "cloud";
-        if (n.indexOf("crimson") !== -1) return "bolt";
-        if (n.indexOf("cyber") !== -1) return "terminal";
-        if (n.indexOf("frost") !== -1) return "ac_unit";
-        if (n.indexOf("serenity") !== -1) return "eco";
-        if (n.indexOf("solstice") !== -1) return "wb_sunny";
-        if (n.indexOf("verdant") !== -1) return "spa";
-        return "palette";
+    property var themes: []
+    property string applyError: ""
+    property bool scanFailed: false
+    property bool stripReady: false
+    property int refreshGeneration: 0
+    property string activeName: ""
+    property bool opening: true
+    readonly property var results: {
+        const query = searchInput.text.trim().toLowerCase().replace(/^(>themes?|>)/, "").trim();
+        return themes.filter(theme => !query || [theme.themeName, theme.rawName].some(name => name.toLowerCase().includes(query)));
     }
+    readonly property var activeTheme: themes.find(theme => {
+        const active = picker.activeName.toLowerCase().trim();
+        return theme.rawName.toLowerCase() === active || theme.themeName.toLowerCase().trim() === active;
+    }) ?? null
+    readonly property var selected: results[strip.currentIndex] ?? null
 
-    function applyThemeAt(idx) {
-        if (idx >= 0 && idx < filteredThemes.length) {
-            var t = filteredThemes[idx];
-            if (t && t.rawName) {
-                var home = Quickshell.env("HOME") || "";
-                Quickshell.execDetached(["bash", home + "/.config/hypr/scripts/apply-theme.sh", t.rawName]);
-                Theme.currentThemeName = t.rawName;
-                if (typeof root !== "undefined") root.activeMode = "idle";
-            }
+    function forceThemeFocus() {
+        if (picker.notch && picker.notch.activeMode === "theme") {
+            picker.opening = true;
+            activeNameReader.running = false;
+            activeNameReader.running = true;
         }
+        searchInput.forceActiveFocus();
     }
 
-    function applyCurrentTheme() {
-        themeSelector.applyThemeAt(themeSelector.selectedIndex);
+    function resetSearch() {
+        searchInput.clear();
+        applyError = "";
+        centerActive();
     }
 
-    Keys.onLeftPressed: (event) => {
-        if (themeSelector.filteredThemes.length > 0) {
-            themeSelector.selectedIndex = Math.max(0, themeSelector.selectedIndex - 1);
-        }
-        event.accepted = true;
-    }
-    Keys.onRightPressed: (event) => {
-        if (themeSelector.filteredThemes.length > 0) {
-            themeSelector.selectedIndex = Math.min(themeSelector.filteredThemes.length - 1, themeSelector.selectedIndex + 1);
-        }
-        event.accepted = true;
-    }
-    Keys.onUpPressed: (event) => {
-        if (themeSelector.filteredThemes.length > 0) {
-            themeSelector.selectedIndex = Math.max(0, themeSelector.selectedIndex - 5);
-        }
-        event.accepted = true;
-    }
-    Keys.onDownPressed: (event) => {
-        if (themeSelector.filteredThemes.length > 0) {
-            themeSelector.selectedIndex = Math.min(themeSelector.filteredThemes.length - 1, themeSelector.selectedIndex + 5);
-        }
-        event.accepted = true;
-    }
-    Keys.onReturnPressed: (event) => {
-        themeSelector.applyCurrentTheme();
-        event.accepted = true;
-    }
-    Keys.onEnterPressed: (event) => {
-        themeSelector.applyCurrentTheme();
-        event.accepted = true;
-    }
-    Keys.onSpacePressed: (event) => {
-        themeSelector.applyCurrentTheme();
-        event.accepted = true;
-    }
-    Keys.onEscapePressed: (event) => {
-        if (typeof root !== "undefined") root.collapseToIdle();
-        event.accepted = true;
-    }
-    Keys.onTabPressed: (event) => {
-        if (typeof root !== "undefined") root.switchMode("wallpaper", true);
-        event.accepted = true;
+    function centerActive() {
+        const activeName = activeTheme?.rawName ?? "";
+        const index = results.findIndex(theme => theme.rawName === activeName);
+        strip.setIndexImmediate(results.length ? Math.max(0, index) : -1);
     }
 
-    Component.onCompleted: {
-        themeSelector.scanThemes();
+    function refreshStrip() {
+        const generation = ++refreshGeneration;
         Qt.callLater(() => {
-            if (searchInput) searchInput.forceActiveFocus();
+            if (generation === picker.refreshGeneration) picker.centerActive();
         });
     }
+
+    function applyTheme(name) {
+        if (!name || Theme.presetApplying) return;
+        applyError = "";
+        Theme.applyPreset(name);
+    }
+
+    function dismiss() {
+        if (searchInput.text !== "") {
+            searchInput.clear();
+            searchInput.forceActiveFocus();
+        } else if (notch) {
+            notch.collapseToIdle();
+        }
+    }
+
+    function openWallpapers() {
+        if (notch) notch.switchMode("wallpaper", true);
+    }
+
+    onResultsChanged: {
+        if (stripReady) refreshStrip();
+    }
+    Component.onCompleted: {
+        stripReady = true;
+        refreshStrip();
+        forceThemeFocus();
+    }
+    Keys.onLeftPressed: event => { strip.step(-1); event.accepted = true; }
+    Keys.onRightPressed: event => { strip.step(1); event.accepted = true; }
+    Keys.onEscapePressed: event => { dismiss(); event.accepted = true; }
+    Keys.onReturnPressed: event => { strip.activateCurrent(); event.accepted = true; }
+    Keys.onEnterPressed: event => { strip.activateCurrent(); event.accepted = true; }
 
     Connections {
         target: Theme
         function onCurrentThemeNameChanged() {
-            themeSelector.selectActiveTheme();
+            picker.activeName = Theme.currentThemeName;
+            if (picker.notch && picker.notch.activeMode === "theme") picker.centerActive();
         }
-    }
-
-    Connections {
-        target: (typeof root !== "undefined") ? root : null
-        function onActiveModeChanged() {
-            if (root.activeMode === "theme") {
-                themeSelector.resetSearch();
-                Qt.callLater(() => {
-                    themeSelector.selectActiveTheme();
-                    if (searchInput) searchInput.forceActiveFocus();
-                });
+        function onPresetApplyFinished(success) {
+            if (!success) {
+                picker.applyError = "Couldn’t apply this theme. Try again.";
+            } else if (picker.notch && picker.notch.activeMode === "theme") {
+                picker.notch.collapseToIdle();
             }
         }
     }
 
-    onVisibleChanged: {
-        if (visible) {
-            if (allThemes.length === 0) {
-                themeSelector.scanThemes();
-            } else {
-                filterThemes();
-                selectActiveTheme();
-            }
-            if (searchInput) searchInput.forceActiveFocus();
-        }
-    }
-
-    function forceThemeFocus() {
-        if (searchInput) searchInput.forceActiveFocus();
-    }
-
-    function resetSearch() {
-        if (searchInput && searchInput.text !== "") {
-            searchInput.text = "";
-        }
-        filterThemes();
-        selectActiveTheme();
-    }
-
-    function filterThemes() {
-        var q = (searchInput ? searchInput.text : "").trim().toLowerCase();
-        if (q.startsWith(">theme")) {
-            q = q.substring(6).trim();
-        } else if (q.startsWith(">")) {
-            q = q.substring(1).trim();
-        }
-
-        if (!q) {
-            filteredThemes = allThemes.slice();
-        } else {
-            filteredThemes = allThemes.filter(function(t) {
-                return (t.themeName && t.themeName.toLowerCase().indexOf(q) !== -1) ||
-                       (t.rawName && t.rawName.toLowerCase().indexOf(q) !== -1);
-            });
-        }
-        themeSelector.selectedIndex = 0;
-    }
-
-    function selectActiveTheme() {
-        var cur = (Theme.currentThemeName || "").toLowerCase().trim();
-        for (var i = 0; i < filteredThemes.length; i++) {
-            var item = filteredThemes[i];
-            if ((item.rawName && item.rawName.toLowerCase().trim() === cur) ||
-                (item.themeName && item.themeName.toLowerCase().trim() === cur)) {
-                themeSelector.selectedIndex = i;
-                break;
-            }
-        }
-    }
-
-    function scanThemes() {
-        if (themeScanner.running) themeScanner.running = false;
-        Qt.callLater(() => {
-            themeScanner.running = true;
-        });
-    }
-
-    // Scans all themes in ~/.config/themes via python helper
     Process {
-        id: themeScanner
-        running: false
+        id: activeNameReader
+        command: ["cat", Theme.activeThemeDir + "/theme-name.txt"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                picker.activeName = text.trim() || Theme.currentThemeName;
+                picker.centerActive();
+                revealTimer.restart();
+            }
+        }
+        onExited: code => {
+            if (code !== 0) {
+                picker.activeName = Theme.currentThemeName;
+                picker.centerActive();
+                revealTimer.restart();
+            }
+        }
+    }
+    Timer {
+        id: revealTimer
+        interval: 1
+        onTriggered: {
+            if (!scanner.running && !activeNameReader.running) picker.opening = false;
+            else restart();
+        }
+    }
+
+    Process {
+        id: scanner
+        running: true
         command: ["python3", NotchConfig.scriptsDir + "/theme_scanner.py"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    var data = JSON.parse(this.text.trim());
-                    if (Array.isArray(data)) {
-                        allThemes = data;
-                        themeSelector.filterThemes();
-                        Qt.callLater(() => themeSelector.selectActiveTheme());
-                    }
-                } catch(e) {
-                    console.error("Theme JSON parse error:", e);
+                    const entries = JSON.parse(text);
+                    if (!Array.isArray(entries)) throw new Error("Expected a list of themes");
+                    picker.scanFailed = false;
+                    picker.themes = entries;
+                    if (picker.opening) revealTimer.restart();
+                } catch (error) {
+                    picker.scanFailed = true;
+                    console.warn("Could not read theme list:", error);
                 }
+            }
+        }
+        onExited: code => { if (code !== 0) picker.scanFailed = true; }
+    }
+
+    Item {
+        id: strip
+        anchors.top: parent.top
+        anchors.topMargin: 6
+        anchors.bottom: statusLine.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        clip: true
+        visible: picker.results.length > 0 && !picker.opening
+        property int currentIndex: -1
+        property bool immediate: true
+        readonly property int heroW: 180
+        readonly property int midW: 124
+        readonly property int smallW: 77
+        readonly property int gap: 10
+
+        function setIndexImmediate(index) {
+            immediate = true;
+            currentIndex = index;
+            Qt.callLater(() => strip.immediate = false);
+        }
+        function step(direction) {
+            if (!picker.results.length || Theme.presetApplying) return;
+            immediate = false;
+            currentIndex = Math.max(0, Math.min(picker.results.length - 1, currentIndex + direction));
+        }
+        function activateCurrent() {
+            if (picker.selected) picker.applyTheme(picker.selected.rawName);
+        }
+        function cardWidth(distance) {
+            return heroW;
+        }
+        function offset(distance) {
+            let result = heroW / 2 + gap;
+            for (let i = 1; i < distance; i++) result += cardWidth(i) + gap;
+            return result;
+        }
+        onCurrentIndexChanged: picker.applyError = ""
+
+        Repeater {
+            model: picker.results
+            delegate: Rectangle {
+                id: swatch
+                required property var modelData
+                required property int index
+                readonly property int distance: Math.abs(index - strip.currentIndex)
+                readonly property bool active: modelData.rawName === picker.activeTheme?.rawName
+                width: strip.cardWidth(distance)
+                height: 100
+                x: (strip.width - width) / 2 + (index - strip.currentIndex) * (strip.heroW + strip.gap)
+                y: (strip.height - height) / 2
+                z: 10 - distance
+                radius: 16
+                opacity: distance < 2 ? 1 : 0.55
+                color: modelData.cardBg || Theme.bgTile
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: swatch.color }
+                    GradientStop { position: 1; color: Qt.tint(swatch.color, Theme.alpha(swatch.modelData.accentColor || Theme.accent, 0.2)) }
+                }
+                Behavior on x { enabled: !strip.immediate && !picker.opening; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on opacity { enabled: !strip.immediate && !picker.opening; NumberAnimation { duration: 180 } }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    anchors.bottom: paletteBar.top
+                    anchors.bottomMargin: 10
+                    text: swatch.modelData.themeName
+                    color: swatch.modelData.textColor || Theme.text
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: swatch.distance === 0 ? 20 : 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    visible: swatch.distance < 2
+                }
+                Text {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 10
+                    text: "✓"
+                    color: swatch.modelData.accentColor || Theme.accent
+                    font.pixelSize: 15
+                    visible: swatch.active
+                }
+                Row {
+                    id: paletteBar
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: swatch.distance === 0 ? 14 : 7
+                    height: swatch.distance === 0 ? 10 : 6
+                    Repeater {
+                        model: swatch.modelData.palette || []
+                        Rectangle {
+                            required property color modelData
+                            width: paletteBar.width / Math.max(1, swatch.modelData.palette.length)
+                            height: paletteBar.height
+                            color: modelData
+                        }
+                    }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !Theme.presetApplying
+                    onClicked: {
+                        if (strip.currentIndex === swatch.index) strip.activateCurrent();
+                        else { strip.immediate = false; strip.currentIndex = swatch.index; }
+                    }
+                }
+            }
+        }
+        WheelHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: event => { strip.step(event.angleDelta.y < 0 || event.angleDelta.x < 0 ? 1 : -1); event.accepted = true; }
+        }
+    }
+
+    Text {
+        anchors.centerIn: strip
+        visible: picker.results.length === 0 && !picker.opening
+        text: picker.scanFailed ? "Couldn’t load themes"
+            : scanner.running ? "Loading themes…"
+            : searchInput.text.trim() !== "" ? "No matching themes" : "No installed themes"
+        color: Theme.subtext
+        font.family: Theme.fontFamilyBody
+        font.pixelSize: 14
+    }
+
+    Text {
+        id: statusLine
+        anchors.bottom: searchBar.top
+        anchors.bottomMargin: 4
+        anchors.horizontalCenter: parent.horizontalCenter
+        height: 17
+        visible: !picker.opening
+        text: picker.applyError || (Theme.presetApplying ? "Applying…"
+            : picker.selected ? picker.selected.themeName
+                + (picker.selected.rawName === picker.activeTheme?.rawName ? "  ·  Active" : "")
+                + "  ·  " + (strip.currentIndex + 1) + " / " + picker.results.length : "")
+        color: picker.applyError ? Theme.error : Theme.subtext
+        font.family: Theme.fontFamilyBody
+        font.pixelSize: 11
+    }
+
+    Rectangle {
+        id: searchBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
+        anchors.bottomMargin: 12
+        height: 40
+        radius: 12
+        color: Theme.alpha(Theme.text, searchInput.activeFocus ? 0.10 : 0.06)
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 6
+            spacing: 8
+
+            Lucid.Icon {
+                name: "search"
+                size: 15
+                color: Theme.subtext
+            }
+
+            Controls.TextField {
+                id: searchInput
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                padding: 4
+                background: null
+                placeholderText: "Search themes"
+                placeholderTextColor: Theme.subtext
+                font.family: Theme.fontFamilyBody
+                font.pixelSize: 13
+                color: Theme.text
+                selectionColor: Theme.accent
+                selectedTextColor: Theme.fgAccent
+
+                Keys.onLeftPressed: event => {
+                    if (cursorPosition === 0) {
+                        strip.step(-1);
+                        event.accepted = true;
+                    }
+                }
+                Keys.onRightPressed: event => {
+                    if (cursorPosition === text.length) {
+                        strip.step(1);
+                        event.accepted = true;
+                    }
+                }
+                Keys.onUpPressed: event => { strip.step(-1); event.accepted = true; }
+                Keys.onDownPressed: event => { strip.step(1); event.accepted = true; }
+                Keys.onTabPressed: event => {
+                    if (picker.notch) {
+                        picker.openWallpapers();
+                        event.accepted = true;
+                    }
+                }
+                Keys.onEscapePressed: event => { picker.dismiss(); event.accepted = true; }
+                Keys.onReturnPressed: event => { strip.activateCurrent(); event.accepted = true; }
+                Keys.onEnterPressed: event => { strip.activateCurrent(); event.accepted = true; }
+                onTextEdited: {
+                    if (/^>wall(?:paper(?:s)?)?$/i.test(text.trim())) picker.openWallpapers();
+                }
+            }
+
+            PickerButton {
+                text: "Wallpapers"
+                visible: picker.notch !== null
+                onClicked: picker.openWallpapers()
+            }
+
+            PickerButton {
+                text: "Apply"
+                primary: true
+                enabled: picker.selected !== null && !Theme.presetApplying
+                onClicked: strip.activateCurrent()
             }
         }
     }
 
-    // ==========================================
-    // UI LAYOUT (Iris Theme Gallery Grid)
-    // ==========================================
-    Item {
-        anchors.fill: parent
+    component PickerButton: Controls.Button {
+        id: button
+        property bool primary: false
+        implicitHeight: 32
+        leftPadding: 12
+        rightPadding: 12
+        focusPolicy: Qt.NoFocus
+        hoverEnabled: true
 
-        // ------------------------------------------
-        // Center: Iris Theme Cards Grid (5 x 2 layout)
-        // ------------------------------------------
-        Item {
-            id: gridContainer
-            anchors.top: parent.top
-            anchors.topMargin: 12
-            anchors.bottom: searchBar.top
-            anchors.bottomMargin: 10
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            clip: true
-
-            Flickable {
-                id: flick
-                anchors.fill: parent
-                contentWidth: width
-                contentHeight: flowGrid.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
-                clip: true
-
-                Flow {
-                    id: flowGrid
-                    width: flick.width
-                    spacing: 12
-
-                    Repeater {
-                        model: themeSelector.filteredThemes
-
-                        Item {
-                            id: cardRoot
-                            width: Math.floor((flowGrid.width - 4 * flowGrid.spacing) / 5)
-                            height: 114
-
-                            readonly property var themeItem: modelData
-                            readonly property bool isCurrent: Theme.currentThemeName === themeItem.rawName
-                            readonly property bool isHighlighted: themeSelector.selectedIndex === index
-                            readonly property color accentCol: themeItem.accentColor || Theme.accent
-
-                            // Concentric Active Selection Ring (Iris 1:1 signature)
-                            Rectangle {
-                                anchors.fill: plate
-                                anchors.margins: -3
-                                radius: plate.radius + 3
-                                color: "transparent"
-                                visible: cardRoot.isCurrent || cardRoot.isHighlighted
-                                border.width: 2
-                                border.color: cardRoot.accentCol
-
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-                            }
-
-                            // Theme Plate Card
-                            Rectangle {
-                                id: plate
-                                anchors.fill: parent
-                                radius: 14
-                                color: cardRoot.themeItem.cardBg || "#14141e"
-                                border.width: 1
-                                border.color: cardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.22) : Qt.rgba(255, 255, 255, 0.08)
-                                scale: cardMouse.pressed ? 0.96 : (cardMouse.containsMouse ? 1.025 : 1.0)
-                                clip: true
-
-                                Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
-                                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                                // Lit 1px top edge rim highlight
-                                Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    width: parent.width - 16
-                                    height: 1
-                                    color: Qt.rgba(255, 255, 255, 0.16)
-                                }
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 9
-                                    spacing: 4
-
-                                    // Top Header: Glyph + Name + Checkmark Badge
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 5
-
-                                        Icon {
-                                            name: themeSelector.getThemeGlyph(cardRoot.themeItem.rawName)
-                                            size: 15
-                                            color: cardRoot.accentCol
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: cardRoot.themeItem.themeName || cardRoot.themeItem.rawName
-                                            font.family: Theme.fontFamilyBody
-                                            font.pixelSize: 12
-                                            font.bold: true
-                                            color: cardRoot.themeItem.textColor || "#ffffff"
-                                            elide: Text.ElideRight
-                                        }
-
-                                        Rectangle {
-                                            visible: cardRoot.isCurrent
-                                            width: 15
-                                            height: 15
-                                            radius: 7.5
-                                            color: cardRoot.accentCol
-
-                                            Icon {
-                                                anchors.centerIn: parent
-                                                name: "check"
-                                                size: 10
-                                                color: cardRoot.themeItem.cardBg || "#000000"
-                                            }
-                                        }
-                                    }
-
-                                    // Middle Typographic "Aa" Specimen + Tone
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
-
-                                        Text {
-                                            text: "Aa"
-                                            font.family: Theme.fontFamilyTitle
-                                            font.pixelSize: 21
-                                            font.bold: true
-                                            color: cardRoot.themeItem.textColor || "#ffffff"
-                                            opacity: 0.90
-                                        }
-
-                                        Item { Layout.fillWidth: true }
-
-                                        Rectangle {
-                                            height: 15
-                                            width: cardRoot.themeItem.rawName.length * 6 + 10
-                                            radius: 7.5
-                                            color: Qt.alpha(cardRoot.accentCol, 0.15)
-                                            border.width: 1
-                                            border.color: Qt.alpha(cardRoot.accentCol, 0.40)
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: cardRoot.themeItem.rawName
-                                                font.pixelSize: 9
-                                                font.bold: true
-                                                color: cardRoot.accentCol
-                                            }
-                                        }
-                                    }
-
-                                    // Iris Screen Time Ribbon (multi-color segmented pill)
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 6
-                                        radius: 3
-                                        color: Qt.rgba(255, 255, 255, 0.08)
-                                        clip: true
-
-                                        Row {
-                                            anchors.fill: parent
-                                            spacing: 1.5
-
-                                            readonly property var p: cardRoot.themeItem.palette || []
-                                            readonly property var shares: [0.32, 0.22, 0.18, 0.15, 0.13]
-
-                                            Repeater {
-                                                model: Math.min(parent.p.length, parent.shares.length)
-
-                                                Rectangle {
-                                                    width: Math.floor(parent.parent.width * parent.shares[index])
-                                                    height: parent.parent.height
-                                                    radius: 2.5
-                                                    color: parent.p[index]
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Bottom: 6 Palette Dots
-                                    Row {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        spacing: 4
-
-                                        Repeater {
-                                            model: (cardRoot.themeItem.palette && cardRoot.themeItem.palette.length >= 6)
-                                                ? cardRoot.themeItem.palette.slice(0, 6)
-                                                : []
-
-                                            Rectangle {
-                                                width: 6
-                                                height: 6
-                                                radius: 3
-                                                color: modelData
-                                            }
-                                        }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: cardMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        themeSelector.selectedIndex = index;
-                                        themeSelector.applyThemeAt(index);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        contentItem: Text {
+            text: button.text
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 12
+            color: button.primary && button.enabled ? (Theme.fgPrimary || "#101014") : Theme.text
+            opacity: button.enabled ? 1 : 0.4
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-
-        // ------------------------------------------
-        // Bottom: Material 3 Search Bar Pill (Border-free, White text)
-        // ------------------------------------------
-        Rectangle {
-            id: searchBar
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 14
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            height: 48
-            radius: 24
-            color: searchInput.activeFocus ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.07)
-            border.width: 0
-            border.color: "transparent"
-
-            Behavior on color { ColorAnimation { duration: 140 } }
-
-            MouseArea {
-                anchors.fill: parent
-                z: -1
-                cursorShape: Qt.IBeamCursor
-                onClicked: {
-                    if (searchInput) searchInput.forceActiveFocus();
-                }
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
-                spacing: 8
-
-                // Back Button
-                Item {
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    Layout.alignment: Qt.AlignVCenter
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: width / 2
-                        color: backMouse.pressed ? Qt.rgba(255, 255, 255, 0.16) : (backMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                    }
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "arrow_back"
-                        size: 20
-                        color: backMouse.containsMouse ? "#ffffff" : Qt.rgba(255, 255, 255, 0.75)
-                    }
-
-                    MouseArea {
-                        id: backMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (typeof root !== "undefined") root.collapseToIdle();
-                        }
-                    }
-                }
-
-                // Input + Ghost Placeholder Container
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-                        visible: searchInput.text === ""
-                        text: ">theme"
-                        font.family: Theme.fontFamilyBody
-                        font.pixelSize: 14
-                        color: Qt.rgba(255, 255, 255, 0.65)
-                    }
-
-                    TextInput {
-                        id: searchInput
-                        anchors.fill: parent
-                        verticalAlignment: TextInput.AlignVCenter
-                        font.family: Theme.fontFamilyBody
-                        font.pixelSize: 14
-                        color: "#ffffff"
-                        selectionColor: Theme.accent
-                        selectedTextColor: Theme.fgAccent
-                        clip: true
-
-                        onTextChanged: {
-                            var t = text.trim().toLowerCase();
-                            if (t === ">wallpaper" || t === ">wallpapers" || t === ">wall") {
-                                if (typeof root !== "undefined") root.switchMode("wallpaper", true);
-                                return;
-                            }
-                            themeSelector.filterThemes();
-                        }
-
-                        Keys.onLeftPressed: (event) => {
-                            if (cursorPosition === 0) {
-                                themeSelector.selectedIndex = Math.max(0, themeSelector.selectedIndex - 1);
-                                event.accepted = true;
-                            }
-                        }
-                        Keys.onRightPressed: (event) => {
-                            if (cursorPosition === text.length) {
-                                themeSelector.selectedIndex = Math.min(themeSelector.filteredThemes.length - 1, themeSelector.selectedIndex + 1);
-                                event.accepted = true;
-                            }
-                        }
-                        Keys.onUpPressed: (event) => {
-                            themeSelector.selectedIndex = Math.max(0, themeSelector.selectedIndex - 5);
-                            event.accepted = true;
-                        }
-                        Keys.onDownPressed: (event) => {
-                            themeSelector.selectedIndex = Math.min(themeSelector.filteredThemes.length - 1, themeSelector.selectedIndex + 5);
-                            event.accepted = true;
-                        }
-                        Keys.onReturnPressed: (event) => {
-                            themeSelector.applyCurrentTheme();
-                            event.accepted = true;
-                        }
-                        Keys.onEnterPressed: (event) => {
-                            themeSelector.applyCurrentTheme();
-                            event.accepted = true;
-                        }
-                        Keys.onEscapePressed: (event) => {
-                            if (searchInput.text !== "") {
-                                searchInput.text = "";
-                            } else if (typeof root !== "undefined") {
-                                root.collapseToIdle();
-                            }
-                            event.accepted = true;
-                        }
-                        Keys.onTabPressed: (event) => {
-                            if (typeof root !== "undefined") root.switchMode("wallpaper", true);
-                            event.accepted = true;
-                        }
-                    }
-                }
-
-                // Clear button
-                Rectangle {
-                    visible: searchInput.text !== ""
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    Layout.alignment: Qt.AlignVCenter
-                    radius: 12
-                    color: clearMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.14) : "transparent"
-
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "close"
-                        size: 16
-                        color: "#ffffff"
-                    }
-
-                    MouseArea {
-                        id: clearMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            searchInput.text = "";
-                            searchInput.forceActiveFocus();
-                        }
-                    }
-                }
-
-                // Switch to Wallpapers Button
-                Rectangle {
-                    Layout.preferredHeight: 32
-                    Layout.preferredWidth: wallBtnRow.implicitWidth + 24
-                    Layout.alignment: Qt.AlignVCenter
-                    radius: 16
-                    color: wallBtnMouse.pressed ? Qt.rgba(255, 255, 255, 0.18) : (wallBtnMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.06))
-                    border.width: 1
-                    border.color: wallBtnMouse.containsMouse ? Theme.accent : Qt.rgba(255, 255, 255, 0.12)
-
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                    Row {
-                        id: wallBtnRow
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        Icon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            name: "wallpaper"
-                            size: 16
-                            color: Theme.accent
-                        }
-
-                        LText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            role: "labelMedium"
-                            text: "Wallpapers"
-                            font.bold: true
-                            color: "#ffffff"
-                        }
-                    }
-
-                    MouseArea {
-                        id: wallBtnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (typeof root !== "undefined") root.switchMode("wallpaper", true);
-                        }
-                    }
-                }
-            }
+        background: Rectangle {
+            radius: 9
+            color: button.primary && button.enabled ? Theme.accent
+                : Theme.alpha(Theme.text, button.hovered && button.enabled ? 0.14 : 0.07)
         }
     }
 }

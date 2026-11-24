@@ -20,6 +20,7 @@ import argparse
 import json
 import math
 import shutil
+import tempfile
 from pathlib import Path
 from PIL import Image
 
@@ -150,8 +151,8 @@ def classify_wallpaper(img_path):
             hex_color = f"#{chosen_rgb[0]:02x}{chosen_rgb[1]:02x}{chosen_rgb[2]:02x}"
             return best_theme, chosen_rgb, hex_color
 
-    except Exception:
-        return "Frost", (200, 200, 200), THEME_HEX["Frost"]
+    except (OSError, Image.DecompressionBombError) as error:
+        raise ValueError(f"Could not read image: {img_path.name}") from error
 
 def collect_existing_names(dest_dir):
     """Gathers all existing wallpaper filenames across destination theme subfolders."""
@@ -166,6 +167,17 @@ def collect_existing_names(dest_dir):
             existing.add(item.name.lower())
     return existing
 
+
+def copy_image(source, destination):
+    # Keep the final filename out of the picker until the copy is complete.
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".wallpaper-") as directory:
+        temporary = Path(directory) / destination.name
+        shutil.copy2(source, temporary)
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(destination)
+        os.replace(temporary, destination)
+
+
 def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
     """
     Scans source_dir for images, deduplicates by filename, classifies via Material You,
@@ -174,16 +186,22 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
     source_path = Path(source_dir).expanduser().resolve()
     dest_path = Path(dest_dir).expanduser().resolve()
 
-    if not source_path.is_dir():
+    if not source_path.is_dir() or source_path.is_relative_to(dest_path):
+        message = (f"Source folder does not exist: {source_path}" if not source_path.is_dir()
+                   else "Choose a source folder outside ~/Pictures/Wallpapers.")
         if as_json:
-            print(json.dumps({"type": "error", "message": f"Source directory does not exist: {source_path}"}), flush=True)
+            print(json.dumps({"type": "error", "message": message}), flush=True)
         else:
-            print(f"Error: Source directory does not exist: {source_path}", file=sys.stderr)
+            print(f"Error: {message}", file=sys.stderr)
         return False
 
     extensions = {".jpg", ".jpeg", ".png", ".webp"}
-    # Gather all image files
-    files = [f for f in source_path.rglob("*") if f.is_file() and f.suffix.lower() in extensions]
+    files = []
+    for folder, directories, names in os.walk(source_path):
+        folder = Path(folder)
+        directories[:] = [name for name in directories if folder / name != dest_path]
+        files.extend(folder / name for name in names
+                     if Path(name).suffix.lower() in extensions and (folder / name).is_file())
     total_files = len(files)
 
     existing_names = collect_existing_names(dest_path)
@@ -207,6 +225,7 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
     stats = {t: 0 for t in THEME_ANCHORS}
     duplicates_skipped = 0
     unique_added = 0
+    failed = 0
 
     for idx, file_path in enumerate(sorted(files, key=lambda f: f.name.lower()), start=1):
         file_key = file_path.name.lower()
@@ -227,31 +246,31 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
                 print(f"[{idx:3d}/{total_files:3d}] \033[33m[DUPLICATE]\033[0m {file_path.name} (Skipped)")
             continue
 
-        seen_in_batch.add(file_key)
-        existing_names.add(file_key)
-
-        # Classify color
-        theme, rgb, hex_col = classify_wallpaper(file_path)
-        stats[theme] += 1
-        unique_added += 1
-
-        # Destination path
-        theme_dir = dest_path / theme
-        theme_dir.mkdir(parents=True, exist_ok=True)
-        dest_file = theme_dir / file_path.name
-
         try:
+            theme, rgb, hex_col = classify_wallpaper(file_path)
+            theme_dir = dest_path / theme
+            dest_file = theme_dir / file_path.name
+            theme_dir.mkdir(parents=True, exist_ok=True)
+            if dest_file.exists() or dest_file.is_symlink():
+                raise FileExistsError(dest_file)
             if mode == "symlink":
-                if dest_file.exists() or dest_file.is_symlink():
-                    dest_file.unlink()
                 dest_file.symlink_to(file_path)
             elif mode == "move":
                 shutil.move(file_path, dest_file)
             else:  # copy
-                shutil.copy2(file_path, dest_file)
-        except Exception as e:
+                copy_image(file_path, dest_file)
+        except (OSError, ValueError) as e:
+            failed += 1
             if as_json:
-                print(json.dumps({"type": "warn", "message": f"Failed to place {file_path.name}: {e}"}), flush=True)
+                print(json.dumps({"type": "progress", "current": idx, "total": total_files,
+                                  "filename": file_path.name, "status": "failed"}), flush=True)
+            else:
+                print(f"Could not place {file_path.name}: {e}", file=sys.stderr)
+            continue
+
+        seen_in_batch.add(file_key)
+        stats[theme] += 1
+        unique_added += 1
 
         if as_json:
             print(json.dumps({
@@ -274,6 +293,7 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
             "total_found": total_files,
             "unique_added": unique_added,
             "duplicates_skipped": duplicates_skipped,
+            "failed": failed,
             "by_theme": stats
         }), flush=True)
     else:
@@ -282,6 +302,7 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
         print(f"   • Total Processed    : {total_files}")
         print(f"   • Unique Added       : {unique_added}")
         print(f"   • Duplicates Skipped : {duplicates_skipped}")
+        print(f"   • Failed             : {failed}")
         print("─" * 40)
         for t, count in stats.items():
             print(f"   • {t:<10}: +{count}")
@@ -300,7 +321,7 @@ def main():
     parser.add_argument("--json", action="store_true", help="Emit line-by-line JSON events for UI consumers")
 
     args = parser.parse_args()
-    sort_directory(args.source, args.dest, mode=args.mode, as_json=args.json)
+    return 0 if sort_directory(args.source, args.dest, mode=args.mode, as_json=args.json) else 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

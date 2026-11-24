@@ -19,18 +19,22 @@ FocusScope {
     // ==========================================
     // PROPERTIES & THEME (Iris Frosted M3 Aesthetic)
     // ==========================================
-    readonly property color colAccent: Theme.accent ?? "#a8c7fa"
-    readonly property color colCard: Qt.rgba(255, 255, 255, 0.045)
-    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.085)
+    readonly property color colAccent: Theme.accent
+    readonly property color colCpuMetric: "#82b8ff"
+    readonly property color colMemory: "#f0ba78"
+    readonly property color colGraphics: "#c6a5f5"
+    readonly property color colNetwork: "#78d4ba"
+    readonly property color colUpload: "#a9c7ff"
+    readonly property color colCard: Theme.surfaceHigh
+    readonly property color colCardHover: Theme.surfaceHighest
     readonly property color colCardSelected: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.12)
-    readonly property color colDanger: "#ff5449"
-    readonly property color colDangerHover: "#ff6e65"
-    readonly property color colDangerBg: Qt.rgba(255, 84, 73, 0.16)
+    readonly property color colDanger: Theme.error
+    readonly property color colDangerBg: Theme.alpha(colDanger, 0.14)
     readonly property color colWarning: "#fbbf24"
     readonly property color colSuccess: "#51cf66"
-    readonly property color colText: "#ffffff"
-    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.65)
-    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.40)
+    readonly property color colText: Theme.text
+    readonly property color colSubtext: Theme.subtext
+    readonly property color colMuted: Theme.subtextDim
 
     // System Metrics & State
     property real cpuTotal: 0.0
@@ -66,16 +70,25 @@ FocusScope {
     property int tasksBgCount: 0
 
     // Sparkline Live History Arrays
-    property var cpuHistory: [0, 0]
-    property var memHistory: [0, 0]
-    property var gpuHistory: [0, 0]
-    property var netHistory: [0, 0]
+    property var cpuHistory: []
+    property var memHistory: []
+    property var gpuHistory: []
+    property var netHistory: []
+    property var uploadHistory: []
+    readonly property real networkScale: Math.pow(2, Math.ceil(Math.log2(
+        Math.max(128 * 1024, ...netHistory, ...uploadHistory))))
 
     function pushHistory(arr, val, maxLen) {
-        var a = (arr && arr.length > 0) ? arr.slice() : [0, 0];
-        a.push(typeof val === "number" ? val : 0);
+        const sample = typeof val === "number" ? val : 0;
+        var a = (arr && arr.length > 0) ? arr.slice() : [sample];
+        a.push(sample);
         while (a.length > (maxLen || 24)) a.shift();
         return a;
+    }
+
+    function formatCpu(rounded, raw) {
+        const value = rounded || 0;
+        return value === 0 && raw > 0 ? "<0.1%" : value.toFixed(1) + "%";
     }
 
     property var rawApps: []
@@ -86,8 +99,6 @@ FocusScope {
     property string sortField: "cpu" // "cpu", "mem", "name"
     property bool sortAsc: false
     property string searchQuery: ""
-    property int selectedPid: -1
-    property bool isRefreshing: false
     property string statusMessage: ""
 
     // Expose dynamic list metrics for reactive Notch container height
@@ -117,7 +128,6 @@ FocusScope {
 
     function refresh() {
         if (!taskPoller.running) {
-            isRefreshing = true;
             taskPoller.running = true;
         }
     }
@@ -198,7 +208,20 @@ FocusScope {
     property string lastSortField: ""
     property bool lastSortAsc: false
 
+    function restoreSelection(pid, fallback) {
+        for (let index = 0; index < displayProcessModel.count; index++) {
+            if (displayProcessModel.get(index).pid === pid) {
+                processList.currentIndex = index;
+                return;
+            }
+        }
+        processList.currentIndex = Math.min(fallback, displayProcessModel.count - 1);
+    }
+
     function applyFilterAndSort(userTriggered) {
+        const selectedIndex = processList.currentIndex;
+        const selected = selectedIndex >= 0 && selectedIndex < displayProcessModel.count
+            ? displayProcessModel.get(selectedIndex).pid : -1;
         var q = searchQuery.toLowerCase().trim();
         var src = (activeTab === 0) ? rawApps : ((activeTab === 1) ? rawBackground : rawAll);
         var filteredList = [];
@@ -222,13 +245,14 @@ FocusScope {
         filteredList.sort(function(a, b) {
             var diff = 0;
             if (sortField === "cpu") {
-                diff = a.cpu - b.cpu;
+                diff = (a.cpu_raw ?? a.cpu) - (b.cpu_raw ?? b.cpu);
+                if (Math.abs(diff) < 0.001) diff = a.mem_mb - b.mem_mb;
             } else if (sortField === "mem") {
                 diff = a.mem_mb - b.mem_mb;
             } else if (sortField === "name") {
                 diff = (a.display_name || a.name).localeCompare(b.display_name || b.name);
             }
-            return sortAsc ? diff : -diff;
+            return (sortAsc ? diff : -diff) || a.pid - b.pid;
         });
 
         var tabChanged = (lastRenderedTab !== activeTab);
@@ -247,6 +271,7 @@ FocusScope {
             for (var j = 0; j < filteredList.length; j++) {
                 displayProcessModel.append(filteredList[j]);
             }
+            restoreSelection(tabChanged ? -1 : selected, 0);
             return;
         }
 
@@ -273,6 +298,7 @@ FocusScope {
             if (updatedData) {
                 existingPids[curItem.pid] = true;
                 if (curItem.cpu !== updatedData.cpu) displayProcessModel.setProperty(u, "cpu", updatedData.cpu);
+                if (curItem.cpu_raw !== updatedData.cpu_raw) displayProcessModel.setProperty(u, "cpu_raw", updatedData.cpu_raw);
                 if (curItem.mem_mb !== updatedData.mem_mb) displayProcessModel.setProperty(u, "mem_mb", updatedData.mem_mb);
                 if (curItem.mem_percent !== updatedData.mem_percent) displayProcessModel.setProperty(u, "mem_percent", updatedData.mem_percent);
                 if (curItem.mem_bytes !== updatedData.mem_bytes) displayProcessModel.setProperty(u, "mem_bytes", updatedData.mem_bytes);
@@ -290,9 +316,9 @@ FocusScope {
             }
         }
 
-        // 5. Re-order items ONLY if user explicitly changed sort/search OR if the user is NOT actively scrolling!
-        var isUserScrolling = processList.moving || processList.flicking || processList.dragging;
-        if ((userTriggered || sortChanged || searchChanged || !isUserScrolling)) {
+        // Update the readings in place while the pointer or scrolling is in the list.
+        const interacting = processHover.hovered || processList.moving || vbar.pressed;
+        if (userTriggered || sortChanged || searchChanged || !interacting) {
             // Re-order displayProcessModel to match filteredList order using model.move()
             for (var target = 0; target < filteredList.length; target++) {
                 var targetPid = filteredList[target].pid;
@@ -308,6 +334,7 @@ FocusScope {
                 }
             }
         }
+        restoreSelection(selected, searchChanged ? 0 : Math.max(0, selectedIndex));
     }
 
     Timer {
@@ -364,7 +391,6 @@ FocusScope {
         ]
         stdout: StdioCollector {
             onStreamFinished: {
-                taskManagerRoot.isRefreshing = false;
                 var raw = this.text.trim();
                 if (!raw) return;
                 try {
@@ -406,7 +432,8 @@ FocusScope {
                         taskManagerRoot.cpuHistory = taskManagerRoot.pushHistory(taskManagerRoot.cpuHistory, taskManagerRoot.cpuTotal, 24);
                         taskManagerRoot.memHistory = taskManagerRoot.pushHistory(taskManagerRoot.memHistory, taskManagerRoot.memPercent, 24);
                         taskManagerRoot.gpuHistory = taskManagerRoot.pushHistory(taskManagerRoot.gpuHistory, taskManagerRoot.gpuUsage, 24);
-                        taskManagerRoot.netHistory = taskManagerRoot.pushHistory(taskManagerRoot.netHistory, Math.min(100, (taskManagerRoot.netRxRate / (1024 * 1024)) * 10), 24);
+                        taskManagerRoot.netHistory = taskManagerRoot.pushHistory(taskManagerRoot.netHistory, taskManagerRoot.netRxRate, 24);
+                        taskManagerRoot.uploadHistory = taskManagerRoot.pushHistory(taskManagerRoot.uploadHistory, taskManagerRoot.netTxRate, 24);
 
                         taskManagerRoot.rawApps = data.apps || [];
                         taskManagerRoot.rawBackground = data.background || [];
@@ -447,8 +474,8 @@ FocusScope {
     // ==========================================
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 11
+        anchors.margins: 2
+        spacing: 9
 
         // ── 1. HEADER BAR ─────────────────────────────────────────
         RowLayout {
@@ -472,6 +499,7 @@ FocusScope {
 
             // Header Title & Dynamic Subtitle
             RowLayout {
+                Layout.fillWidth: true
                 spacing: 8
                 MaterialSymbol {
                     text: "monitoring"
@@ -481,15 +509,18 @@ FocusScope {
                 }
 
                 ColumnLayout {
+                    Layout.fillWidth: true
                     spacing: 1
                     Text {
-                        text: "System Monitor"
+                        text: "Task Manager"
                         font.family: "Noto Sans"
-                        font.pixelSize: 14
+                        font.pixelSize: 17
                         font.weight: Font.DemiBold
                         color: taskManagerRoot.colText
                     }
                     Text {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
                         text: taskManagerRoot.statusMessage !== "" 
                             ? taskManagerRoot.statusMessage 
                             : (taskManagerRoot.distroName + (taskManagerRoot.kernelVer !== "" ? " • " + taskManagerRoot.kernelVer : "") + " • " + taskManagerRoot.cpuModel + (taskManagerRoot.uptimeStr !== "" ? " • Up " + taskManagerRoot.uptimeStr : ""))
@@ -498,53 +529,6 @@ FocusScope {
                         color: taskManagerRoot.statusMessage !== "" ? taskManagerRoot.colAccent : taskManagerRoot.colSubtext
                     }
                 }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // Live Network Throughput Chip
-            Rectangle {
-                Layout.preferredHeight: 32
-                Layout.preferredWidth: netChipRow.implicitWidth + 20
-                radius: 12
-                color: taskManagerRoot.colCard
-                border.width: 1
-                border.color: Qt.rgba(224, 175, 104, 0.25)
-
-                RowLayout {
-                    id: netChipRow
-                    anchors.centerIn: parent
-                    spacing: 6
-
-                    MaterialSymbol {
-                        text: "swap_vert"
-                        iconSize: 15
-                        fill: 1
-                        color: "#e0af68"
-                    }
-
-                    Text {
-                        text: "↓ " + taskManagerRoot.netRxStr + "   ↑ " + taskManagerRoot.netTxStr
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
-                        font.bold: true
-                        color: "#ffffff"
-                    }
-                }
-            }
-
-            // Quick Refresh Button
-            IrisIconButton {
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
-                buttonSize: 32
-                icon: "refresh"
-                iconSize: 15
-                spinning: taskManagerRoot.isRefreshing
-                backgroundColor: taskManagerRoot.colCard
-                backgroundHoverColor: taskManagerRoot.colCardHover
-                iconColor: taskManagerRoot.isRefreshing ? taskManagerRoot.colAccent : taskManagerRoot.colSubtext
-                onClicked: taskManagerRoot.refresh()
             }
 
             // Close Button
@@ -562,430 +546,58 @@ FocusScope {
             }
         }
 
-        // ── 2. LIVE HARDWARE HERO CARDS (The Goat / Lucid Style) ──
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 96
-            spacing: 8
+            spacing: 9
 
-            // ── Card 1: CPU HERO ──────────────────────────────────
-            Rectangle {
-                id: cpuCard
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-                radius: 14
-                color: cpuCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.075) : taskManagerRoot.colCard
-                border.width: 1
-                border.color: cpuCardMouse.containsMouse ? Qt.rgba(122, 162, 247, 0.55) : Qt.rgba(122, 162, 247, 0.25)
-                clip: true
-
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                MouseArea {
-                    id: cpuCardMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 2
-
-                    // Card Header: Icon + Name + Temp badge
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        MaterialSymbol {
-                            text: "memory"
-                            iconSize: 15
-                            fill: 1
-                            color: "#7aa2f7"
-                        }
-                        Text {
-                            text: "CPU"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            color: "#ffffff"
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Rectangle {
-                            visible: taskManagerRoot.cpuTemp > 0
-                            Layout.preferredHeight: 18
-                            Layout.preferredWidth: tempText.implicitWidth + 12
-                            radius: 9
-                            color: taskManagerRoot.cpuTemp >= 80 ? Qt.rgba(247, 118, 142, 0.25) : (taskManagerRoot.cpuTemp >= 65 ? Qt.rgba(224, 175, 104, 0.22) : Qt.rgba(115, 218, 202, 0.18))
-                            border.width: 1
-                            border.color: taskManagerRoot.cpuTemp >= 80 ? "#f7768e" : (taskManagerRoot.cpuTemp >= 65 ? "#e0af68" : "#73daca")
-
-                            Text {
-                                id: tempText
-                                anchors.centerIn: parent
-                                text: taskManagerRoot.cpuTemp + "°C"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 9
-                                font.bold: true
-                                color: parent.border.color
-                            }
-                        }
-                    }
-
-                    // Card Body: Big Value + Sparkline
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
-
-                        ColumnLayout {
-                            spacing: 0
-                            Text {
-                                text: Math.round(taskManagerRoot.cpuTotal) + "%"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 20
-                                font.weight: Font.Bold
-                                color: taskManagerRoot.cpuTotal > 80 ? taskManagerRoot.colDanger : (taskManagerRoot.cpuTotal > 50 ? taskManagerRoot.colWarning : "#7aa2f7")
-                            }
-                            Text {
-                                text: taskManagerRoot.cpuMhz > 0 ? (taskManagerRoot.cpuMhz / 1000).toFixed(1) + " GHz" : (taskManagerRoot.cpuCount + " cores")
-                                font.family: "Noto Sans"
-                                font.pixelSize: 9
-                                color: taskManagerRoot.colSubtext
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Sparkline {
-                            Layout.preferredWidth: 78
-                            Layout.preferredHeight: 32
-                            strokeColor: "#7aa2f7"
-                            values: taskManagerRoot.cpuHistory
-                            maximum: 100
-                            fillArea: true
-                            fillOpacity: 0.22
-                        }
-                    }
-
-                    // Card Footer: Cores & Load averages
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: taskManagerRoot.cpuCount + " Cores • Load " + taskManagerRoot.load1 + ", " + taskManagerRoot.load5
-                        font.family: "Noto Sans"
-                        font.pixelSize: 9
-                        color: taskManagerRoot.colMuted
-                    }
-                }
+            MetricCard {
+                title: "CPU"
+                glyph: "memory"
+                tone: taskManagerRoot.colCpuMetric
+                alert: taskManagerRoot.cpuTotal > 80
+                value: Math.round(taskManagerRoot.cpuTotal) + "%"
+                detail: taskManagerRoot.cpuTemp >= 0 ? taskManagerRoot.cpuTemp.toFixed(0) + " °C" : ""
+                history: taskManagerRoot.cpuHistory
+                caption: taskManagerRoot.cpuCount + " threads · Load " + taskManagerRoot.load1 + " / " + taskManagerRoot.load5
+                secondary: taskManagerRoot.cpuMhz > 0 ? (taskManagerRoot.cpuMhz / 1000).toFixed(1) + " GHz" : ""
             }
-
-            // ── Card 2: MEMORY HERO ───────────────────────────────
-            Rectangle {
-                id: memCard
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-                radius: 14
-                color: memCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.075) : taskManagerRoot.colCard
-                border.width: 1
-                border.color: memCardMouse.containsMouse ? Qt.rgba(187, 154, 247, 0.55) : Qt.rgba(187, 154, 247, 0.25)
-                clip: true
-
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                MouseArea {
-                    id: memCardMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 2
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        MaterialSymbol {
-                            text: "storage"
-                            iconSize: 15
-                            fill: 1
-                            color: "#bb9af7"
-                        }
-                        Text {
-                            text: "RAM"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            color: "#ffffff"
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: taskManagerRoot.memUsedGb.toFixed(1) + " / " + taskManagerRoot.memTotalGb.toFixed(1) + " GB"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 9
-                            color: taskManagerRoot.colSubtext
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
-
-                        ColumnLayout {
-                            spacing: 0
-                            Text {
-                                text: Math.round(taskManagerRoot.memPercent) + "%"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 20
-                                font.weight: Font.Bold
-                                color: taskManagerRoot.memPercent > 85 ? taskManagerRoot.colDanger : (taskManagerRoot.memPercent > 70 ? taskManagerRoot.colWarning : "#bb9af7")
-                            }
-                            Text {
-                                text: (taskManagerRoot.memTotalGb - taskManagerRoot.memUsedGb).toFixed(1) + " GB avail"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 9
-                                color: taskManagerRoot.colSubtext
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Sparkline {
-                            Layout.preferredWidth: 78
-                            Layout.preferredHeight: 32
-                            strokeColor: "#bb9af7"
-                            values: taskManagerRoot.memHistory
-                            maximum: 100
-                            fillArea: true
-                            fillOpacity: 0.22
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: taskManagerRoot.swapTotalGb > 0
-                            ? ("Swap: " + taskManagerRoot.swapUsedGb.toFixed(1) + " / " + taskManagerRoot.swapTotalGb.toFixed(1) + " GB (" + Math.round(taskManagerRoot.swapPercent) + "%)")
-                            : "Swap inactive"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 9
-                        color: taskManagerRoot.colMuted
-                    }
-                }
+            MetricCard {
+                title: "Memory"
+                glyph: "storage"
+                tone: taskManagerRoot.colMemory
+                chart: "allocation"
+                current: taskManagerRoot.memPercent
+                alert: taskManagerRoot.memPercent >= 85
+                value: Math.round(taskManagerRoot.memPercent) + "%"
+                detail: taskManagerRoot.memUsedGb.toFixed(1) + " / " + taskManagerRoot.memTotalGb.toFixed(1) + " GB"
+                history: taskManagerRoot.memHistory
+                caption: taskManagerRoot.swapTotalGb > 0
+                    ? "Swap " + taskManagerRoot.swapUsedGb.toFixed(1) + " / " + taskManagerRoot.swapTotalGb.toFixed(1) + " GB"
+                    : "No swap configured"
             }
-
-            // ── Card 3: GPU HERO ──────────────────────────────────
-            Rectangle {
-                id: gpuCard
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-                radius: 14
-                color: gpuCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.075) : taskManagerRoot.colCard
-                border.width: 1
-                border.color: gpuCardMouse.containsMouse ? Qt.rgba(115, 218, 202, 0.55) : Qt.rgba(115, 218, 202, 0.25)
-                clip: true
-
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                MouseArea {
-                    id: gpuCardMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 2
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        MaterialSymbol {
-                            text: "developer_board"
-                            iconSize: 15
-                            fill: 1
-                            color: "#73daca"
-                        }
-                        Text {
-                            text: "GPU"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            color: "#ffffff"
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: taskManagerRoot.gpuName
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: taskManagerRoot.colSubtext
-                            elide: Text.ElideRight
-                            Layout.maximumWidth: 100
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
-
-                        ColumnLayout {
-                            spacing: 0
-                            Text {
-                                text: Math.round(taskManagerRoot.gpuUsage) + "%"
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 20
-                                font.weight: Font.Bold
-                                color: taskManagerRoot.gpuUsage > 80 ? taskManagerRoot.colDanger : "#73daca"
-                            }
-                            Text {
-                                text: taskManagerRoot.gpuTemp > 0 ? (taskManagerRoot.gpuTemp + "°C") : "Rendering"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 9
-                                color: taskManagerRoot.colSubtext
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Sparkline {
-                            Layout.preferredWidth: 78
-                            Layout.preferredHeight: 32
-                            strokeColor: "#73daca"
-                            values: taskManagerRoot.gpuHistory
-                            maximum: 100
-                            fillArea: true
-                            fillOpacity: 0.22
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: taskManagerRoot.gpuName.indexOf("RTX") !== -1 || taskManagerRoot.gpuName.indexOf("Radeon") !== -1 ? "Dedicated Graphics" : "Hardware Accelerated"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 9
-                        color: taskManagerRoot.colMuted
-                    }
-                }
+            MetricCard {
+                title: "Graphics"
+                glyph: "developer_board"
+                tone: taskManagerRoot.colGraphics
+                chart: "bars"
+                alert: taskManagerRoot.gpuUsage > 80
+                value: Math.round(taskManagerRoot.gpuUsage) + "%"
+                detail: taskManagerRoot.gpuTemp >= 0 ? taskManagerRoot.gpuTemp.toFixed(0) + " °C" : ""
+                history: taskManagerRoot.gpuHistory
+                caption: taskManagerRoot.gpuName
             }
-
-            // ── Card 4: DISK & NETWORK HERO ───────────────────────
-            Rectangle {
-                id: ioCard
-                Layout.fillWidth: true
-                Layout.preferredHeight: 96
-                radius: 14
-                color: ioCardMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.075) : taskManagerRoot.colCard
-                border.width: 1
-                border.color: ioCardMouse.containsMouse ? Qt.rgba(224, 175, 104, 0.55) : Qt.rgba(224, 175, 104, 0.25)
-                clip: true
-
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
-
-                MouseArea {
-                    id: ioCardMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 2
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        MaterialSymbol {
-                            text: "speed"
-                            iconSize: 15
-                            fill: 1
-                            color: "#e0af68"
-                        }
-                        Text {
-                            text: "I/O & DISK"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            color: "#ffffff"
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: taskManagerRoot.diskFreeGb.toFixed(0) + " GB free"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 9
-                            color: taskManagerRoot.colSubtext
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
-
-                        ColumnLayout {
-                            spacing: 0
-                            Text {
-                                text: "↓ " + taskManagerRoot.netRxStr
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 15
-                                font.weight: Font.Bold
-                                color: "#e0af68"
-                            }
-                            Text {
-                                text: "↑ " + taskManagerRoot.netTxStr
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 10
-                                color: taskManagerRoot.colSubtext
-                            }
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Sparkline {
-                            Layout.preferredWidth: 78
-                            Layout.preferredHeight: 32
-                            strokeColor: "#e0af68"
-                            values: taskManagerRoot.netHistory
-                            maximum: 100
-                            fillArea: true
-                            fillOpacity: 0.22
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                        text: "Root: " + Math.round(taskManagerRoot.diskPercent) + "% (" + taskManagerRoot.diskUsedGb.toFixed(0) + " / " + taskManagerRoot.diskTotalGb.toFixed(0) + " GB)"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 9
-                        color: taskManagerRoot.colMuted
-                    }
-                }
+            MetricCard {
+                title: "Network & disk"
+                glyph: "swap_vert"
+                tone: taskManagerRoot.colNetwork
+                chart: "traffic"
+                detailTone: taskManagerRoot.colUpload
+                value: "↓ " + taskManagerRoot.netRxStr
+                detail: "↑ " + taskManagerRoot.netTxStr
+                history: taskManagerRoot.netHistory
+                caption: "File system  " + taskManagerRoot.diskUsedGb.toFixed(0) + " / " + taskManagerRoot.diskTotalGb.toFixed(0) + " GB"
+                secondary: Math.round(taskManagerRoot.diskPercent) + "%"
+                compactValue: true
             }
         }
 
@@ -1001,7 +613,6 @@ FocusScope {
                 Layout.preferredWidth: tabsRow.implicitWidth + 8
                 radius: 17
                 color: Qt.rgba(255, 255, 255, 0.05)
-                border.width: 0
 
                 RowLayout {
                     id: tabsRow
@@ -1024,14 +635,14 @@ FocusScope {
                                 text: "apps"
                                 iconSize: 14
                                 fill: taskManagerRoot.activeTab === 0 ? 1 : 0
-                                color: taskManagerRoot.activeTab === 0 ? "#101318" : (appTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 0 ? Theme.fgPrimary : (appTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                             Text {
                                 text: "Apps (" + taskManagerRoot.tasksAppsCount + ")"
                                 font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 font.weight: taskManagerRoot.activeTab === 0 ? Font.Bold : Font.Normal
-                                color: taskManagerRoot.activeTab === 0 ? "#101318" : (appTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 0 ? Theme.fgPrimary : (appTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                         }
 
@@ -1063,14 +674,14 @@ FocusScope {
                                 text: "tune"
                                 iconSize: 14
                                 fill: taskManagerRoot.activeTab === 1 ? 1 : 0
-                                color: taskManagerRoot.activeTab === 1 ? "#101318" : (bgTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 1 ? Theme.fgPrimary : (bgTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                             Text {
                                 text: "Background (" + taskManagerRoot.tasksBgCount + ")"
                                 font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 font.weight: taskManagerRoot.activeTab === 1 ? Font.Bold : Font.Normal
-                                color: taskManagerRoot.activeTab === 1 ? "#101318" : (bgTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 1 ? Theme.fgPrimary : (bgTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                         }
 
@@ -1102,14 +713,14 @@ FocusScope {
                                 text: "view_list"
                                 iconSize: 14
                                 fill: taskManagerRoot.activeTab === 2 ? 1 : 0
-                                color: taskManagerRoot.activeTab === 2 ? "#101318" : (allTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 2 ? Theme.fgPrimary : (allTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                             Text {
                                 text: "All (" + taskManagerRoot.tasksTotalCount + ")"
                                 font.family: "Noto Sans"
                                 font.pixelSize: 11
                                 font.weight: taskManagerRoot.activeTab === 2 ? Font.Bold : Font.Normal
-                                color: taskManagerRoot.activeTab === 2 ? "#101318" : (allTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
+                                color: taskManagerRoot.activeTab === 2 ? Theme.fgPrimary : (allTabMouse.containsMouse ? taskManagerRoot.colText : taskManagerRoot.colSubtext)
                             }
                         }
 
@@ -1132,11 +743,8 @@ FocusScope {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 34
                 radius: 17
-                color: searchInput.activeFocus ? Qt.rgba(255, 255, 255, 0.08) : Qt.rgba(255, 255, 255, 0.045)
-                border.width: searchInput.activeFocus ? 1 : 0
-                border.color: Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.45)
+                color: searchInput.activeFocus ? Theme.alpha(Theme.text, 0.09) : Theme.alpha(Theme.text, 0.05)
                 Behavior on color { ColorAnimation { duration: 120 } }
-                Behavior on border.color { ColorAnimation { duration: 120 } }
 
                 RowLayout {
                     anchors.fill: parent
@@ -1154,8 +762,8 @@ FocusScope {
                         id: searchInput
                         Layout.fillWidth: true
                         color: taskManagerRoot.colText
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
+                        font.family: Theme.fontFamilyBody
+                        font.pixelSize: 12
                         placeholderText: "Search application, window title, or PID..."
                         placeholderTextColor: taskManagerRoot.colMuted
                         background: Item {}
@@ -1224,7 +832,6 @@ FocusScope {
                     color: taskManagerRoot.sortField === "cpu" 
                         ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.22) 
                         : (cpuSortMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: 0
 
                     RowLayout {
                         id: cpuSortRow
@@ -1272,7 +879,6 @@ FocusScope {
                     color: taskManagerRoot.sortField === "mem" 
                         ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.22) 
                         : (memSortMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: 0
 
                     RowLayout {
                         id: memSortRow
@@ -1320,7 +926,6 @@ FocusScope {
                     color: taskManagerRoot.sortField === "name" 
                         ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.22) 
                         : (nameSortMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: 0
 
                     RowLayout {
                         id: nameSortRow
@@ -1375,7 +980,7 @@ FocusScope {
             spacing: 8
 
             Text {
-                text: "APPLICATION / PROCESS"
+                text: "Applications and processes"
                 font.family: "Noto Sans"
                 font.pixelSize: 9
                 font.weight: Font.DemiBold
@@ -1394,7 +999,7 @@ FocusScope {
             }
 
             Text {
-                text: "MEMORY"
+                text: "Memory"
                 font.family: "Noto Sans"
                 font.pixelSize: 9
                 font.weight: Font.DemiBold
@@ -1404,7 +1009,7 @@ FocusScope {
             }
 
             Text {
-                text: "ACTIONS"
+                text: "Actions"
                 font.family: "Noto Sans"
                 font.pixelSize: 9
                 font.weight: Font.DemiBold
@@ -1419,8 +1024,7 @@ FocusScope {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: 16
-            color: Qt.rgba(255, 255, 255, 0.02)
-            border.width: 0
+            color: Theme.alpha(Theme.surfaceHigh, 0.62)
             clip: true
 
             ListView {
@@ -1431,9 +1035,11 @@ FocusScope {
                 spacing: 5
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
-                cacheBuffer: 600
+                cacheBuffer: 140
                 pixelAligned: true
                 highlightFollowsCurrentItem: false
+
+                HoverHandler { id: processHover }
 
                 ScrollBar.vertical: ScrollBar {
                     id: vbar
@@ -1464,16 +1070,11 @@ FocusScope {
                     color: (processList.currentIndex === index)
                         ? taskManagerRoot.colCardSelected
                         : (rowMouse.containsMouse ? taskManagerRoot.colCardHover : taskManagerRoot.colCard)
-                    border.width: (processList.currentIndex === index || rowMouse.containsMouse) ? 1 : 0
-                    border.color: (processList.currentIndex === index) 
-                        ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.35) 
-                        : Qt.rgba(255, 255, 255, 0.08)
                     clip: true
 
                     scale: rowMouse.pressed ? 0.995 : 1.0
                     Behavior on scale { NumberAnimation { duration: 80 } }
                     Behavior on color { ColorAnimation { duration: 100 } }
-                    Behavior on border.color { ColorAnimation { duration: 100 } }
                     Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
 
                     ColumnLayout {
@@ -1487,8 +1088,8 @@ FocusScope {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 12
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 14
                                 spacing: 8
 
                                 // Dropdown Expand Chevron Button
@@ -1518,13 +1119,12 @@ FocusScope {
                                     Layout.preferredHeight: 36
                                     radius: 10
                                     color: Qt.rgba(255, 255, 255, 0.06)
-                                    border.width: 0
                                     clip: true
 
                                     IrisIcon {
                                         anchors.centerIn: parent
                                         icon: (model.icon_name && model.icon_name !== "") ? model.icon_name : (model.icon || "memory")
-                                        isApp: true
+                                        isApp: Boolean(model.icon_name)
                                         iconSize: 20
                                         fill: model.category === "app" ? 1 : 0
                                         color: model.category === "app" ? taskManagerRoot.colAccent : taskManagerRoot.colSubtext
@@ -1561,7 +1161,6 @@ FocusScope {
                                             Layout.preferredWidth: wsTagText.implicitWidth + 10
                                             radius: 9
                                             color: Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.18)
-                                            border.width: 0
                                             Text {
                                                 id: wsTagText
                                                 anchors.centerIn: parent
@@ -1584,7 +1183,6 @@ FocusScope {
                                                 : (procRow.isExpanded 
                                                     ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.18) 
                                                     : Qt.rgba(255, 255, 255, 0.08))
-                                            border.width: 0
 
                                             RowLayout {
                                                 id: countTagRow
@@ -1669,7 +1267,7 @@ FocusScope {
 
                                         Text {
                                             Layout.alignment: Qt.AlignHCenter
-                                            text: model.cpu.toFixed(1) + "%"
+                                            text: taskManagerRoot.formatCpu(model.cpu, model.cpu_raw)
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 12
                                             font.weight: Font.DemiBold
@@ -1688,7 +1286,7 @@ FocusScope {
                                                 anchors.left: parent.left
                                                 anchors.top: parent.top
                                                 anchors.bottom: parent.bottom
-                                                width: Math.max(2, parent.width * Math.min(1.0, model.cpu / 100.0))
+                                                width: model.cpu_raw > 0 ? Math.max(2, parent.width * Math.min(1, model.cpu / 100)) : 0
                                                 radius: 1.5
                                                 color: model.cpu > 50 ? taskManagerRoot.colDanger : (model.cpu > 20 ? taskManagerRoot.colWarning : taskManagerRoot.colAccent)
                                             }
@@ -1712,110 +1310,38 @@ FocusScope {
 
                                         Text {
                                             Layout.alignment: Qt.AlignHCenter
-                                            text: model.mem_percent.toFixed(0) + "% RAM"
+                                            text: model.mem_percent.toFixed(model.mem_percent < 1 && model.mem_percent > 0 ? 1 : 0) + "% RAM"
                                             font.family: "Noto Sans"
                                             font.pixelSize: 9
                                             color: taskManagerRoot.colMuted
                                         }
                                     }
 
-                                    // 3. Action Buttons Row (124px: Focus + End)
+                                    // 3. Action Buttons Row (136px: Focus + End)
                                     RowLayout {
-                                        Layout.preferredWidth: 124
+                                        Layout.preferredWidth: 136
                                         spacing: 6
 
-                                        Rectangle {
-                                            id: focusBtn
+                                        ProcessAction {
                                             visible: procRow.hasWin
-                                            Layout.preferredWidth: 58
-                                            Layout.preferredHeight: 28
-                                            radius: 14
-                                            color: focusMouse.containsMouse 
-                                                ? Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.28)
-                                                : Qt.rgba(taskManagerRoot.colAccent.r, taskManagerRoot.colAccent.g, taskManagerRoot.colAccent.b, 0.15)
-                                            border.width: 0
-                                            scale: focusMouse.pressed ? 0.92 : 1.0
-                                            Behavior on scale { NumberAnimation { duration: 80 } }
-                                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 4
-
-                                                MaterialSymbol {
-                                                    text: "open_in_new"
-                                                    iconSize: 12
-                                                    color: taskManagerRoot.colAccent
-                                                }
-
-                                                Text {
-                                                    text: "Focus"
-                                                    font.family: "Noto Sans"
-                                                    font.pixelSize: 10
-                                                    font.weight: Font.DemiBold
-                                                    color: taskManagerRoot.colAccent
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: focusMouse
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                hoverEnabled: true
-                                                onClicked: {
-                                                    taskManagerRoot.focusWindow(model.address, model.pid);
-                                                }
-                                            }
+                                            text: "Focus"
+                                            glyph: "visibility"
+                                            hint: "Focus window"
+                                            onTriggered: taskManagerRoot.focusWindow(model.address, model.pid)
                                         }
 
-                                        Item { 
+                                        Item {
                                             visible: !procRow.hasWin
-                                            Layout.preferredWidth: 58
-                                            Layout.preferredHeight: 28
+                                            Layout.preferredWidth: 64
+                                            Layout.preferredHeight: 30
                                         }
 
-                                        // End Task Action Button
-                                        Rectangle {
-                                            id: killBtn
-                                            Layout.preferredWidth: 58
-                                            Layout.preferredHeight: 28
-                                            radius: 14
-                                            color: killBtnMouse.containsMouse ? taskManagerRoot.colDanger : taskManagerRoot.colDangerBg
-                                            border.width: 0
-                                            scale: killBtnMouse.pressed ? 0.92 : 1.0
-                                            Behavior on scale { NumberAnimation { duration: 80 } }
-                                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 3
-
-                                                MaterialSymbol {
-                                                    text: "close"
-                                                    iconSize: 12
-                                                    color: killBtnMouse.containsMouse ? "#ffffff" : taskManagerRoot.colDanger
-                                                }
-
-                                                Text {
-                                                    text: "End"
-                                                    font.family: "Noto Sans"
-                                                    font.pixelSize: 10
-                                                    font.weight: Font.DemiBold
-                                                    color: killBtnMouse.containsMouse ? "#ffffff" : taskManagerRoot.colDanger
-                                                }
-                                            }
-
-                                            MouseArea {
-                                                id: killBtnMouse
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                hoverEnabled: true
-                                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                onClicked: (mouse) => {
-                                                    var force = (mouse.button === Qt.RightButton) || (mouse.modifiers & Qt.ShiftModifier);
-                                                    taskManagerRoot.killProcess(model.pid, force);
-                                                }
-                                            }
+                                        ProcessAction {
+                                            text: "End"
+                                            glyph: "close"
+                                            hint: "End process. Right-click to force quit."
+                                            destructive: true
+                                            onTriggered: force => taskManagerRoot.killProcess(model.pid, force)
                                         }
                                     }
                                 }
@@ -1830,7 +1356,6 @@ FocusScope {
                                 z: -1
                                 onClicked: (mouse) => {
                                     processList.currentIndex = index;
-                                    taskManagerRoot.selectedPid = model.pid;
                                     mouse.accepted = false;
                                 }
                             }
@@ -1848,8 +1373,8 @@ FocusScope {
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 1
-                                Layout.leftMargin: 16
-                                Layout.rightMargin: 16
+                                Layout.leftMargin: 14
+                                Layout.rightMargin: 14
                                 color: Qt.rgba(255, 255, 255, 0.06)
                             }
 
@@ -1862,7 +1387,6 @@ FocusScope {
                                     Layout.rightMargin: 12
                                     radius: 8
                                     color: childRowMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.05) : Qt.rgba(255, 255, 255, 0.015)
-                                    border.width: 0
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -1899,7 +1423,7 @@ FocusScope {
                                         Text {
                                             Layout.preferredWidth: 86
                                             horizontalAlignment: Text.AlignHCenter
-                                            text: (modelData.cpu || 0.0).toFixed(1) + "%"
+                                            text: taskManagerRoot.formatCpu(modelData.cpu, modelData.cpu_raw)
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
                                             color: (modelData.cpu > 20) ? taskManagerRoot.colWarning : taskManagerRoot.colSubtext
@@ -1915,51 +1439,19 @@ FocusScope {
                                             color: taskManagerRoot.colSubtext
                                         }
 
-                                        // Subprocess Action Column (124px)
+                                        // Subprocess Action Column (136px)
                                         RowLayout {
-                                            Layout.preferredWidth: 124
+                                            Layout.preferredWidth: 136
                                             spacing: 6
 
                                             Item { Layout.fillWidth: true }
 
-                                            Rectangle {
-                                                Layout.preferredWidth: 54
-                                                Layout.preferredHeight: 24
-                                                radius: 12
-                                                color: subKillMouse.containsMouse ? taskManagerRoot.colDanger : Qt.rgba(255, 84, 73, 0.12)
-                                                border.width: 0
-                                                scale: subKillMouse.pressed ? 0.90 : 1.0
-                                                Behavior on scale { NumberAnimation { duration: 80 } }
-                                                Behavior on color { ColorAnimation { duration: 120 } }
-
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 3
-                                                    MaterialSymbol {
-                                                        text: "close"
-                                                        iconSize: 11
-                                                        color: subKillMouse.containsMouse ? "#ffffff" : taskManagerRoot.colDanger
-                                                    }
-                                                    Text {
-                                                        text: "End"
-                                                        font.family: "Noto Sans"
-                                                        font.pixelSize: 9
-                                                        font.weight: Font.DemiBold
-                                                        color: subKillMouse.containsMouse ? "#ffffff" : taskManagerRoot.colDanger
-                                                    }
-                                                }
-
-                                                MouseArea {
-                                                    id: subKillMouse
-                                                    anchors.fill: parent
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    hoverEnabled: true
-                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                                    onClicked: (mouse) => {
-                                                        var force = (mouse.button === Qt.RightButton) || (mouse.modifiers & Qt.ShiftModifier);
-                                                        taskManagerRoot.killProcess(modelData.pid, force);
-                                                    }
-                                                }
+                                            ProcessAction {
+                                                text: "End"
+                                                glyph: "close"
+                                                hint: "End subprocess. Right-click to force quit."
+                                                destructive: true
+                                                onTriggered: force => taskManagerRoot.killProcess(modelData.pid, force)
                                             }
                                         }
                                     }
@@ -2030,4 +1522,317 @@ FocusScope {
             }
         }
     }
+    component ProcessAction: Rectangle {
+        id: action
+        required property string text
+        required property string glyph
+        required property string hint
+        property bool destructive: false
+        signal triggered(bool force)
+
+        readonly property color tone: destructive ? taskManagerRoot.colDanger : taskManagerRoot.colAccent
+        Layout.preferredWidth: 64
+        Layout.preferredHeight: 30
+        radius: 15
+        color: destructive
+            ? (pointer.pressed ? Theme.alpha(Theme.error, 0.32) : pointer.containsMouse ? Theme.alpha(Theme.error, 0.20) : Theme.alpha(Theme.text, 0.07))
+            : (pointer.pressed ? Theme.alpha(Theme.accent, 0.35) : pointer.containsMouse ? Theme.alpha(Theme.accent, 0.24) : Theme.alpha(Theme.accent, 0.14))
+
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+        Accessible.description: hint
+        Accessible.onPressAction: triggered(false)
+        ToolTip.visible: pointer.containsMouse
+        ToolTip.delay: 600
+        ToolTip.text: hint
+
+        Behavior on color { ColorAnimation { duration: 115 } }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 5
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                text: action.glyph
+                iconSize: 14
+                color: action.destructive
+                    ? (pointer.containsMouse ? Theme.error : Theme.alpha(Theme.text, 0.70))
+                    : Theme.accent
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: action.text
+                color: action.destructive
+                    ? (pointer.containsMouse ? Theme.error : Theme.alpha(Theme.text, 0.85))
+                    : Theme.accent
+                font.family: Theme.fontFamilyBody
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+            }
+        }
+
+        MouseArea {
+            id: pointer
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            acceptedButtons: action.destructive ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
+            onClicked: event => action.triggered(action.destructive
+                && (event.button === Qt.RightButton || (event.modifiers & Qt.ShiftModifier) !== 0))
+        }
+    }
+
+    component MetricCard: Rectangle {
+        id: card
+        required property string title
+        required property string glyph
+        required property color tone
+        required property string value
+        required property var history
+        required property string caption
+        property string detail: ""
+        property string secondary: ""
+        property bool compactValue: false
+        property bool alert: false
+        property string chart: "line"
+        property real current: 0
+        property color detailTone: tone
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        Layout.minimumWidth: 0
+        Layout.preferredHeight: 142
+        radius: 14
+        clip: true
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.tint(taskManagerRoot.colCard, Theme.alpha(card.tone, 0.24)) }
+            GradientStop { position: 1; color: Qt.tint(taskManagerRoot.colCard, Theme.alpha(card.tone, 0.05)) }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            anchors.topMargin: 10
+            anchors.bottomMargin: 10
+            spacing: 5
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 7
+
+                Rectangle {
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    radius: 7
+                    color: Theme.alpha(card.tone, 0.16)
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: card.glyph
+                        iconSize: 15
+                        color: card.tone
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: card.title
+                    color: taskManagerRoot.colSubtext
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 5
+
+                Text {
+                    Layout.fillWidth: true
+                    text: card.value
+                    color: card.alert ? taskManagerRoot.colDanger : taskManagerRoot.colText
+                    font.family: Theme.fontFamilyNerd
+                    font.pixelSize: card.compactValue ? 17 : 26
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    visible: card.detail !== ""
+                    text: card.detail
+                    color: card.detailTone
+                    font.family: Theme.fontFamilyNerd
+                    font.pixelSize: 9
+                    elide: Text.ElideRight
+                }
+            }
+
+            Loader {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 24
+                clip: true
+                sourceComponent: card.chart === "allocation" ? allocationChart
+                    : card.chart === "bars" ? graphicsChart : card.chart === "traffic" ? trafficChart : cpuChart
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 5
+
+                Text {
+                    Layout.fillWidth: true
+                    text: card.caption
+                    color: taskManagerRoot.colSubtext
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    visible: card.secondary !== ""
+                    text: card.secondary
+                    color: card.tone
+                    font.family: Theme.fontFamilyNerd
+                    font.pixelSize: 9
+                }
+            }
+        }
+
+        Component {
+            id: cpuChart
+            Item {
+                Repeater {
+                    model: 3
+                    delegate: Rectangle {
+                        required property int index
+                        width: parent.width
+                        height: 1
+                        y: (index + 1) * parent.height / 4
+                        color: Theme.alpha(card.tone, 0.17)
+                    }
+                }
+
+                Sparkline {
+                    anchors.fill: parent
+                    values: card.history
+                    strokeColor: card.tone
+                    showPeakDot: false
+                    fillOpacity: 0.48
+                }
+            }
+        }
+
+        Component {
+            id: allocationChart
+            Item {
+                Row {
+                    id: allocation
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.topMargin: 3
+                    height: 10
+                    spacing: 3
+
+                    Repeater {
+                        model: 12
+                        delegate: Rectangle {
+                            id: segment
+                            required property int index
+                            width: Math.max(0, (allocation.width - 11 * allocation.spacing) / 12)
+                            height: allocation.height
+                            radius: 2
+                            color: Theme.alpha(card.tone, 0.18)
+                            Rectangle {
+                                width: segment.width * Math.max(0, Math.min(1, card.current * 0.12 - segment.index))
+                                height: parent.height
+                                radius: 2
+                                color: card.tone
+                                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            }
+                        }
+                    }
+                }
+
+                Sparkline {
+                    anchors.top: allocation.bottom
+                    anchors.topMargin: 5
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    values: card.history
+                    strokeColor: Theme.alpha(card.tone, 0.60)
+                    strokeWidth: 1
+                    fillArea: false
+                    showPeakDot: false
+                }
+            }
+        }
+
+        Component {
+            id: graphicsChart
+            Row {
+                id: samples
+                spacing: 3
+
+                Repeater {
+                    model: 18
+                    delegate: Item {
+                        id: sample
+                        required property int index
+                        readonly property int historyIndex: card.history.length - 18 + index
+                        readonly property real reading: historyIndex < 0 ? 0 : card.history[historyIndex]
+                        width: Math.max(0, (samples.width - 17 * samples.spacing) / 18)
+                        height: samples.height
+
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: parent.height
+                            radius: 2
+                            color: Theme.alpha(card.tone, 0.08)
+                        }
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: Math.max(2, parent.height * Math.min(100, sample.reading) / 100)
+                            radius: 2
+                            color: sample.reading > 0 ? card.tone : Theme.alpha(card.tone, 0.28)
+                            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                        }
+                    }
+                }
+            }
+        }
+
+        Component {
+            id: trafficChart
+            Item {
+                Sparkline {
+                    anchors.fill: parent
+                    values: card.history
+                    maximum: taskManagerRoot.networkScale
+                    strokeColor: card.tone
+                    showPeakDot: false
+                    fillOpacity: 0.38
+                }
+                Sparkline {
+                    anchors.fill: parent
+                    values: taskManagerRoot.uploadHistory
+                    maximum: taskManagerRoot.networkScale
+                    strokeColor: card.detailTone
+                    strokeWidth: 1.4
+                    showPeakDot: false
+                    fillArea: false
+                }
+            }
+        }
+    }
+
 }

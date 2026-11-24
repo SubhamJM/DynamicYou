@@ -666,7 +666,6 @@ Singleton {
     FileView {
         id: paletteFile
 
-        __printErrors: false
         path: root.palettePath
         watchChanges: true
         onFileChanged: root._beginRecolour()
@@ -728,8 +727,7 @@ Singleton {
     }
 
     FileView {
-        __printErrors: false
-        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/active-theme/theme-name.txt"
+        path: Quickshell.env("HOME") + "/.cache/current_theme"
         watchChanges: true
         onFileChanged: reload()
         onLoaded: root.themeName = text().trim() || "matugen"

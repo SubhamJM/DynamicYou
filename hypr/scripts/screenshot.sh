@@ -26,7 +26,6 @@ case "${1:-area}" in
 esac
 
 wl-copy --type image/png < "$file"
-if [[ ${1:-area} == hub ]]; then
-    qs ipc call notch showScreenshot "$file"
+if ! qs ipc call notch showScreenshot "$file" >/dev/null 2>&1; then
+    notify-send -a 'Dynamic You' 'Screenshot captured' "$file"
 fi
-notify-send -a 'Dynamic You' 'Screenshot captured' "$file"

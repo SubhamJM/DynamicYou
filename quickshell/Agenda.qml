@@ -321,8 +321,7 @@ Singleton {
     FileView {
         id: file
 
-        __printErrors: false
-        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/dynamic-you/clock_reminders.json"
+        path: Quickshell.env("HOME") + "/.config/quickshell/lucidbar/clock_reminders.json"
         blockLoading: true
         onAdapterUpdated: saveDebounce.restart()
 

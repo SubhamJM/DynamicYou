@@ -3,7 +3,6 @@
 
 import argparse
 import configparser
-from contextlib import contextmanager
 from copy import deepcopy
 import fcntl
 import json
@@ -19,7 +18,6 @@ import uuid
 
 sys.dont_write_bytecode = True
 from surfaces import app_surfaces
-from backups import Backup, backup_root
 
 HERE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -50,8 +48,6 @@ def write(path, text):
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as file:
         temporary = Path(file.name)
         file.write(text)
-    if path.is_file() and not path.is_symlink():
-        temporary.chmod(path.stat().st_mode & 0o777)
     try:
         temporary.replace(path)
     finally:
@@ -163,34 +159,7 @@ def zen_profile():
     return None
 
 
-def integration_enabled(prefs, name):
-    selected = prefs.get("integrations")
-    if not isinstance(selected, dict):
-        return TAPE
-    return selected.get(name) is True
-
-
-@contextmanager
-def installed_backup(prefs):
-    install_id = prefs.get("installId")
-    if not isinstance(install_id, str) or not re.fullmatch(r"install-[\w-]+", install_id):
-        yield None
-        return
-    root = backup_root()
-    if not root.is_dir():
-        yield None
-        return
-    with (root / ".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        directory = root / install_id
-        backup = Backup(directory) if (directory / "manifest.json").is_file() else None
-        current = read_json(SETTINGS).get("installId")
-        if current != install_id or (backup is not None and backup.data["status"] != "complete"):
-            raise ValueError("Installation changed during palette generation. Refresh the wallpaper colors again.")
-        yield backup
-
-
-def add_import(path, target, backup=None):
+def add_import(path, target):
     old = path.read_text() if path.exists() else ""
     if re.search(r"@import[^;]*" + re.escape(target) + r"""[\x27\x22)]""", old):
         return
@@ -198,21 +167,28 @@ def add_import(path, target, backup=None):
     charset = re.match(r'^\s*@charset[^;]+;[^\n]*\n?', old)
     pos = charset.end() if charset else 0
     updated = old[:pos] + directive + old[pos:]
-    path = path.resolve()
-    remember_shared(path, backup)
+    if path.is_symlink():
+        path = path.resolve()
     write(path, updated)
 
 
-def remember_shared(path, backup=None):
-    if backup is not None:
-        backup.remember(path)
+def restore_destination(path):
+    # Tapes swaps the original config back before running eject hooks.
+    # Paths resolved through its staging tree must point to the live config.
+    staging = CONFIG.with_name(CONFIG.name + ".tapes")
+    if path.is_relative_to(staging):
+        return CONFIG / path.relative_to(staging)
+    return path
+
+
+def remember_shared(path):
     if not TAPE:
         return
     directory = STATE / "tape-restore"
     directory.mkdir(parents=True, exist_ok=True)
     index = directory / "files.json"
     files = read_json(index)
-    key = str(path)
+    key = str(restore_destination(path))
     if key in files:
         return
     saved = directory / str(len(files))
@@ -228,7 +204,7 @@ def restore_shared():
     directory = STATE / "tape-restore"
     index = directory / "files.json"
     for destination, filename in read_json(index).items():
-        path = Path(destination)
+        path = restore_destination(Path(destination))
         if filename is None:
             path.unlink(missing_ok=True)
         else:
@@ -238,14 +214,14 @@ def restore_shared():
         shutil.rmtree(directory)
 
 
-def update_zen(profile, work, scheme, mode, backup):
+def update_zen(profile, work, scheme, mode):
     if profile is None:
         return
     prefs = profile / "user.js"
     current = prefs.read_text() if prefs.exists() else ""
     key = "toolkit.legacyUserProfileCustomizations.stylesheets"
     if not re.search(r'user_pref\(\s*"' + re.escape(key) + r'"', current):
-        remember_shared(prefs.resolve(), backup)
+        remember_shared(prefs.resolve())
         with prefs.open("a", encoding="utf-8") as file:
             file.write(f'\nuser_pref("{key}", true);\n')
     chrome = profile / "chrome"
@@ -261,71 +237,55 @@ def update_zen(profile, work, scheme, mode, backup):
         ("zen-sites.css", css[1], "userContent.css"),
     ):
         rendered = render(work, scheme, mode, template)
-        remember_shared(chrome / output, backup)
+        remember_shared(chrome / output)
+        remember_shared((chrome / entry).resolve())
         write(chrome / output, rendered)
-        add_import(chrome / entry, output, backup)
+        add_import(chrome / entry, output)
 
 
-def publish_apps(work, scheme, mode, prefs, backup):
-    targets = {
-        "kitty": [("kitty.conf", STATE / "kitty.conf")],
-        "gtk": [("gtk-colors.css", STATE / "gtk.css")],
-        "qt6ct": [("qt6ct-colors.conf", CONFIG / "qt6ct/colors/DynamicYou.conf")],
-        "kde": [("kde-colors.colors", DATA / "color-schemes/DynamicYou.colors")],
-        "vesktop": [("midnight-discord.css", CONFIG / "vesktop/themes/dynamic-you.css")],
-        "vscode": [("vscode-colors", CACHE / "matugen/vscode-colors"),
-                   ("vscode-colors.json", CACHE / "matugen/vscode-colors.json")],
-    }
-    enabled = {name for name in (*targets, "zen", "starship") if integration_enabled(prefs, name)}
+def publish_apps(work, scheme, mode, prefs):
+    targets = [
+        ("kitty.conf", STATE / "kitty.conf"),
+        ("gtk-colors.css", STATE / "gtk.css"),
+        ("qt6ct-colors.conf", CONFIG / "qt6ct/colors/DynamicYou.conf"),
+        ("kde-colors.colors", DATA / "color-schemes/DynamicYou.colors"),
+        ("midnight-discord.css", CONFIG / "vesktop/themes/dynamic-you.css"),
+        ("vscode-colors", CACHE / "matugen/vscode-colors"),
+        ("vscode-colors.json", CACHE / "matugen/vscode-colors.json"),
+    ]
     errors = []
-    for name, templates in targets.items():
-        if name not in enabled:
-            continue
-        for template, path in templates:
-            try:
-                rendered = render(work, scheme, mode, template)
-                if backup is not None:
-                    backup.remember(path)
-                if name == "vscode":
-                    remember_shared(path)
-                write(path, rendered)
-            except (OSError, ValueError, subprocess.SubprocessError) as error:
-                errors.append(str(error))
-    if "zen" in enabled:
+    for template, path in targets:
         try:
-            update_zen(zen_profile(), work, scheme, mode, backup)
+            rendered = render(work, scheme, mode, template)
+            if path.parent == CACHE / "matugen":
+                remember_shared(path)
+            write(path, rendered)
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             errors.append(str(error))
-    if "kitty" in enabled:
-        try:
-            enable_kitty_palette(backup)
-        except OSError as error:
-            errors.append(str(error))
-    if "gtk" in enabled:
-        for toolkit in ("gtk-3.0", "gtk-4.0"):
-            try:
-                add_import(CONFIG / toolkit / "gtk.css", (STATE / "gtk.css").as_uri(), backup)
-            except OSError as error:
-                errors.append(str(error))
-    if "starship" in enabled:
-        try:
-            update_prompt(roles(json.loads(scheme.read_text())), backup)
-        except (OSError, ValueError) as error:
-            errors.append(str(error))
-    if prefs.get("reloadApps", True) and "kitty" in enabled:
-        reload_kitty(prefs)
+    try:
+        update_zen(zen_profile(), work, scheme, mode)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        errors.append(str(error))
+    try:
+        enable_app_includes()
+        update_prompt(roles(json.loads(scheme.read_text())))
+    except OSError as error:
+        errors.append(str(error))
+    if not prefs.get("reloadApps", True):
+        return errors
+    # Kitty's supplied config loads the generated file on startup. Existing
+    # instances reread their config. A socket is optional for custom configs.
+    quiet("pkill", "-USR1", "-u", str(os.getuid()), "-x", "kitty")
+    sockets = [value for value in (os.environ.get("KITTY_LISTEN_ON"), prefs.get("kittySocket")) if value]
+    for socket in dict.fromkeys(value for value in sockets if isinstance(value, str)):
+        if isinstance(socket, str) and socket.startswith("unix:"):
+            quiet("kitty", "@", "--to", socket, "set-colors", "--all", "--configured", str(STATE / "kitty.conf"))
+    if not TAPE:
+        quiet("gsettings", "set", "org.gnome.desktop.interface", "color-scheme", f"prefer-{mode}")
     return errors
 
 
-def reload_kitty(prefs):
-    quiet("pkill", "-USR1", "-u", str(os.getuid()), "-x", "kitty")
-    sockets = (os.environ.get("KITTY_LISTEN_ON"), prefs.get("kittySocket"))
-    for socket in dict.fromkeys(value for value in sockets if isinstance(value, str)):
-        if socket.startswith("unix:"):
-            quiet("kitten", "@", "--to", socket, "set-colors", "--all", "--configured", str(STATE / "kitty.conf"))
-
-
-def update_prompt(palette, backup):
+def update_prompt(palette):
     path = Path(os.environ.get("STARSHIP_CONFIG") or CONFIG / "starship.toml").resolve()
     if not path.is_file():
         return
@@ -357,21 +317,19 @@ def update_prompt(palette, backup):
     updated = re.sub(r"""(?m)^(\s*([\w-]+)\s*=\s*)(["'])(#[0-9a-fA-F]{6})\3""",
                      repaint, text[table.end():end])
     if updated != text[table.end():end]:
-        remember_shared(path, backup)
+        remember_shared(path)
         write(path, text[:table.end()] + updated + text[end:])
 
 
-def enable_kitty_palette(backup):
+def enable_kitty_palette():
     config = Path(os.environ.get("KITTY_CONFIG_DIRECTORY") or CONFIG / "kitty") / "kitty.conf"
     local_palette = config.parent / "dynamic-you-wallpaper.generated.conf"
+    config.parent.mkdir(parents=True, exist_ok=True)
     if local_palette.is_symlink():
         if local_palette.readlink() != STATE / "kitty.conf":
-            remember_shared(local_palette, backup)
             local_palette.unlink()
             local_palette.symlink_to(STATE / "kitty.conf")
     elif not local_palette.exists():
-        remember_shared(local_palette, backup)
-        config.parent.mkdir(parents=True, exist_ok=True)
         local_palette.symlink_to(STATE / "kitty.conf")
 
     original = config.read_text(encoding="utf-8") if config.is_file() else ""
@@ -390,8 +348,13 @@ def enable_kitty_palette(backup):
     if not matches:
         updated = updated.rstrip("\n") + ("\n\n" if updated else "") + command + "\n"
     if updated != original:
-        remember_shared(config.resolve(), backup)
         write(config.resolve(), updated)
+
+
+def enable_app_includes():
+    enable_kitty_palette()
+    for toolkit in ("gtk-3.0", "gtk-4.0"):
+        add_import(CONFIG / toolkit / "gtk.css", (STATE / "gtk.css").as_uri())
 
 
 def deactivate():
@@ -401,7 +364,7 @@ def deactivate():
     with (STATE / "update.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         restore_shared()
-        for name in ("palette.json", "material.json", "hypr-colors", "mode.txt"):
+        for name in ("palette.json", "material.json", "hypr-colors"):
             (STATE / name).unlink(missing_ok=True)
         # Keep the include target valid for Kitty and GTK when the tape is off.
         kitty = STATE / "kitty.conf"
@@ -434,7 +397,7 @@ def apply(image):
     STATE.mkdir(parents=True, exist_ok=True)
     ticket = uuid.uuid4().hex
     write(STATE / "requested", ticket)
-    with installed_backup(prefs) as backup, (STATE / "update.lock").open("a") as lock:
+    with (STATE / "update.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if not current_request(ticket, image):
             return 0
@@ -459,12 +422,8 @@ def apply(image):
             # Publish the shell palette first, then render apps off the same
             # result. Lucid softens light surfaces before handing them to apps.
             softened = app_surfaces(palette, tint) if mode == "light" else palette
-            if backup is not None:
-                for name in ("scheme.json", "material.json", "palette.json", "hypr-colors", "mode.txt"):
-                    backup.remember(STATE / name)
             write(STATE / "scheme.json", json.dumps(scheme))
             write(STATE / "material.json", json.dumps(palette))
-            write(STATE / "mode.txt", mode + "\n")
             write(STATE / "palette.json", json.dumps({**softened, "mode": mode, "request": key}))
             write(STATE / "hypr-colors", f"{palette['primary'][1:]} {palette['outline'][1:]}\n")
             if prefs.get("reloadApps", True):
@@ -481,7 +440,7 @@ def apply(image):
             app_scheme.write_text(json.dumps(apps))
             if not current_request(ticket, image):
                 return 0
-            for error in publish_apps(work, app_scheme, mode, prefs, backup):
+            for error in publish_apps(work, app_scheme, mode, prefs):
                 report(error)
     return 0
 
@@ -492,7 +451,6 @@ def main():
     actions.add_argument("--deactivate", action="store_true")
     actions.add_argument("--install-zen-live", action="store_true",
                          help="install the palette watcher into an existing Fx AutoConfig profile")
-    parser.add_argument("--mode", choices=("dark", "light", "auto"), help="save the wallpaper palette mode")
     parser.add_argument("image", nargs="?", type=Path)
     options = parser.parse_args()
     try:
@@ -507,20 +465,9 @@ def main():
             if (chrome / "JS/lucid-zen.sys.mjs").is_file():
                 print("Zen already has the compatible Lucid palette watcher.")
             else:
-                path = chrome / "JS/dynamic-you-zen.sys.mjs"
-                with installed_backup(read_json(SETTINGS)) as backup:
-                    remember_shared(path, backup)
-                    write(path, (HERE / "zen-live.sys.mjs").read_text())
+                write(chrome / "JS/dynamic-you-zen.sys.mjs", (HERE / "zen-live.sys.mjs").read_text())
                 print("Restart Zen once to load the Dynamic You palette watcher.")
             return 0
-        if options.mode:
-            prefs = read_json(SETTINGS)
-            with installed_backup(prefs) as backup:
-                if backup is not None:
-                    backup.remember(SETTINGS)
-                write(SETTINGS, json.dumps({**prefs, "mode": options.mode}, indent=2) + "\n")
-            if options.image is None and not (ACTIVE / "current-wallpaper").is_file():
-                return 0
         image = (options.image or ACTIVE / "current-wallpaper").expanduser().resolve(strict=True)
         if not image.is_file():
             raise ValueError("the wallpaper must be an image file")

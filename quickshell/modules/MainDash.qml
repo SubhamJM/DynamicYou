@@ -7,6 +7,8 @@ import Quickshell.Services.Mpris
 import Quickshell.Bluetooth
 import Quickshell.Services.UPower
 import "../"
+import "."
+import "." as DashComponents
 
 Item {
     id: dash
@@ -21,10 +23,9 @@ Item {
     property bool powerIslandExpanded: false
     property bool settingsOpen: false
     signal settingsRequested()
-    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive || root.isPomoFinishedIslandActive
+    property bool isIslandActive: btIslandExpanded || powerIslandExpanded || netIslandExpanded || root.isNotifPopupActive || root.isWorkspacePeeking || root.isScreenshotIslandActive
 
     readonly property string currentIslandType: {
-        if (root.isPomoFinishedIslandActive) return "pomo_done";
         if (root.isScreenshotIslandActive) return "screenshot";
         if (root.isNotifPopupActive) return "notif";
         if (btIslandExpanded) return "bluetooth";
@@ -35,6 +36,7 @@ Item {
     }
 
     property string displayedIslandType: ""
+    readonly property real notificationHeight: notificationBanner.implicitHeight
 
     FileView {
         id: osReleaseFile
@@ -61,16 +63,10 @@ Item {
     }
 
     property int activeIslandWidth: {
-        if (displayedIslandType === "pomo_done" || root.isPomoFinishedIslandActive) {
-            return Math.max(380, pomoDonePopupRow.implicitWidth + 36);
-        }
         if (displayedIslandType === "screenshot" || root.isScreenshotIslandActive) {
             return Math.max(260, screenshotPopupRow.implicitWidth + 36);
         }
-        if (displayedIslandType === "notif" || root.isNotifPopupActive) {
-            var textW = Math.max(notifSummaryText.implicitWidth, notifBodyText.implicitWidth);
-            return Math.min(520, Math.max(260, textW + 80));
-        }
+        if (displayedIslandType === "notif" || root.isNotifPopupActive) return notificationBanner.preferredWidth;
         if (displayedIslandType === "workspace" || root.isWorkspacePeeking) {
             return Math.max(136, wsIslandRow.implicitWidth + 36);
         }
@@ -86,7 +82,7 @@ Item {
             return dashRow.implicitWidth + 36;
         }
         if (dash.isMediaPlaying && root.activeMode === "idle") {
-            if (dash.showMusicInfo) return 360;
+            if (dash.showMusicInfo) return 360 + (expandedMusicReadouts.visible ? expandedMusicReadouts.implicitWidth + 10 : 0);
             return Math.max(196, (typeof musicIdleRow !== "undefined" ? musicIdleRow.implicitWidth : 172) + 24);
         }
         return Math.max(184, idleCluster.implicitWidth + 36);  // Iris idle width (DateMark + IrisClock)
@@ -413,8 +409,9 @@ Item {
     Item {
         id: islandContainer
         anchors.fill: parent
-        opacity: dash.isIslandActive ? 1.0 : 0.0
-        scale: dash.isIslandActive ? 1.0 : 0.9
+        readonly property bool showIsland: dash.isIslandActive && dash.currentIslandType !== "notif"
+        opacity: showIsland ? 1.0 : 0.0
+        scale: showIsland ? 1.0 : 0.9
         visible: opacity > 0.01
         Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
         Behavior on scale { NumberAnimation { duration: 340; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
@@ -430,7 +427,7 @@ Item {
             id: screenshotPopupRow
             anchors.centerIn: parent
             spacing: 10
-            visible: dash.displayedIslandType === "screenshot" || root.isScreenshotIslandActive
+            visible: dash.currentIslandType === "screenshot"
 
             // 1. Thumbnail Preview (or fallback icon)
             Rectangle {
@@ -527,7 +524,6 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             Quickshell.execDetached(["swappy", "-f", root.screenshotIslandPath]);
-                            screenshotIslandTimer.stop();
                             root.screenshotIslandPath = "";
                             root.screenshotIslandStatus = "";
                         }
@@ -556,7 +552,6 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            screenshotIslandTimer.stop();
                             root.screenshotIslandPath = "";
                             root.screenshotIslandStatus = "";
                         }
@@ -565,241 +560,57 @@ Item {
             }
         }
 
-        // Pomodoro Completed Celebration Island (Section 4.4)
-        RowLayout {
-            id: pomoDonePopupRow
-            anchors.centerIn: parent
-            spacing: 10
-            visible: dash.displayedIslandType === "pomo_done" || root.isPomoFinishedIslandActive
-
-            Rectangle {
-                Layout.preferredWidth: 26
-                Layout.preferredHeight: 26
-                radius: 13
-                color: Qt.rgba(0.18, 0.82, 0.34, 0.22)
-                border.width: 0
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰄬"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 13
-                    color: "#30d158"
-                }
-            }
-
-            ColumnLayout {
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 0
-
-                Text {
-                    text: root.pomoFinishedTitle !== "" ? root.pomoFinishedTitle : "Sprint Complete!"
-                    font.family: "Readex Pro"
-                    font.pixelSize: 12
-                    font.weight: Font.Bold
-                    color: "#ffffff"
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    text: root.pomoFinishedMessage !== "" ? root.pomoFinishedMessage : "Take a well-deserved break"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#8e8e93"
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            // Quick transition action button
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: pomoNextActionText.implicitWidth + 16
-                radius: 12
-                color: pomoNextMouse.containsMouse ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.accent, 0.20)
-                border.width: 0
-                scale: pomoNextMouse.pressed ? 0.94 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                Text {
-                    id: pomoNextActionText
-                    anchors.centerIn: parent
-                    text: root.pomoMode === "focus" ? "5m Break" : "25m Focus"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    color: Theme.accent
-                }
-
-                MouseArea {
-                    id: pomoNextMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.pomoMode === "focus") {
-                            root.startPomodoro(5, "short_break");
-                        } else {
-                            root.startPomodoro(25, "focus");
-                        }
-                        root.isPomoFinishedIslandActive = false;
-                    }
-                }
-            }
-
-            // Dismiss
-            Rectangle {
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
-                radius: 11
-                color: pomoDismissMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(1, 1, 1, 0.08)
-                scale: pomoDismissMouse.pressed ? 0.90 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "close"
-                    iconSize: 13
-                    color: Theme.colors.text_secondary ?? "#8e8e93"
-                }
-
-                MouseArea {
-                    id: pomoDismissMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.isPomoFinishedIslandActive = false;
-                        root.collapseToIdle();
-                    }
-                }
-            }
-        }
-
-        // Pop-up Notification Row
-        RowLayout {
-            id: notifPopupRow
-            anchors.centerIn: parent
-            spacing: 8
-            visible: dash.displayedIslandType === "notif" || root.isNotifPopupActive
-
-            Rectangle {
-                Layout.preferredWidth: 22
-                Layout.preferredHeight: 22
-                radius: 11
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
-                Layout.alignment: Qt.AlignVCenter
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰂚"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 12
-                    color: Theme.accent
-                }
-            }
-
-            ColumnLayout {
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 0
-
-                Text {
-                    id: notifSummaryText
-                    text: root.notifPopupSummary
-                    font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: Theme.colors.text_primary ?? "white"
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 380
-                }
-
-                Text {
-                    id: notifBodyText
-                    text: root.notifPopupBody
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    color: Theme.colors.text_secondary ?? "#565f89"
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 380
-                    visible: text !== ""
-                }
-            }
-        }
-
-        MouseArea {
-            anchors.fill: notifPopupRow
-            visible: notifPopupRow.visible && root.isNotifPopupActive
-            enabled: root.isNotifPopupActive
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                notifPopupTimer.stop();
-                root.notifPopupSummary = "";
-                root.notifPopupBody = "";
-                root.switchMode("notifications", true);
-            }
-        }
-
-        // Workspace Switch Island Row (GNOME-style dynamic pills)
+        // Workspace switch OSD: the active dot stretches into a pill.
         Item {
             id: wsIslandContainer
             anchors.centerIn: parent
             width: wsIslandRow.implicitWidth
             height: wsIslandRow.implicitHeight
-            visible: dash.displayedIslandType === "workspace" || (root.isWorkspacePeeking && !root.isNotifPopupActive && !dash.btIslandExpanded && !dash.powerIslandExpanded && !dash.netIslandExpanded)
+            visible: dash.currentIslandType === "workspace"
 
             Row {
                 id: wsIslandRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 8
 
                 Repeater {
                     model: dash.workspaceIds
 
                     delegate: Item {
-                        id: indicatorItem
-                        property int wsId: modelData
-                        property bool isFocused: indicatorItem.wsId === dash.activeWsId
-                        property int winCount: dash.getWorkspaceWindowCount(indicatorItem.wsId)
-                        property bool hasWindows: indicatorItem.winCount > 0
+                        id: indicator
+                        required property int modelData
+                        readonly property bool isFocused: modelData === dash.activeWsId
 
-                        width: indicatorPill.width + 6
-                        implicitWidth: indicatorPill.width + 6
+                        width: isFocused ? 26 : 8
                         height: 22
-                        implicitHeight: 22
                         anchors.verticalCenter: parent.verticalCenter
 
+                        Behavior on width {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+
                         Rectangle {
-                            id: indicatorPill
                             anchors.centerIn: parent
+                            width: parent.width
                             height: 8
-                            radius: 4
+                            radius: height / 2
+                            color: indicator.isFocused ? Theme.accent
+                                : dotMouse.containsMouse ? (Theme.colors.text_primary ?? "#c0caf5")
+                                : Qt.rgba(1, 1, 1, 0.28)
 
-                            width: indicatorItem.isFocused ? 32 : (indicatorItem.hasWindows ? 12 : 8)
-
-                            color: indicatorItem.isFocused
-                                ? Theme.accent
-                                : (dotMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.85) : (indicatorItem.hasWindows ? Qt.rgba(255, 255, 255, 0.52) : Qt.rgba(255, 255, 255, 0.22)))
-
-                            scale: dotMouse.pressed ? 0.90 : (dotMouse.containsMouse ? 1.10 : 1.0)
-
-                            Behavior on width {
-                                NumberAnimation {
-                                    duration: 260
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: dash.motionCurve
-                                }
+                            Behavior on color {
+                                ColorAnimation { duration: 240; easing.type: Easing.OutCubic }
                             }
-                            Behavior on color { ColorAnimation { duration: 180 } }
-                            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
                         }
 
                         MouseArea {
                             id: dotMouse
-                            anchors.fill: parent
+                            anchors.centerIn: parent
+                            width: parent.width + wsIslandRow.spacing
+                            height: parent.height
                             cursorShape: Qt.PointingHandCursor
                             hoverEnabled: true
-                            onClicked: dash.switchToWorkspace(indicatorItem.wsId)
+                            onClicked: dash.switchToWorkspace(indicator.modelData)
                             onWheel: (wheel) => {
                                 wheel.accepted = true;
                                 dash.handleWorkspaceScroll(wheel.angleDelta.y);
@@ -826,7 +637,7 @@ Item {
             id: btPopupRow
             anchors.centerIn: parent
             spacing: 8
-            visible: dash.displayedIslandType === "bluetooth" || (dash.btIslandExpanded && !root.isNotifPopupActive && !root.isWorkspacePeeking)
+            visible: dash.currentIslandType === "bluetooth"
 
             Rectangle {
                 width: 22
@@ -888,7 +699,7 @@ Item {
             id: powerPopupRow
             anchors.centerIn: parent
             spacing: 12
-            visible: dash.displayedIslandType === "power" || (dash.powerIslandExpanded && !dash.btIslandExpanded && !root.isNotifPopupActive && !root.isWorkspacePeeking)
+            visible: dash.currentIslandType === "power"
             
             Item {
                 width: 20
@@ -930,7 +741,7 @@ Item {
             id: netPopupRow
             anchors.centerIn: parent
             spacing: 8
-            visible: dash.displayedIslandType === "net" || (dash.netIslandExpanded && !dash.powerIslandExpanded && !dash.btIslandExpanded && !root.isNotifPopupActive && !root.isWorkspacePeeking)
+            visible: dash.currentIslandType === "net"
             
             Text {
                 text: dash.activeNetType === "eth" ? "󰈀" : "󰤨"
@@ -983,6 +794,25 @@ Item {
         }
     }
 
+
+    DashComponents.NotificationBanner {
+        id: notificationBanner
+        z: 2
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(preferredWidth, root.isNotifPopupActive ? root.targetWidth : preferredWidth)
+        surfaceWidth: dash.width
+        surfaceHeight: dash.height
+        notification: root.notificationBanner
+        active: dash.currentIslandType === "notif" && root.isDashMode
+        onHoverChanged: hovered => root.setNotificationBannerHovered(hovered)
+        onDismissed: root.dismissNotificationBanner()
+        onOpened: {
+            root.dismissNotificationBanner();
+            root.switchMode("notifications", true);
+        }
+    }
+
     // ========================================================
     // 1. IRIS IDLE CAPSULE (Look 1: Idle when no music)
     // ========================================================
@@ -1012,127 +842,95 @@ Item {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: -0.5
             spacing: 7
+            z: 2
 
-            // DateMark: weekday quiet, day number carrying accent,
-            // sharing optical baseline directly with IrisClock figures
-            Row {
-                id: idleDateMark
-                spacing: 4
-                baselineOffset: idleWeekdayText.baselineOffset
-                anchors.baseline: idleIrisClock.baseline
-
-                Text {
-                    id: idleWeekdayText
-                    text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                    color: Theme.colors.text_muted ?? "#8e8e93"
-                    font.family: "Readex Pro"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    id: idleDayText
-                    anchors.baseline: idleWeekdayText.baseline
-                    text: Qt.formatDate(clock.date, "d")
-                    color: Theme.accent
-                    font.family: "Readex Pro"
-                    font.pixelSize: 14
-                    font.weight: Font.Bold
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            // Material You subtle separator bullet
-            Text {
-                text: "•"
-                anchors.baseline: idleIrisClock.baseline
-                anchors.baselineOffset: -0.5
-                color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                font.family: "Readex Pro"
-                font.pixelSize: 11
-                renderType: Text.NativeRendering
-            }
-
-            // IrisClock: clean Readex Pro numbers, accent colon, no leading zero in 12h
-            IrisClock {
-                id: idleIrisClock
-                pixelSize: 16
-                family: "Readex Pro"
-                weight: Font.Bold
-                text: {
-                    var h = clock.date.getHours() % 12 || 12;
-                    var m = clock.date.getMinutes();
-                    var hh = String(h);
-                    var mm = (m < 10 ? "0" : "") + m;
-                    return hh + ":" + mm;
-                }
-                color: Theme.colors.text_primary ?? "#f5f5f7"
-                separatorColor: Theme.accent
-                isScreenRecording: root.isScreenRecording
-            }
-
-            // Ambient Pomodoro Countdown Indicator (Section 4.4)
-            Row {
-                id: idlePomoContainer
-                visible: root.pomoRunning
-                spacing: 7
+            Item {
+                id: idleTimeContainer
+                implicitWidth: idleTimeRow.implicitWidth
+                implicitHeight: idleTimeRow.implicitHeight
                 anchors.verticalCenter: parent.verticalCenter
 
-                Text {
-                    text: "•"
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                    font.family: "Readex Pro"
-                    font.pixelSize: 11
-                    renderType: Text.NativeRendering
-                }
+                Row {
+                    id: idleTimeRow
+                    spacing: 7
 
-                Rectangle {
-                    height: 20
-                    width: idlePomoRow.implicitWidth + 12
-                    radius: 10
-                    color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
-                    border.width: 0
-                    anchors.verticalCenter: parent.verticalCenter
-
+                    // DateMark: weekday quiet, day number carrying accent,
+                    // sharing optical baseline directly with IrisClock figures
                     Row {
-                        id: idlePomoRow
-                        anchors.centerIn: parent
+                        id: idleDateMark
                         spacing: 4
+                        baselineOffset: idleWeekdayText.baselineOffset
+                        anchors.baseline: idleIrisClock.baseline
 
                         Text {
-                            text: root.pomoPaused ? "󰏤" : (root.pomoMode === "focus" ? "󱎫" : "󰄉")
-                            color: root.pomoPaused ? (Theme.colors.text_muted ?? "#8e8e93") : (root.pomoMode === "focus" ? Theme.accent : "#30d158")
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            anchors.verticalCenter: parent.verticalCenter
+                            id: idleWeekdayText
+                            text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
+                            color: Theme.colors.text_muted ?? "#8e8e93"
+                            font.family: "Readex Pro"
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                         }
 
                         Text {
-                            text: root.formatPomoTime(root.pomoSecondsRemaining)
-                            color: Theme.colors.text_primary ?? "#f5f5f7"
+                            id: idleDayText
+                            anchors.baseline: idleWeekdayText.baseline
+                            text: Qt.formatDate(clock.date, "d")
+                            color: Theme.accent
                             font.family: "Readex Pro"
-                            font.pixelSize: 12
+                            font.pixelSize: 14
                             font.weight: Font.Bold
-                            anchors.verticalCenter: parent.verticalCenter
                             renderType: Text.NativeRendering
                         }
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: (mouse) => {
-                            if (mouse.button === Qt.RightButton) {
-                                root.togglePomodoroPause();
-                            } else {
-                                root.openUtility("pomo", false);
-                            }
+                    // Material You subtle separator bullet
+                    Text {
+                        text: "•"
+                        anchors.baseline: idleIrisClock.baseline
+                        anchors.baselineOffset: -0.5
+                        color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                        font.family: "Readex Pro"
+                        font.pixelSize: 11
+                        renderType: Text.NativeRendering
+                    }
+
+                    // IrisClock: clean Readex Pro numbers, accent colon, no leading zero in 12h
+                    IrisClock {
+                        id: idleIrisClock
+                        pixelSize: 16
+                        family: "Readex Pro"
+                        weight: Font.Bold
+                        text: {
+                            var h = clock.date.getHours() % 12 || 12;
+                            var m = clock.date.getMinutes();
+                            var hh = String(h);
+                            var mm = (m < 10 ? "0" : "") + m;
+                            return hh + ":" + mm;
+                        }
+                        color: Theme.colors.text_primary ?? "#f5f5f7"
+                        separatorColor: Theme.accent
+                        isScreenRecording: root.isScreenRecording
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: (mouse) => {
+                        if (mouse.button === Qt.RightButton) {
+                            root.openUtility("", true);
+                        } else {
+                            root.switchMode("calendar", true);
                         }
                     }
                 }
+            }
+
+            BarTimeReadouts {
+                anchors.verticalCenter: parent.verticalCenter
+                onOpenRequested: tab => root.openClockTab(tab)
             }
         }
     }
@@ -1179,123 +977,91 @@ Item {
                 id: musicIdleCluster
                 spacing: 7
                 anchors.verticalCenter: parent.verticalCenter
+                z: 2
 
-                Row {
-                    id: musicIdleDateMark
-                    spacing: 4
-                    baselineOffset: musicIdleWeekdayText.baselineOffset
-                    anchors.baseline: musicIdleClock.baseline
-
-                    Text {
-                        id: musicIdleWeekdayText
-                        text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                        color: Theme.colors.text_muted ?? "#8e8e93"
-                        font.family: "Readex Pro"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
-                    }
-
-                    Text {
-                        id: musicIdleDayText
-                        anchors.baseline: musicIdleWeekdayText.baseline
-                        text: Qt.formatDate(clock.date, "d")
-                        color: Theme.accent
-                        font.family: "Readex Pro"
-                        font.pixelSize: 14
-                        font.weight: Font.Bold
-                        renderType: Text.NativeRendering
-                    }
-                }
-
-                Text {
-                    text: "•"
-                    anchors.baseline: musicIdleClock.baseline
-                    anchors.baselineOffset: -0.5
-                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                    font.family: "Readex Pro"
-                    font.pixelSize: 11
-                    renderType: Text.NativeRendering
-                }
-
-                IrisClock {
-                    id: musicIdleClock
-                    pixelSize: 16
-                    family: "Readex Pro"
-                    weight: Font.Bold
-                    text: {
-                        var h = clock.date.getHours() % 12 || 12;
-                        var m = clock.date.getMinutes();
-                        var hh = String(h);
-                        var mm = (m < 10 ? "0" : "") + m;
-                        return hh + ":" + mm;
-                    }
-                    color: Theme.colors.text_primary ?? "#f5f5f7"
-                    separatorColor: Theme.accent
-                    isScreenRecording: root.isScreenRecording
-                }
-
-                // Ambient Pomodoro Countdown Indicator (Look 2: Music Idle)
-                Row {
-                    id: musicIdlePomoContainer
-                    visible: root.pomoRunning
-                    spacing: 7
+                Item {
+                    id: musicIdleTimeContainer
+                    implicitWidth: musicIdleTimeRow.implicitWidth
+                    implicitHeight: musicIdleTimeRow.implicitHeight
                     anchors.verticalCenter: parent.verticalCenter
 
-                    Text {
-                        text: "•"
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                        font.family: "Readex Pro"
-                        font.pixelSize: 11
-                        renderType: Text.NativeRendering
-                    }
-
-                    Rectangle {
-                        height: 20
-                        width: musicIdlePomoRow.implicitWidth + 12
-                        radius: 10
-                        color: root.pomoPaused ? Qt.rgba(1, 1, 1, 0.08) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.16) : Qt.rgba(0.18, 0.82, 0.34, 0.16))
-                        border.width: 0
-                        anchors.verticalCenter: parent.verticalCenter
+                    Row {
+                        id: musicIdleTimeRow
+                        spacing: 7
 
                         Row {
-                            id: musicIdlePomoRow
-                            anchors.centerIn: parent
+                            id: musicIdleDateMark
                             spacing: 4
+                            baselineOffset: musicIdleWeekdayText.baselineOffset
+                            anchors.baseline: musicIdleClock.baseline
 
                             Text {
-                                text: root.pomoPaused ? "󰏤" : (root.pomoMode === "focus" ? "󱎫" : "󰄉")
-                                color: root.pomoPaused ? (Theme.colors.text_muted ?? "#8e8e93") : (root.pomoMode === "focus" ? Theme.accent : "#30d158")
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 11
-                                anchors.verticalCenter: parent.verticalCenter
+                                id: musicIdleWeekdayText
+                                text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
+                                color: Theme.colors.text_muted ?? "#8e8e93"
+                                font.family: "Readex Pro"
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
                             }
 
                             Text {
-                                text: root.formatPomoTime(root.pomoSecondsRemaining)
-                                color: Theme.colors.text_primary ?? "#f5f5f7"
+                                id: musicIdleDayText
+                                anchors.baseline: musicIdleWeekdayText.baseline
+                                text: Qt.formatDate(clock.date, "d")
+                                color: Theme.accent
                                 font.family: "Readex Pro"
-                                font.pixelSize: 12
+                                font.pixelSize: 14
                                 font.weight: Font.Bold
-                                anchors.verticalCenter: parent.verticalCenter
                                 renderType: Text.NativeRendering
                             }
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: (mouse) => {
-                                if (mouse.button === Qt.RightButton) {
-                                    root.togglePomodoroPause();
-                                } else {
-                                    root.openUtility("pomo", false);
-                                }
+                        Text {
+                            text: "•"
+                            anchors.baseline: musicIdleClock.baseline
+                            anchors.baselineOffset: -0.5
+                            color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
+                            font.family: "Readex Pro"
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                        }
+
+                        IrisClock {
+                            id: musicIdleClock
+                            pixelSize: 16
+                            family: "Readex Pro"
+                            weight: Font.Bold
+                            text: {
+                                var h = clock.date.getHours() % 12 || 12;
+                                var m = clock.date.getMinutes();
+                                var hh = String(h);
+                                var mm = (m < 10 ? "0" : "") + m;
+                                return hh + ":" + mm;
+                            }
+                            color: Theme.colors.text_primary ?? "#f5f5f7"
+                            separatorColor: Theme.accent
+                            isScreenRecording: root.isScreenRecording
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.MiddleButton) {
+                                Quickshell.execDetached(["playerctl", "play-pause"]);
+                            } else {
+                                root.switchMode("calendar", true);
                             }
                         }
                     }
+                }
+
+                BarTimeReadouts {
+                    anchors.verticalCenter: parent.verticalCenter
+                    onOpenRequested: tab => root.openClockTab(tab)
                 }
             }
 
@@ -1396,6 +1162,12 @@ Item {
                 Layout.alignment: Qt.AlignVCenter
             }
 
+            BarTimeReadouts {
+                id: expandedMusicReadouts
+                Layout.alignment: Qt.AlignVCenter
+                onOpenRequested: tab => root.openClockTab(tab)
+            }
+
             // Live Waveform
             IrisWaveform {
                 running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
@@ -1418,12 +1190,18 @@ Item {
     RowLayout {
         id: dashRow
         anchors.centerIn: parent
-        spacing: 20
-        opacity: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.0
-        scale: (root.activeMode === "hover" && !dash.isIslandActive) ? 1.0 : 0.96
+        spacing: 10
+        property real hoverBlend: root.activeMode === "hover" && !dash.isIslandActive ? 1 : 0
+
+        opacity: hoverBlend * NotchConfig.revealBetween(dash.width / Math.max(1, implicitWidth), 0.72, 1.04)
         visible: opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
-        Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
+
+        Behavior on hoverBlend {
+            NumberAnimation {
+                duration: root.activeMode === "hover" ? NotchConfig.animContentEnter : NotchConfig.animContentExit
+                easing.type: Easing.OutCubic
+            }
+        }
 
         // ── 1. LEFT GROUP: LAUNCHER & WORKSPACES ─────────────────
         Row {
@@ -1473,7 +1251,7 @@ Item {
                 width: 1
                 height: 14
                 anchors.verticalCenter: parent.verticalCenter
-                color: Qt.rgba(255, 255, 255, 0.15)
+                color: Theme.alpha(Theme.text, 0.14)
             }
 
             // Workspaces Pager (Square Cells, Ultra-Bold Numbers & Occupied Window Dots)
@@ -1551,6 +1329,13 @@ Item {
             }
         }
 
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: 1
+            Layout.preferredHeight: 16
+            color: Theme.alpha(Theme.text, 0.14)
+        }
+
         // ── 2. CENTER GROUP: DATE & TABULAR CLOCK (Original Design) ─
         Item {
             id: centerItem
@@ -1567,6 +1352,7 @@ Item {
 
             RowLayout {
                 id: centerGroupRow
+                z: 1
                 anchors.centerIn: parent
                 spacing: 8
 
@@ -1626,37 +1412,29 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                 }
 
-                // Screen Recording Live Dot
-                Rectangle {
-                    width: 6
-                    height: 6
-                    radius: 3
-                    color: "#ff5449"
-                    visible: root.isScreenRecording
+                BarTimeReadouts {
                     Layout.alignment: Qt.AlignVCenter
-
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: root.isScreenRecording
-                        NumberAnimation { to: 0.3; duration: 600 }
-                        NumberAnimation { to: 1.0; duration: 600 }
-                    }
+                    onOpenRequested: tab => root.openClockTab(tab)
                 }
             }
 
             MouseArea {
                 id: centerMouse
+                z: 0
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (root.isScreenRecording) {
-                        root.switchMode("recorder");
-                    } else {
-                        root.switchMode("calendar");
-                    }
+                    root.switchMode("calendar");
                 }
             }
+        }
+
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: 1
+            Layout.preferredHeight: 16
+            color: Theme.alpha(Theme.text, 0.14)
         }
 
         // ── 3. RIGHT GROUP: BATTERY PILL & REVAMPED QUICK CONTROLS ─
@@ -1699,47 +1477,7 @@ Item {
                 width: 1
                 height: 14
                 Layout.alignment: Qt.AlignVCenter
-                color: Qt.rgba(255, 255, 255, 0.15)
-            }
-
-            // Revamped Settings Window Toggle (Settings gear icon)
-            Item {
-                width: 28
-                height: 28
-                Layout.alignment: Qt.AlignVCenter
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 8
-                    property bool isToggled: typeof root !== "undefined" && root.settingsOpen
-                    color: isToggled ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22) : (setMouse.pressed ? Qt.rgba(255, 255, 255, 0.14) : (setMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"))
-                    scale: setMouse.pressed ? 0.92 : (setMouse.containsMouse ? 1.06 : 1.0)
-
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "settings"
-                        iconSize: 17
-                        color: parent.isToggled ? Theme.accent : (setMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#ffffff"))
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-                }
-
-                MouseArea {
-                    id: setMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (typeof root !== "undefined" && root.openSettings) {
-                            root.openSettings("");
-                        } else {
-                            dash.settingsRequested();
-                        }
-                    }
-                }
+                color: Theme.alpha(Theme.text, 0.14)
             }
 
             // Revamped Control Center Toggle (Tune sliders icon)

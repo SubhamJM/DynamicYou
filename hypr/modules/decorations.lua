@@ -13,19 +13,10 @@ if palette then
 end
 
 hl.config({
-    gestures = {
-        workspace_swipe_distance = 700,
-        workspace_swipe_cancel_ratio = 0.2,
-        workspace_swipe_min_speed_to_force = 5,
-        workspace_swipe_direction_lock = true,
-        workspace_swipe_direction_lock_threshold = 10,
-        workspace_swipe_create_new = true
-    },
     general = {
         -- Gaps and border
         gaps_in = 6,
         gaps_out = 10,
-        gaps_workspaces = 20,
 
         border_size = 0,
 
@@ -48,7 +39,7 @@ hl.config({
         -- 2 = circle, higher = squircle, 4 = very obvious squircle
         -- Fuck clearly visible squircles. 100% Apple brainrot.
         rounding_power = 2.5,
-        rounding = 18,
+        rounding = 12,
 
 		active_opacity = 0.95,
 		inactive_opacity = 0.90,
@@ -72,7 +63,7 @@ hl.config({
             input_methods_ignorealpha = 0.8
         },
         shadow = {
-            enabled = true,
+            enabled = false,
             range = 25,
             render_power = 4,
             color = "rgba(1a1a1aee)"

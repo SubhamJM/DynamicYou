@@ -4,12 +4,28 @@ import sys
 import glob
 import json
 import subprocess
+import re
+
+def keyboard_backlights():
+    return sorted(glob.glob('/sys/class/leds/*kbd_backlight'))
+
+
+def display_modes():
+    monitors = json.loads(subprocess.check_output(['hyprctl', 'monitors', '-j'], text=True, stderr=subprocess.DEVNULL))
+    monitor = next((m for m in monitors if m.get('name', '').startswith(('eDP-', 'LVDS-', 'DSI-'))), None)
+    if not monitor:
+        return None, []
+    dimensions = f"{monitor.get('width')}x{monitor.get('height')}"
+    modes = []
+    for mode in monitor.get('availableModes', []):
+        match = re.fullmatch(r'(\d+x\d+)@(\d+(?:\.\d+)?)Hz', mode)
+        if match and match.group(1) == dimensions:
+            modes.append((float(match.group(2)), mode[:-2]))
+    return monitor, sorted(modes)
+
 
 def get_telemetry():
-    bats = [
-        b for b in glob.glob('/sys/class/power_supply/*')
-        if os.path.exists(os.path.join(b, 'type')) and open(os.path.join(b, 'type')).read().strip() == 'Battery'
-    ]
+    bats = battery_paths()
     if not bats:
         return {
             'percentage': 100,
@@ -23,6 +39,7 @@ def get_telemetry():
             'fullEnergyWh': 0.0,
             'timeStr': 'Connected to AC Power',
             'chargeThreshold': 100,
+            'chargeThresholdSupported': False,
             'refreshRate': 144,
             'kbdBacklight': 0,
             'topDrainers': []
@@ -106,32 +123,28 @@ def get_telemetry():
     else:
         time_str = f'{cap}% Discharging'
 
-    # Asus Charge Control Threshold
-    thresh = 100
-    thresh_path = os.path.join(bat, 'charge_control_end_threshold')
-    if os.path.exists(thresh_path):
-        try:
-            thresh = int(open(thresh_path).read().strip())
-        except Exception:
-            pass
+    # Read the first charge cap exposed by the kernel/firmware. Laptops without a
+    # supported sysfs control report unsupported instead of pretending the cap is 100%.
+    threshold_control = find_charge_threshold_control(bats)
+    thresh = read_charge_threshold(threshold_control) if threshold_control else 100
 
-    # Monitor Refresh Rate
-    rr = 144
+    rr = 0
+    refresh_supported = False
     try:
-        m_out = subprocess.check_output(['hyprctl', 'monitors', '-j'], stderr=subprocess.DEVNULL).decode()
-        m_data = json.loads(m_out)
-        if m_data and 'refreshRate' in m_data[0]:
-            rr = int(round(m_data[0]['refreshRate']))
-    except Exception:
+        monitor, modes = display_modes()
+        if monitor:
+            rr = round(monitor.get('refreshRate', 0))
+            refresh_supported = len(modes) > 1 and modes[-1][0] - modes[0][0] > 1
+    except (OSError, ValueError, subprocess.SubprocessError):
         pass
 
-    # Keyboard Backlight
+    backlights = keyboard_backlights()
     kbd = 0
-    kbd_path = '/sys/class/leds/asus::kbd_backlight/brightness'
-    if os.path.exists(kbd_path):
+    if backlights:
         try:
-            kbd = int(open(kbd_path).read().strip())
-        except Exception:
+            with open(os.path.join(backlights[0], 'brightness')) as stream:
+                kbd = int(stream.read().strip())
+        except (OSError, ValueError):
             pass
 
     # Top CPU / Energy Draining Processes
@@ -188,53 +201,158 @@ def get_telemetry():
         'fullEnergyWh': full_energy_wh,
         'timeStr': time_str,
         'chargeThreshold': thresh,
+        'chargeThresholdSupported': bool(threshold_control),
         'refreshRate': rr,
+        'refreshRateSupported': refresh_supported,
         'kbdBacklight': kbd,
+        'kbdBacklightSupported': bool(backlights),
         'topDrainers': drainers
     }
 
 def toggle_refresh_rate():
     try:
-        m_out = subprocess.check_output(['hyprctl', 'monitors', '-j'], stderr=subprocess.DEVNULL).decode()
-        m_data = json.loads(m_out)
-        curr_hz = 144
-        if m_data and 'refreshRate' in m_data[0]:
-            curr_hz = int(round(m_data[0]['refreshRate']))
-
-        if curr_hz > 100:
-            # Switch to 60Hz
-            cmd = 'hl.monitor({ output = "eDP-1", mode = "1920x1200@60.00", position = "auto", scale = "1.20" })'
-        else:
-            # Switch to 144Hz
-            cmd = 'hl.monitor({ output = "eDP-1", mode = "1920x1200@144.00", position = "auto", scale = "1.20" })'
-
-        subprocess.run(['hyprctl', 'eval', cmd], capture_output=True)
-        print(json.dumps({'status': 'ok', 'newRate': 60 if curr_hz > 100 else 144}))
-    except Exception as e:
+        monitor, modes = display_modes()
+        if not monitor or len(modes) < 2 or modes[-1][0] - modes[0][0] <= 1:
+            raise RuntimeError('No alternate refresh rate is available')
+        current = float(monitor.get('refreshRate', 0))
+        target = modes[-1] if abs(current - modes[0][0]) < 1 else modes[0]
+        name = monitor['name']
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+', name):
+            raise ValueError('Unsupported monitor name')
+        scale = float(monitor.get('scale', 1))
+        x, y = int(monitor.get('x', 0)), int(monitor.get('y', 0))
+        cmd = f'hl.monitor({{ output = "{name}", mode = "{target[1]}", position = "{x}x{y}", scale = "{scale}" }})'
+        subprocess.run(['hyprctl', 'eval', cmd], check=True, capture_output=True, text=True)
+        print(json.dumps({'status': 'ok', 'newRate': round(target[0])}))
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as e:
         print(json.dumps({'status': 'error', 'message': str(e)}))
+
 
 def toggle_kbd_backlight():
     try:
-        kbd_path = '/sys/class/leds/asus::kbd_backlight/brightness'
-        curr = 0
-        if os.path.exists(kbd_path):
-            curr = int(open(kbd_path).read().strip())
-        new_val = 2 if curr == 0 else 0
-        subprocess.run(['brightnessctl', "--device=asus::kbd_backlight", 'set', str(new_val)], capture_output=True)
+        backlights = keyboard_backlights()
+        if not backlights:
+            raise RuntimeError('No keyboard backlight is available')
+        path = backlights[0]
+        with open(os.path.join(path, 'brightness')) as stream:
+            current = int(stream.read().strip())
+        with open(os.path.join(path, 'max_brightness')) as stream:
+            maximum = int(stream.read().strip())
+        new_val = maximum if current == 0 else 0
+        subprocess.run(['brightnessctl', '--device=' + os.path.basename(path), 'set', str(new_val)], check=True, capture_output=True)
         print(json.dumps({'status': 'ok', 'kbdBacklight': new_val}))
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as e:
         print(json.dumps({'status': 'error', 'message': str(e)}))
+
+def battery_paths():
+    paths = []
+    for path in sorted(glob.glob('/sys/class/power_supply/*')):
+        try:
+            with open(os.path.join(path, 'type'), encoding='utf-8') as stream:
+                if stream.read().strip() == 'Battery':
+                    paths.append(path)
+        except OSError:
+            continue
+    return paths
+
+
+def charge_threshold_controls(batteries):
+    """Known charge-limit interfaces with explicit kernel/vendor encodings."""
+    controls = []
+    for battery in batteries:
+        for name in ('charge_control_end_threshold', 'charge_stop_threshold'):
+            path = os.path.join(battery, name)
+            if os.path.isfile(path):
+                controls.append((path, 'number'))
+        name = os.path.basename(os.path.realpath(battery))
+        path = os.path.join('/sys/devices/platform/smapi', name, 'stop_charge_thresh')
+        if os.path.isfile(path):
+            controls.append((path, 'number'))
+    for path, encoding in (
+        ('/sys/devices/platform/lg-laptop/battery_care_limit', 'number'),
+        ('/sys/devices/platform/sony-laptop/battery_care_limiter', 'number'),
+        ('/sys/devices/platform/samsung/battery_life_extender', 'bool80'),
+    ):
+        if os.path.isfile(path):
+            controls.append((path, encoding))
+    for path in ('/sys/devices/platform/huawei-wmi/charge_control_thresholds',):
+        if os.path.isfile(path):
+            controls.append((path, 'pair'))
+    # Preserve discovery order and avoid touching the same sysfs node twice.
+    unique = []
+    seen = set()
+    for path, encoding in controls:
+        real = os.path.realpath(path)
+        if real not in seen:
+            seen.add(real)
+            unique.append((path, encoding))
+    return unique
+
+
+def find_charge_threshold_control(batteries=None):
+    batteries = battery_paths() if batteries is None else batteries
+    controls = charge_threshold_controls(batteries)
+    return controls[0] if controls else None
+
+
+def read_charge_threshold(control):
+    path, encoding = control
+    try:
+        with open(path, encoding='utf-8') as stream:
+            values = stream.read().strip().split()
+        if not values:
+            return 100
+        if encoding == 'bool80':
+            return 80 if int(values[0]) else 100
+        return int(values[-1])
+    except (OSError, ValueError):
+        return 100
+
+
+def write_charge_threshold(control, value):
+    path, encoding = control
+    if encoding == 'bool80':
+        payload = '1' if value == 80 else '0'
+    elif encoding == 'pair':
+        try:
+            with open(path, encoding='utf-8') as stream:
+                current = stream.read().strip().split()
+            start = int(current[0]) if current else 50
+        except (OSError, ValueError):
+            start = 50
+        payload = f'{min(start, value)} {value}'
+    else:
+        payload = str(value)
+    try:
+        with open(path, 'w', encoding='utf-8') as stream:
+            stream.write(payload)
+    except PermissionError:
+        result = subprocess.run(
+            ['pkexec', '/usr/bin/tee', '--', path],
+            input=payload, capture_output=True, text=True, timeout=45,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(detail or 'Authorization was cancelled or the firmware denied the change')
+    actual = read_charge_threshold(control)
+    if actual != value:
+        raise RuntimeError(f'Firmware reported {actual}% after requesting {value}%')
+
 
 def set_charge_threshold(val):
     try:
         val_int = int(val)
-        if val_int not in (60, 80, 100):
-            print(json.dumps({'status': 'error', 'message': 'Invalid threshold. Use 60, 80, or 100'}))
-            return
-        subprocess.Popen(['pkexec', 'sh', '-c', f'echo {val_int} > /sys/class/power_supply/BAT1/charge_control_end_threshold'])
-        print(json.dumps({'status': 'ok', 'chargeThreshold': val_int}))
-    except Exception as e:
-        print(json.dumps({'status': 'error', 'message': str(e)}))
+        if val_int not in (80, 100):
+            raise ValueError('Charge Care supports 80% or 100%')
+        controls = charge_threshold_controls(battery_paths())
+        if not controls:
+            raise RuntimeError('This laptop does not expose a supported charge limit')
+
+        control = controls[0]
+        write_charge_threshold(control, val_int)
+        print(json.dumps({'status': 'ok', 'chargeThreshold': val_int, 'control': control[0]}))
+    except Exception as error:
+        print(json.dumps({'status': 'error', 'message': str(error)}))
 
 def main():
     if len(sys.argv) > 1:

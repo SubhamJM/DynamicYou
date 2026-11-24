@@ -39,7 +39,6 @@ FocusScope {
     property bool nightLightActive: false
     property bool caffeineActive: false
     property bool micMuted: false
-    property bool hotspotActive: false
 
     // Enabled Utilities List
     property var enabledKeys: [
@@ -154,10 +153,10 @@ FocusScope {
             id: "hotspot",
             name: "Hotspot",
             icon: "wifi_tethering",
-            desc: toolDeckRoot.hotspotActive ? "Sharing AP" : "Disabled",
+            desc: root.hotspot.active ? "Sharing AP" : "Disabled",
             color: "#30d158",
-            isActive: toolDeckRoot.hotspotActive,
-            action: function() { toolDeckRoot.toggleHotspot(); }
+            isActive: root.hotspot.active,
+            action: function() { root.hotspot.request("toggle"); }
         },
         "dictation": {
             id: "dictation",
@@ -192,17 +191,11 @@ FocusScope {
         "pomo": {
             id: "pomo",
             name: "Focus Timer",
-            icon: root.pomoRunning ? (root.pomoPaused ? "pause" : "timer") : "timer",
-            desc: root.pomoRunning ? (root.pomoPaused ? "Paused" : root.formatPomoTime(root.pomoSecondsRemaining)) : "25m Sprint",
+            icon: Chrono.pomoActive && !Chrono.pomoRunning ? "pause" : "timer",
+            desc: Chrono.pomoActive ? Chrono.countdown(Chrono.pomoRemaining) : Prefs.pomodoroFocus + "m Focus",
             color: toolDeckRoot.colAccent,
-            isActive: root.pomoRunning,
-            action: function() {
-                if (root.pomoRunning) {
-                    root.togglePomodoroPause();
-                } else {
-                    root.startPomodoro(25, "focus", "Focus Sprint");
-                }
-            }
+            isActive: Chrono.pomoRunning,
+            action: function() { Chrono.pomoToggle(); }
         },
         "notes": {
             id: "notes",
@@ -344,32 +337,6 @@ FocusScope {
         toolDeckRoot.micMuted = !toolDeckRoot.micMuted;
         Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]);
         fetchMicProcess.running = true;
-    }
-
-    Process {
-        id: checkHotspotStatus
-        running: root.activeMode === "tooldeck"
-        command: ["python3", Quickshell.shellPath("scripts/hotspot_manager.py"), "status"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var data = JSON.parse(this.text.trim());
-                    var isActive = !!data.active;
-                    toolDeckRoot.hotspotActive = isActive;
-                } catch(e) {
-                    var fallback = (this.text.indexOf('"active": true') !== -1);
-                    toolDeckRoot.hotspotActive = fallback;
-                }
-            }
-        }
-    }
-
-    function toggleHotspot() {
-        var targetState = !toolDeckRoot.hotspotActive;
-        toolDeckRoot.hotspotActive = targetState;
-        var scriptPath = Quickshell.shellPath("scripts/hotspot_manager.py");
-        Quickshell.execDetached(["python3", scriptPath, targetState ? "start" : "stop"]);
-        checkHotspotStatus.running = true;
     }
 
     // ========================================================

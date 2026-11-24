@@ -442,6 +442,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: Theme.dp(14)
             anchors.verticalCenter: parent.verticalCenter
+            width: reminderButton.x - x - Theme.dp(12)
             spacing: Theme.dp(12)
 
             Item {
@@ -467,14 +468,19 @@ Item {
 
             Column {
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, parent.width - Theme.dp(50))
                 spacing: 0
 
                 LText {
+                    width: parent.width
+                    elide: Text.ElideRight
                     role: "titleSmall"
                     text: Agenda.next ? Agenda.next.item.name : I18n.tr("Nothing coming up")
                 }
 
                 LText {
+                    width: parent.width
+                    elide: Text.ElideRight
                     role: "bodySmall"
                     color: Theme.subtext
                     text: Agenda.next ? Agenda.next.at.toLocaleDateString(I18n.locale, I18n.tr("ddd d MMM")) + " · " + Agenda.timeText(Agenda.next.item) + " · " + Agenda.untilText(Agenda.next.at) : I18n.tr("Reminders you add show up here")
@@ -485,6 +491,7 @@ Item {
         }
 
         Button {
+            id: reminderButton
             anchors.right: parent.right
             anchors.rightMargin: Theme.dp(12)
             anchors.verticalCenter: parent.verticalCenter

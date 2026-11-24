@@ -25,6 +25,13 @@ Item {
     // ========================================================
     property string activeSection: "" // "" (main), "audio", "vpn"
     onActiveSectionChanged: {
+        const page = activeSection === "audio" ? audioSubviewContainer
+            : activeSection === "vpn" ? vpnSubviewContainer : mainViewContainer;
+        if (page && visible) {
+            sectionReveal.stop();
+            sectionReveal.target = page;
+            sectionReveal.restart();
+        }
         if (activeSection === "audio") {
             fetchAudioDevices.running = true;
         } else if (activeSection === "vpn") {
@@ -32,12 +39,20 @@ Item {
         }
     }
 
+    NumberAnimation {
+        id: sectionReveal
+        property: "opacity"
+        from: 0.72
+        to: 1
+        duration: 145
+        easing.type: Easing.OutCubic
+    }
+
     Component.onCompleted: {
         fetchAudioDevices.running = true;
         fetchVpnStatus.running = true;
         checkNightLight.running = true;
         checkCaffeineState.running = true;
-        checkHotspotStatus.running = true;
     }
     property bool nightLightActive: false
     property bool caffeineActive: false
@@ -46,6 +61,9 @@ Item {
     property bool audioMicMuted: false
     property real audioMicVolume: 0.5
     property real displayBrightness: 0.5
+    property bool volumeReady: false
+    property bool microphoneReady: false
+    property bool brightnessReady: false
 
     property bool isDraggingVolume: false
     property bool isDraggingMic: false
@@ -56,6 +74,8 @@ Item {
     readonly property color colCardHover: (Theme.colors && Theme.colors.hover_bg) ? Theme.colors.hover_bg : "#312823"
     readonly property color colCardActive: Qt.alpha(Theme.accent, 0.24)
     readonly property color colAccent: Theme.accent
+    readonly property int feedbackDuration: 120
+    readonly property real pressScale: 0.975
     readonly property color colText: (Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#f0dfd7"
     readonly property color colSubtext: (Theme.colors && Theme.colors.text_secondary) ? Theme.colors.text_secondary : "#d7c2b8"
     readonly property color colMuted: (Theme.colors && Theme.colors.text_muted) ? Theme.colors.text_muted : "#9f8d84"
@@ -88,6 +108,7 @@ Item {
                 if (utilModule.isTogglingWifi) return;
                 var isEnabled = this.text.trim() === "enabled";
                 utilModule.wifiEnabled = isEnabled;
+                if (root.wifiMod) root.wifiMod.wifiEnabled = isEnabled;
             }
         }
     }
@@ -107,57 +128,11 @@ Item {
         var targetState = !utilModule.wifiEnabled;
         utilModule.isTogglingWifi = true;
         utilModule.wifiEnabled = targetState;
+        if (root.wifiMod) {
+            root.wifiMod.wifiEnabled = targetState;
+        }
         Quickshell.execDetached(["nmcli", "radio", "wifi", targetState ? "on" : "off"]);
         wifiSettleTimer.restart();
-    }
-
-    // 1b. Hotspot Toggle & Monitoring
-    property bool hotspotActive: false
-
-    Process {
-        id: checkHotspotStatus
-        running: true
-        command: ["python3", Quickshell.shellPath("scripts/hotspot_manager.py"), "status"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var data = JSON.parse(this.text.trim());
-                    var isActive = !!data.active;
-                    utilModule.hotspotActive = isActive;
-                } catch(e) {
-                    var fallback = (this.text.indexOf('"active": true') !== -1);
-                    utilModule.hotspotActive = fallback;
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: hotspotSettleTimer
-        interval: 500
-        repeat: false
-        onTriggered: {
-            checkHotspotStatus.running = true;
-            if (root.wifiMod) root.wifiMod.refreshStatus();
-        }
-    }
-
-    Process {
-        id: utilHotspotRunner
-        running: false
-        onExited: {
-            checkHotspotStatus.running = true;
-            if (root.wifiMod) root.wifiMod.refreshStatus();
-        }
-    }
-
-    function toggleHotspot() {
-        var targetState = !utilModule.hotspotActive;
-        utilModule.hotspotActive = targetState;
-        var scriptPath = Quickshell.shellPath("scripts/hotspot_manager.py");
-        utilHotspotRunner.command = ["python3", scriptPath, targetState ? "start" : "stop"];
-        utilHotspotRunner.running = true;
-        hotspotSettleTimer.restart();
     }
 
     // 2. Bluetooth Toggle & Open
@@ -273,6 +248,7 @@ Item {
                     var v = parseFloat(parts[1]);
                     if (!isNaN(v)) {
                         utilModule.audioVolume = Math.max(0.0, Math.min(1.0, v));
+                        utilModule.volumeReady = true;
                     }
                 }
             }
@@ -293,6 +269,7 @@ Item {
                         var v = parseFloat(parts[1]);
                         if (!isNaN(v)) {
                             utilModule.audioMicVolume = Math.max(0.0, Math.min(1.0, v));
+                            utilModule.microphoneReady = true;
                         }
                     }
                 }
@@ -346,6 +323,7 @@ Item {
                 var val = parseInt(this.text.trim());
                 if (!isNaN(val) && !utilModule.isDraggingBrightness) {
                     utilModule.displayBrightness = Math.max(0.01, Math.min(1.0, val / 100.0));
+                    utilModule.brightnessReady = true;
                 }
             }
         }
@@ -360,6 +338,8 @@ Item {
     // 10. Audio Devices Data (Sinks & Sources)
     property var audioSinks: []
     property var audioSources: []
+    property bool audioDevicesReady: false
+    readonly property int audioPanelHeight: Math.max(220, Math.min(440, Math.ceil(audioContentCol.implicitHeight) + 72))
     readonly property var defaultSink: {
         for (var i = 0; i < utilModule.audioSinks.length; i++) {
             if (utilModule.audioSinks[i].isDefault) return utilModule.audioSinks[i];
@@ -375,8 +355,11 @@ Item {
             onStreamFinished: {
                 try {
                     var data = JSON.parse(this.text.trim());
-                    utilModule.audioSinks = data.sinks || [];
-                    utilModule.audioSources = data.sources || [];
+                    const sinks = data.sinks || [];
+                    const sources = data.sources || [];
+                    if (JSON.stringify(sinks) !== JSON.stringify(utilModule.audioSinks)) utilModule.audioSinks = sinks;
+                    if (JSON.stringify(sources) !== JSON.stringify(utilModule.audioSources)) utilModule.audioSources = sources;
+                    utilModule.audioDevicesReady = true;
                 } catch (e) {}
             }
         }
@@ -385,7 +368,7 @@ Item {
     function cleanDeviceName(name, desc) {
         var d = (desc && desc.length > 0) ? desc : (name || "Audio Device");
         d = d.replace(/^(Alder|Raptor)\s*Lake(-P\/U\/H)?\s*(cAVS|High Definition Audio Controller)?\s*/i, "");
-        d = d.replace(/\bHDMI\s*\/\s*DisplayPort\s*\d+\s*Output\b/i, "HDMI Output");
+        d = d.replace(/\bHDMI\s*\/\s*DisplayPort\s*(\d+)\s*Output\b/i, "HDMI $1");
         return d.trim() || desc || name;
     }
 
@@ -536,12 +519,11 @@ Item {
 
     Timer {
         interval: 1000
-        running: utilModule.visible && root.activeMode === "utility"
+        running: root.activeMode === "utility"
         repeat: true
         triggeredOnStart: true
         onTriggered: {
             checkWifiRadio.running = true;
-            checkHotspotStatus.running = true;
             checkNightLight.running = true;
             checkCaffeineState.running = true;
             fetchVolumeProcess.running = true;
@@ -577,14 +559,14 @@ Item {
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         implicitHeight: 48
-        radius: 16
+        radius: 14
 
         // Material 3 Surface Container plate
         color: plateMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
         border.width: 0
 
-        scale: plateMouse.pressed ? 0.985 : (plateMouse.containsMouse ? 1.01 : 1.0)
-        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        scale: plateMouse.pressed ? utilModule.pressScale : 1.0
+        Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 120 } }
 
         // Whole card click area (opens popup / details)
@@ -606,21 +588,21 @@ Item {
             Rectangle {
                 id: iplateDisc
                 z: 10
-                width: 34
-                height: 34
-                radius: 17
+                Layout.preferredWidth: 34
+                Layout.preferredHeight: 34
+                radius: 12
                 color: iplate.lit
                     ? iplate.tint
                     : (discMouse.containsMouse ? utilModule.colCardHover : Qt.rgba(255, 255, 255, 0.08))
-                scale: discMouse.pressed ? 0.88 : (discMouse.containsMouse ? 1.05 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 80 } }
+                scale: discMouse.pressed ? utilModule.pressScale : 1.0
+                Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: iplate.glyph
                     fill: iplate.lit ? 1 : 0
-                    iconSize: 18
+                    iconSize: 19
                     color: iplate.lit ? utilModule.colBg : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 100 } }
                 }
@@ -688,31 +670,50 @@ Item {
         property string label: ""
         property bool lit: false
         property color tint: utilModule.colAccent
+        property string contextHint: ""
+        property bool grouped: false
         signal clicked()
+        signal contextRequested()
+
+        Accessible.name: label
+        ToolTip.visible: contextHint !== "" && tileMouse.containsMouse
+        ToolTip.text: contextHint
+        ToolTip.delay: 500
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         Layout.fillHeight: true
         Layout.preferredHeight: 48
         implicitHeight: 48
-        radius: 16
+        radius: 14
 
         // Material 3 tonal surface
-        color: gtile.lit
-            ? gtile.tint
-            : (tileMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
+        color: gtile.grouped ? "transparent" : (gtile.lit
+            ? Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22)
+            : (tileMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard))
         border.width: 0
 
-        scale: tileMouse.pressed ? 0.93 : (tileMouse.containsMouse ? 1.02 : 1.0)
-        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        scale: tileMouse.pressed ? utilModule.pressScale : 1.0
+        Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 110 } }
+
+        Rectangle {
+            anchors.centerIn: parent
+            height: Math.min(parent.width - 4, parent.height)
+            width: height
+            radius: Math.min(width, height) / 2
+            visible: gtile.grouped
+            color: gtile.lit ? Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22)
+                : Theme.alpha(Theme.text, tileMouse.containsMouse ? 0.13 : 0.065)
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
 
         MaterialSymbol {
             anchors.centerIn: parent
             text: gtile.glyph
             fill: gtile.lit ? 1 : 0
-            iconSize: 19
-            color: gtile.lit ? utilModule.colBg : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
+            iconSize: 21
+            color: gtile.lit ? gtile.tint : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
             Behavior on color { ColorAnimation { duration: 100 } }
         }
 
@@ -722,9 +723,11 @@ Item {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             preventStealing: true
+            acceptedButtons: gtile.contextHint ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
             onClicked: (mouse) => {
                 mouse.accepted = true;
-                gtile.clicked();
+                if (mouse.button === Qt.RightButton) gtile.contextRequested();
+                else gtile.clicked();
             }
         }
     }
@@ -736,6 +739,7 @@ Item {
         property string icon: "volume_up"
         property string percentText: "50%"
         property bool muted: false
+        required property bool valueReady
         property color activeColor: utilModule.colAccent
         signal moved(real val)
         signal iconClicked()
@@ -743,36 +747,54 @@ Item {
         property real dragVal: -1
         readonly property real currentRatio: Math.max(0.0, Math.min(1.0, vslider.dragVal >= 0 ? vslider.dragVal : vslider.value))
 
+        property real fillRatio: valueReady && !muted ? currentRatio : 0
+        Behavior on fillRatio {
+            enabled: root.expandedContentReady && vslider.dragVal < 0
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        Layout.minimumWidth: 0
         Layout.fillHeight: true
 
         Rectangle {
             id: track
             anchors.fill: parent
-            radius: 18
+            radius: 15
             color: utilModule.colCard
             border.width: 0
             clip: true
 
-            scale: vsliderMouse.pressed ? 0.985 : (vsliderMouse.containsMouse ? 1.015 : 1.0)
-            Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-
-            // Fluid Rising Fill with rounded top and bottom - matching current theme
+            // A slim track leaves the control's icon and value easy to read.
             Rectangle {
-                id: fillFace
-                anchors.left: parent.left
-                anchors.right: parent.right
+                id: sliderRail
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                visible: !vslider.muted && vslider.currentRatio > 0.01
-                height: vslider.muted ? 0 : (vslider.currentRatio > 0.01 ? Math.max(38, Math.min(parent.height, parent.height * vslider.currentRatio)) : 0)
-                radius: 18
-                color: vslider.muted ? utilModule.colMuted : vslider.activeColor
-
-                Behavior on height {
-                    enabled: vslider.dragVal < 0
-                    NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                anchors.topMargin: 33
+                anchors.bottomMargin: 40
+                width: 5
+                radius: width / 2
+                color: Theme.alpha(Theme.text, 0.13)
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: parent.height * vslider.fillRatio
+                    radius: width / 2
+                    color: vslider.activeColor
                 }
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.max(-height / 2, Math.min(parent.height - height / 2, parent.height * (1 - vslider.fillRatio) - height / 2))
+                    width: 14
+                    height: 14
+                    radius: 7
+                    color: vslider.valueReady && !vslider.muted ? vslider.activeColor : utilModule.colSubtext
+                    border.width: 2
+                    border.color: utilModule.colCard
+                }
             }
 
             // Top Numeric Percentage Readout
@@ -781,14 +803,14 @@ Item {
                 anchors.topMargin: 10
                 anchors.horizontalCenter: parent.horizontalCenter
                 z: 5
-                text: vslider.percentText
+                text: vslider.valueReady ? vslider.percentText : "—"
                 font.family: "Noto Sans"
                 font.pixelSize: 11
                 font.weight: Font.Bold
                 font.features: ({ "tnum": 1 })
                 color: vslider.muted
                     ? (Theme.colors.error || "#ffb4ab")
-                    : (vslider.currentRatio >= 0.82 ? utilModule.colBg : utilModule.colText)
+                    : utilModule.colText
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
 
@@ -805,8 +827,8 @@ Item {
                 color: viconMouse.containsMouse
                     ? (vslider.currentRatio >= 0.25 ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(255, 255, 255, 0.12))
                     : "transparent"
-                scale: viconMouse.pressed ? 0.88 : (viconMouse.containsMouse ? 1.06 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 75 } }
+                scale: viconMouse.pressed ? utilModule.pressScale : 1.0
+                Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 120 } }
 
                 MaterialSymbol {
@@ -816,7 +838,7 @@ Item {
                     iconSize: 18
                     color: vslider.muted
                         ? (Theme.colors.error || "#ffb4ab")
-                        : (vslider.currentRatio >= 0.01 ? utilModule.colBg : utilModule.colText)
+                        : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
@@ -842,7 +864,7 @@ Item {
                 preventStealing: true
 
                 function calcRatio(mouseY) {
-                    return Math.max(0.0, Math.min(1.0, (height - mouseY) / Math.max(1, height)));
+                    return Math.max(0.0, Math.min(1.0, (height - 40 - mouseY) / Math.max(1, height - 73)));
                 }
 
                 onPressed: (mouse) => {
@@ -857,12 +879,15 @@ Item {
                     vslider.moved(vslider.dragVal);
                 }
 
-                onReleased: {
+                function finishDrag() {
                     vslider.dragVal = -1;
                     utilModule.isDraggingBrightness = false;
                     utilModule.isDraggingVolume = false;
                     utilModule.isDraggingMic = false;
                 }
+
+                onReleased: finishDrag()
+                onCanceled: finishDrag()
 
                 onWheel: (wheel) => {
                     var step = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
@@ -1243,26 +1268,31 @@ Item {
     component HeaderQuickBtn: Rectangle {
         id: hbtn
         property string glyph: ""
+        property string hint: ""
         property color iconColor: utilModule.colSubtext
         property color customBg: utilModule.colCard
         property color hoverBg: utilModule.colCardHover
         signal clicked()
 
-        width: 28
-        height: 28
-        radius: 14
+        Layout.preferredWidth: 24
+        Layout.preferredHeight: 28
+        radius: 8
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
         border.width: 0
+        Accessible.name: hint
+        ToolTip.visible: hint !== "" && hmouse.containsMouse
+        ToolTip.delay: 500
+        ToolTip.text: hint
 
-        scale: hmouse.pressed ? 0.90 : (hmouse.containsMouse ? 1.05 : 1.0)
-        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+        scale: hmouse.pressed ? utilModule.pressScale : 1.0
+        Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 110 } }
 
         MaterialSymbol {
             anchors.centerIn: parent
             text: hbtn.glyph
             iconSize: 15
-            color: hmouse.containsMouse ? "#f5f5f7" : hbtn.iconColor
+            color: hmouse.containsMouse ? utilModule.colText : hbtn.iconColor
         }
 
         MouseArea {
@@ -1274,13 +1304,140 @@ Item {
         }
     }
 
+    component AudioDeviceGroup: ColumnLayout {
+        id: group
+        required property string heading
+        required property string emptyText
+        required property var devices
+        property bool input: false
+        signal chosen(string name)
+
+        readonly property color outline: Theme.alpha(Theme.text, 0.10)
+
+        Layout.fillWidth: true
+        spacing: 5
+
+        Text {
+            Layout.leftMargin: 3
+            text: group.heading
+            color: Theme.alpha(Theme.text, 0.74)
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: rows.implicitHeight + 4
+            radius: 12
+            color: Theme.alpha(Theme.text, 0.055)
+            border.color: group.outline
+
+            ColumnLayout {
+                id: rows
+                anchors.fill: parent
+                anchors.margins: 2
+                spacing: 0
+
+                Text {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 10
+                    Layout.preferredHeight: 34
+                    verticalAlignment: Text.AlignVCenter
+                    visible: group.devices.length === 0
+                    text: utilModule.audioDevicesReady ? group.emptyText : "Looking for devices…"
+                    color: Theme.alpha(Theme.text, 0.64)
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 11
+                }
+
+                Repeater {
+                    model: group.devices
+
+                    ColumnLayout {
+                        id: entry
+                        required property var modelData
+                        required property int index
+
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        Rectangle {
+                            visible: entry.index > 0
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 9
+                            Layout.rightMargin: 9
+                            Layout.preferredHeight: 1
+                            color: group.outline
+                        }
+
+                        Button {
+                            id: device
+                            readonly property bool selected: entry.modelData.isDefault
+
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 32
+                            leftPadding: 10
+                            rightPadding: 10
+                            topPadding: 0
+                            bottomPadding: 0
+                            hoverEnabled: true
+                            text: utilModule.cleanDeviceName(entry.modelData.name, entry.modelData.desc)
+                            Accessible.role: Accessible.RadioButton
+                            Accessible.checkable: true
+                            Accessible.checked: selected
+                            onClicked: {
+                                if (!selected) group.chosen(entry.modelData.name);
+                            }
+
+                            background: Rectangle {
+                                radius: 8
+                                color: device.selected ? Theme.alpha(Theme.accent, device.down ? 0.22 : 0.13)
+                                    : Theme.alpha(Theme.text, device.down ? 0.12 : device.hovered ? 0.07 : 0)
+                                border.color: device.visualFocus ? Theme.accent : "transparent"
+                                Behavior on color { ColorAnimation { duration: utilModule.feedbackDuration } }
+                            }
+
+                            contentItem: RowLayout {
+                                spacing: 9
+
+                                MaterialSymbol {
+                                    text: group.input ? "mic" : utilModule.getSinkIcon(entry.modelData.name, entry.modelData.desc)
+                                    iconSize: 16
+                                    color: device.selected ? Theme.accent : Theme.alpha(Theme.text, 0.72)
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: device.text
+                                    color: Theme.text
+                                    font.family: Theme.fontFamilyBody
+                                    font.pixelSize: 12
+                                    font.weight: device.selected ? Font.DemiBold : Font.Normal
+                                    elide: Text.ElideRight
+                                }
+
+                                MaterialSymbol {
+                                    visible: device.selected
+                                    text: "check"
+                                    iconSize: 16
+                                    color: Theme.accent
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ========================================================
     // MAIN LAYOUT
     // ========================================================
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
         anchors.topMargin: 14
         anchors.bottomMargin: 14
         spacing: 10
@@ -1296,8 +1453,8 @@ Item {
                 width: 30; height: 30; radius: 15
                 color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
                 border.width: 0
-                scale: headerBackMouse.pressed ? 0.90 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
+                scale: headerBackMouse.pressed ? utilModule.pressScale : 1.0
+                Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
 
                 MaterialSymbol {
                     anchors.centerIn: parent
@@ -1324,19 +1481,24 @@ Item {
             // Title & Date Subtitle
             ColumnLayout {
                 spacing: 1
-                Layout.preferredWidth: 150
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: 120
                 Layout.alignment: Qt.AlignVCenter
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : (utilModule.activeSection === "pomo" ? "Focus & Pomodoro" : "Control Center"))
+                    Layout.fillWidth: true
+                    text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : "Control Center")
                     font.family: "Noto Sans"
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
                     color: utilModule.colText
+                    elide: Text.ElideRight
                 }
 
                 Text {
-                    text: utilModule.activeSection === "audio" ? "Select output sink & microphone source" : (utilModule.activeSection === "vpn" ? "Select network provider or quick-connect" : (utilModule.activeSection === "pomo" ? "Distraction-free focus & timer" : Qt.formatDate(clock.date, "dddd, d MMMM")))
+                    Layout.fillWidth: true
+                    text: utilModule.activeSection === "audio" ? "Choose an output or microphone" : (utilModule.activeSection === "vpn" ? "Select network provider or quick-connect" : Qt.formatDate(clock.date, "dddd, d MMMM"))
                     font.family: "Noto Sans"
                     font.pixelSize: 10
                     color: utilModule.colSubtext
@@ -1344,11 +1506,9 @@ Item {
                 }
             }
 
-            Item { Layout.fillWidth: true }
-
-            // Quick Shortcut Badges & System Actions (Notes, Clipboard, Theme, Tasks, Lock, Power)
+            // Quick shortcuts and system actions
             RowLayout {
-                spacing: 6
+                spacing: 3
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 visible: utilModule.activeSection === ""
 
@@ -1368,6 +1528,12 @@ Item {
                 HeaderQuickBtn {
                     glyph: "palette"
                     onClicked: root.switchMode("theme", false)
+                }
+
+                HeaderQuickBtn {
+                    glyph: "auto_awesome_mosaic"
+                    hint: "Wallpaper Color Sorter"
+                    onClicked: root.switchMode("wallsort", false)
                 }
 
                 // 4. Task Manager
@@ -1484,23 +1650,41 @@ Item {
                         onClicked: root.switchMode("bluetooth", false)
                     }
 
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 106
+                        radius: 24
+                        color: utilModule.colCard
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 4
                     // 3. Upper Action Buttons (Hotspot, Caffeine)
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
                         Layout.preferredHeight: 48
-                        spacing: 10
+                        spacing: 4
 
                         // Hotspot
                         IrisGridTile {
+                            grouped: true
                             glyph: "wifi_tethering"
                             label: "Hotspot"
-                            lit: utilModule.hotspotActive
-                            tint: "#2dd4bf"
-                            onClicked: utilModule.toggleHotspot()
+                            lit: root.hotspot.active
+                            tint: Theme.accent
+                            contextHint: "Right-click for hotspot settings"
+                            onClicked: root.hotspot.request("toggle")
+                            onContextRequested: {
+                                root.switchMode("wifi", true);
+                                if (root.wifiMod) root.wifiMod.activeTab = "hotspot";
+                            }
                         }
 
                         // Caffeine
                         IrisGridTile {
+                            grouped: true
                             glyph: "coffee"
                             label: "Caffeine"
                             lit: utilModule.caffeineActive
@@ -1512,11 +1696,13 @@ Item {
                     // 4. Lower Action Buttons (Night Light, DND) - Aligned with Color & Timer
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.fillHeight: true
                         Layout.preferredHeight: 48
-                        spacing: 10
+                        spacing: 4
 
                         // Night Light
                         IrisGridTile {
+                            grouped: true
                             glyph: "nightlight"
                             label: "Night Light"
                             lit: utilModule.nightLightActive
@@ -1526,6 +1712,7 @@ Item {
 
                         // DND
                         IrisGridTile {
+                            grouped: true
                             glyph: (typeof root !== "undefined" && root.dndEnabled) ? "do_not_disturb_on" : "do_not_disturb_off"
                             label: "DND"
                             lit: typeof root !== "undefined" && root.dndEnabled
@@ -1533,9 +1720,11 @@ Item {
                             onClicked: utilModule.toggleDnd()
                         }
                     }
+                        }
+                    }
                 }
 
-                // RIGHT STACK: 3 Sliders (Volume, Brightness, Mic) + [Color & Pomodoro] (Square tiles)
+                // RIGHT STACK: Volume, brightness, microphone, and color picker
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 198
@@ -1551,11 +1740,12 @@ Item {
                         // 1. Volume Capsule Slider
                         IrisVerticalCapsuleSlider {
                             value: utilModule.audioVolume
+                            valueReady: utilModule.volumeReady
                             icon: utilModule.audioMuted ? "volume_off" : (utilModule.audioVolume > 0.5 ? "volume_up" : (utilModule.audioVolume > 0 ? "volume_down" : "volume_mute"))
                             percentText: utilModule.audioMuted ? "Muted" : (Math.round(utilModule.audioVolume * 100) + "%")
                             muted: utilModule.audioMuted
                             onMoved: (val) => {
-                                utilModule.isDraggingVolume = true;
+                                utilModule.isDraggingVolume = dragVal >= 0;
                                 utilModule.setVolume(val);
                             }
                             onIconClicked: utilModule.toggleMute()
@@ -1564,11 +1754,12 @@ Item {
                         // 2. Brightness Capsule Slider
                         IrisVerticalCapsuleSlider {
                             value: utilModule.displayBrightness
+                            valueReady: utilModule.brightnessReady
                             icon: "light_mode"
                             percentText: Math.round(utilModule.displayBrightness * 100) + "%"
                             muted: false
                             onMoved: (val) => {
-                                utilModule.isDraggingBrightness = true;
+                                utilModule.isDraggingBrightness = dragVal >= 0;
                                 utilModule.setBrightness(val);
                             }
                             onIconClicked: utilModule.setBrightness(utilModule.displayBrightness > 0.5 ? 0.2 : 0.8)
@@ -1577,39 +1768,31 @@ Item {
                         // 3. Microphone Capsule Slider (Last)
                         IrisVerticalCapsuleSlider {
                             value: utilModule.audioMicVolume
+                            valueReady: utilModule.microphoneReady
                             icon: utilModule.audioMicMuted ? "mic_off" : "mic"
                             percentText: utilModule.audioMicMuted ? "Muted" : (Math.round(utilModule.audioMicVolume * 100) + "%")
                             muted: utilModule.audioMicMuted
                             onMoved: (val) => {
-                                utilModule.isDraggingMic = true;
+                                utilModule.isDraggingMic = dragVal >= 0;
                                 utilModule.setMicVolume(val);
                             }
                             onIconClicked: utilModule.toggleMicMute()
                         }
                     }
 
-                    // Directly Under Sliders: Color Picker & Pomodoro (Square tiles matching the grid)
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 48
-                        spacing: 10
-
+                        spacing: 8
                         IrisGridTile {
                             glyph: "colorize"
-                            label: "Color"
-                            lit: false
-                            tint: "#ec4899"
+                            label: "Color picker"
                             onClicked: utilModule.triggerColorPicker()
                         }
-
                         IrisGridTile {
-                            glyph: "timer"
-                            label: root.pomoRunning
-                                ? (root.pomoPaused ? "Paused" : (Math.floor(root.pomoSecondsRemaining / 60) + ":" + ((root.pomoSecondsRemaining % 60) < 10 ? "0" : "") + (root.pomoSecondsRemaining % 60)))
-                                : "Timer"
-                            lit: root.pomoRunning
-                            tint: "#f43f5e"
-                            onClicked: utilModule.activeSection = "pomo"
+                            glyph: "wallpaper"
+                            label: "Wallpapers"
+                            onClicked: root.switchMode("wallpaper", true)
                         }
                     }
                 }
@@ -1661,170 +1844,50 @@ Item {
             }
         }
 
-        // ── 2. SOUND DEVICES SUBVIEW ───────────────────────────────
         Item {
             id: audioSubviewContainer
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: utilModule.activeSection === "audio"
-            clip: true
 
             Flickable {
                 id: audioScroll
                 anchors.fill: parent
                 contentWidth: width
-                contentHeight: audioContentCol.implicitHeight + 14
+                contentHeight: audioContentCol.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
+                ScrollBar.vertical: ScrollBar {
+                    width: 5
+                    policy: ScrollBar.AsNeeded
+                }
+
                 WheelHandler {
-                    onWheel: (event) => {
-                        var maxY = Math.max(0, audioScroll.contentHeight - audioScroll.height);
+                    onWheel: event => {
+                        const maxY = Math.max(0, audioScroll.contentHeight - audioScroll.height);
                         audioScroll.contentY = Math.max(0, Math.min(maxY, audioScroll.contentY - event.angleDelta.y));
                     }
                 }
 
                 ColumnLayout {
                     id: audioContentCol
-                    width: audioScroll.width
-                    spacing: 8
+                    width: audioScroll.width - (audioScroll.contentHeight > audioScroll.height ? 7 : 0)
+                    spacing: 10
 
-                    Text {
-                        text: "OUTPUT AUDIO SINKS"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: utilModule.colMuted
-                        Layout.topMargin: 2
-                        Layout.bottomMargin: 2
+                    AudioDeviceGroup {
+                        heading: "Output"
+                        emptyText: "No audio outputs found"
+                        devices: utilModule.audioSinks
+                        onChosen: name => utilModule.setDefaultSink(name)
                     }
 
-                    Repeater {
-                        model: utilModule.audioSinks
-                        delegate: Rectangle {
-                            id: sinkItemRect
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 40
-                            implicitHeight: 40
-                            radius: 12
-                            color: modelData.isDefault
-                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.20)
-                                : (sinkMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 0
-
-                            scale: sinkMouse.pressed ? 0.98 : 1.0
-                            Behavior on scale { NumberAnimation { duration: 80 } }
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14; anchors.rightMargin: 14
-                                spacing: 12
-
-                                MaterialSymbol {
-                                    text: utilModule.getSinkIcon(modelData.name, modelData.desc)
-                                    fill: modelData.isDefault ? 1 : 0
-                                    iconSize: 18
-                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: utilModule.cleanDeviceName(modelData.name, modelData.desc)
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 12
-                                    font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
-                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                                    elide: Text.ElideRight
-                                }
-
-                                MaterialSymbol {
-                                    visible: modelData.isDefault
-                                    text: "check_circle"
-                                    fill: 1
-                                    iconSize: 18
-                                    color: utilModule.colAccent
-                                }
-                            }
-
-                            MouseArea {
-                                id: sinkMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: utilModule.setDefaultSink(modelData.name)
-                            }
-                        }
-                    }
-
-                    Item { Layout.preferredHeight: 6 }
-
-                    Text {
-                        text: "INPUT MICROPHONE SOURCES"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        font.weight: Font.Bold
-                        color: utilModule.colSubtext
-                        Layout.topMargin: 2
-                        Layout.bottomMargin: 2
-                    }
-
-                    Repeater {
-                        model: utilModule.audioSources
-                        delegate: Rectangle {
-                            id: sourceItemRect
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 40
-                            implicitHeight: 40
-                            radius: 12
-                            color: modelData.isDefault
-                                ? Qt.rgba(utilModule.colAccent.r, utilModule.colAccent.g, utilModule.colAccent.b, 0.20)
-                                : (sourceMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 0
-
-                            scale: sourceMouse.pressed ? 0.98 : 1.0
-                            Behavior on scale { NumberAnimation { duration: 80 } }
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14; anchors.rightMargin: 14
-                                spacing: 12
-
-                                MaterialSymbol {
-                                    text: "mic"
-                                    fill: modelData.isDefault ? 1 : 0
-                                    iconSize: 18
-                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: utilModule.cleanDeviceName(modelData.name, modelData.desc)
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 12
-                                    font.weight: modelData.isDefault ? Font.DemiBold : Font.Normal
-                                    color: modelData.isDefault ? utilModule.colAccent : utilModule.colText
-                                    elide: Text.ElideRight
-                                }
-
-                                MaterialSymbol {
-                                    visible: modelData.isDefault
-                                    text: "check_circle"
-                                    fill: 1
-                                    iconSize: 18
-                                    color: utilModule.colAccent
-                                }
-                            }
-
-                            MouseArea {
-                                id: sourceMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: utilModule.setDefaultSource(modelData.name)
-                            }
-                        }
+                    AudioDeviceGroup {
+                        heading: "Microphone"
+                        emptyText: "No microphones found"
+                        devices: utilModule.audioSources
+                        input: true
+                        onChosen: name => utilModule.setDefaultSource(name)
                     }
                 }
             }
@@ -1871,8 +1934,8 @@ Item {
                                 : (cardMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
                             border.width: 0
 
-                            scale: cardMouse.pressed ? 0.98 : 1.0
-                            Behavior on scale { NumberAnimation { duration: 90 } }
+                            scale: cardMouse.pressed ? utilModule.pressScale : 1.0
+                            Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
                             Behavior on color { ColorAnimation { duration: 120 } }
 
                             RowLayout {
@@ -1975,382 +2038,6 @@ Item {
             }
         }
 
-        // ── 4. FOCUS & POMODORO TIMER SUBVIEW ─────────────────────────
-        Item {
-            id: pomoSubviewContainer
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: utilModule.activeSection === "pomo"
-            clip: true
-
-            property int customMinutes: 25
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 12
-
-                // 1. Big Timer Hero Card
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 136
-                    radius: 18
-                    color: utilModule.colCard
-                    border.width: 0
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        // Mode Tag Pill
-                        Rectangle {
-                            Layout.alignment: Qt.AlignHCenter
-                            height: 22
-                            width: pomoModeTagText.implicitWidth + 16
-                            radius: 11
-                            color: root.pomoRunning
-                                ? (root.pomoPaused ? Qt.rgba(1, 1, 1, 0.1) : (root.pomoMode === "focus" ? Qt.alpha(Theme.accent, 0.2) : Qt.rgba(0.18, 0.82, 0.34, 0.2)))
-                                : Qt.rgba(255, 255, 255, 0.08)
-
-                            Text {
-                                id: pomoModeTagText
-                                anchors.centerIn: parent
-                                text: root.pomoRunning
-                                    ? (root.pomoPaused ? "PAUSED" : root.pomoTag.toUpperCase())
-                                    : "READY TO FOCUS"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 10
-                                font.weight: Font.Bold
-                                color: root.pomoRunning
-                                    ? (root.pomoPaused ? utilModule.colMuted : (root.pomoMode === "focus" ? Theme.accent : "#30d158"))
-                                    : utilModule.colMuted
-                            }
-                        }
-
-                        // Big Time Digits
-                        Text {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: root.pomoRunning
-                                ? root.formatPomoTime(root.pomoSecondsRemaining)
-                                : root.formatPomoTime(pomoSubviewContainer.customMinutes * 60)
-                            font.family: "Readex Pro"
-                            font.pixelSize: 42
-                            font.weight: Font.Bold
-                            color: utilModule.colText
-                            renderType: Text.NativeRendering
-                        }
-
-                        // DND Status Indicator
-                        Row {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: 5
-                            visible: root.pomoRunning && root.pomoMode === "focus"
-
-                            MaterialSymbol {
-                                text: "notifications_off"
-                                iconSize: 13
-                                color: Theme.accent
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            Text {
-                                text: "Do Not Disturb Active"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                                color: Theme.accent
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        // Progress bar when running
-                        Rectangle {
-                            Layout.preferredWidth: 240
-                            Layout.preferredHeight: 4
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.topMargin: 4
-                            radius: 2
-                            color: Qt.rgba(255, 255, 255, 0.08)
-                            visible: root.pomoRunning
-
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: {
-                                    if (!root.pomoRunning || root.pomoTotalSeconds <= 0) return 0;
-                                    var pct = 1.0 - (root.pomoSecondsRemaining / root.pomoTotalSeconds);
-                                    return Math.max(0, Math.min(parent.width, parent.width * pct));
-                                }
-                                radius: 2
-                                color: root.pomoMode === "focus" ? Theme.accent : "#30d158"
-                            }
-                        }
-                    }
-                }
-
-                // 2. Preset Chips Row
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Repeater {
-                        model: [
-                            { label: "25m Focus", mins: 25, mode: "focus", tag: "Focus Sprint", icon: "timer" },
-                            { label: "50m Deep", mins: 50, mode: "focus", tag: "Deep Work", icon: "bolt" },
-                            { label: "5m Break", mins: 5, mode: "short_break", tag: "Short Break", icon: "coffee" },
-                            { label: "15m Rest", mins: 15, mode: "long_break", tag: "Long Break", icon: "self_improvement" }
-                        ]
-
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            radius: 12
-                            color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60)
-                                ? Qt.alpha(Theme.accent, 0.20)
-                                : (chipMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
-                            border.width: 0
-                            scale: chipMouse.pressed ? 0.96 : 1.0
-                            Behavior on scale { NumberAnimation { duration: 90 } }
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                MaterialSymbol {
-                                    text: modelData.icon
-                                    iconSize: 15
-                                    color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? Theme.accent : utilModule.colText
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-
-                                Text {
-                                    text: modelData.label
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    color: (root.pomoRunning && root.pomoTotalSeconds === modelData.mins * 60) ? Theme.accent : utilModule.colText
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-
-                            MouseArea {
-                                id: chipMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.startPomodoro(modelData.mins, modelData.mode, modelData.tag);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Actions Row (Pause/Resume/Stop or Stepper/Start)
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    // When Running: Pause/Resume + Stop
-                    Rectangle {
-                        visible: root.pomoRunning
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 40
-                        radius: 14
-                        color: root.pomoPaused ? Qt.alpha(Theme.accent, 0.22) : utilModule.colCard
-                        border.width: 0
-                        scale: pauseMouse.pressed ? 0.97 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 90 } }
-                        Behavior on color { ColorAnimation { duration: 120 } }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            MaterialSymbol {
-                                text: root.pomoPaused ? "play_arrow" : "pause"
-                                iconSize: 18
-                                color: root.pomoPaused ? Theme.accent : utilModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            Text {
-                                text: root.pomoPaused ? "Resume" : "Pause"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                                color: root.pomoPaused ? Theme.accent : utilModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: pauseMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.togglePomodoroPause()
-                        }
-                    }
-
-                    Rectangle {
-                        visible: root.pomoRunning
-                        Layout.preferredWidth: 90
-                        Layout.preferredHeight: 40
-                        radius: 14
-                        color: add5Mouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
-                        scale: add5Mouse.pressed ? 0.97 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 90 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "+5 min"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            color: utilModule.colText
-                        }
-
-                        MouseArea {
-                            id: add5Mouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.pomoSecondsRemaining += 300;
-                                root.pomoTotalSeconds += 300;
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        visible: root.pomoRunning
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 40
-                        radius: 14
-                        color: stopMouse.containsMouse ? Qt.rgba(255, 69, 58, 0.25) : Qt.rgba(255, 69, 58, 0.15)
-                        scale: stopMouse.pressed ? 0.97 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 90 } }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            MaterialSymbol {
-                                text: "stop"
-                                iconSize: 18
-                                color: "#ff453a"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            Text {
-                                text: "Reset"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                                color: "#ff453a"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: stopMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.stopPomodoro()
-                        }
-                    }
-
-                    // When Idle: Stepper [- / +] + Big Start Button
-                    Rectangle {
-                        visible: !root.pomoRunning
-                        Layout.preferredWidth: 120
-                        Layout.preferredHeight: 40
-                        radius: 14
-                        color: utilModule.colCard
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 4
-                            spacing: 0
-
-                            IrisIconButton {
-                                width: 28; height: 28; buttonSize: 28; buttonRadius: 14
-                                flat: true
-                                icon: "remove"
-                                iconSize: 16
-                                onClicked: {
-                                    pomoSubviewContainer.customMinutes = Math.max(1, pomoSubviewContainer.customMinutes - 5);
-                                }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                horizontalAlignment: Text.AlignHCenter
-                                text: pomoSubviewContainer.customMinutes + "m"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 12
-                                font.weight: Font.Bold
-                                color: utilModule.colText
-                            }
-
-                            IrisIconButton {
-                                width: 28; height: 28; buttonSize: 28; buttonRadius: 14
-                                flat: true
-                                icon: "add"
-                                iconSize: 16
-                                onClicked: {
-                                    pomoSubviewContainer.customMinutes = Math.min(120, pomoSubviewContainer.customMinutes + 5);
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        visible: !root.pomoRunning
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 40
-                        radius: 14
-                        color: startCustomMouse.containsMouse ? Qt.lighter(utilModule.colAccent, 1.1) : utilModule.colAccent
-                        scale: startCustomMouse.pressed ? 0.97 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 90 } }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            MaterialSymbol {
-                                text: "play_arrow"
-                                iconSize: 18
-                                color: "#101318"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-
-                            Text {
-                                text: "Start Focus (" + pomoSubviewContainer.customMinutes + "m)"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 13
-                                font.weight: Font.Bold
-                                color: "#101318"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: startCustomMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.startPomodoro(pomoSubviewContainer.customMinutes, "focus", "Custom Focus");
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     SystemClock {

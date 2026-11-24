@@ -9,6 +9,9 @@ Item {
     id: strip
 
     property var model: null
+    property Component cardContent: null
+    property int viewportWidth: 880
+    property bool centerOnCurrent: false
     property int heroW: Theme.dp(340)
     property int heroH: Theme.dp(211)
     property int midW: Theme.dp(238)
@@ -148,7 +151,7 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        width: 880
+        width: strip.viewportWidth
         height: strip.heroH + Theme.dp(24)
         orientation: ListView.Horizontal
         spacing: strip.itemGap
@@ -157,12 +160,12 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         model: strip.model
         highlightRangeMode: ListView.StrictlyEnforceRange
-        preferredHighlightBegin: 280
-        preferredHighlightEnd: 600
+        preferredHighlightBegin: strip.centerOnCurrent ? (width - strip.heroW) / 2 : 280
+        preferredHighlightEnd: strip.centerOnCurrent ? (width + strip.heroW) / 2 : 600
         highlightMoveDuration: Theme.ms(260)
         flickDeceleration: 3000
         visible: count > 0
-        cacheBuffer: strip.heroW * 6
+        cacheBuffer: strip.heroW
 
         onCurrentIndexChanged: {
             Qt.callLater(strip.relayout);
@@ -283,17 +286,26 @@ Item {
                 // one stays off the gui thread
                 Image {
                     anchors.fill: parent
+                    visible: strip.cardContent === null
                     source: {
+                        if (!visible) return "";
                         var p = (slot.thumb && slot.thumb !== "") ? slot.thumb : slot.path;
                         if (!p || p === "" || /\.(mp4|webm|mkv|mov|m4v)$/i.test(p)) return "";
                         return p.startsWith("file://") ? p : ("file://" + p);
                     }
                     fillMode: Image.PreserveAspectCrop
-                    asynchronous: slot.thumb === ""
-                    cache: true
+                    asynchronous: true
+                    cache: false
                     sourceSize: strip.decodeSize
                     smooth: true
                     mipmap: false
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    sourceComponent: strip.cardContent
+                    readonly property int previewIndex: slot.index
+                    readonly property int previewTier: slot.tier
                 }
 
                 Rectangle {

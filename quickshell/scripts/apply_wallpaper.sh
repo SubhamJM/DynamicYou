@@ -1,124 +1,23 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-TARGET="$1"
-TRANSITION="${2:-simple}"
-POSTER_ARG="${3:-}"
-
-ASSETS_DIR="$HOME/.local/share/Steam/steamapps/common/wallpaper_engine/assets"
-STATE_FILE="$HOME/.config/active-wallpaper-engine"
-POSTER_DIR="$HOME/.cache/wallpaper-engine-posters"
-WE_THUMBS="$HOME/.cache/skwd-wall-v2/we-thumbs"
-PRIMARY_OUTPUT="${WALLPAPER_ENGINE_OUTPUT:-$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | .name' | head -1)}"
-PALETTE="$(dirname "$(realpath -- "${BASH_SOURCE[0]}")")/matugen/update.py"
-ACTIVE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/active-theme"
-
-if [ -z "$TARGET" ]; then
-    exit 1
+target=$(realpath -e -- "${1:?Select a wallpaper}")
+library=$(realpath -e -- "$HOME/Pictures/Wallpapers")
+case "$target" in
+    "$library/"*) ;;
+    *) printf 'Wallpaper must be under ~/Pictures/Wallpapers\n' >&2; exit 1 ;;
+esac
+target="$HOME/Pictures/Wallpapers/${target#"$library/"}"
+test -f "$target"
+transition="${2:-simple}"
+if [[ $transition == random ]]; then
+    transitions=(simple fade left right top bottom wipe wave outer)
+    transition="${transitions[RANDOM % ${#transitions[@]}]}"
 fi
+awww img "$target" --transition-type "$transition" --transition-fps 144
+active_dir="${XDG_CONFIG_HOME:-$HOME/.config}/active-theme"
+mkdir -p "$active_dir"
+ln -sfn -- "$target" "$active_dir/current-wallpaper"
+printf '%s\n' "$target" > "$active_dir/current-wallpaper.txt"
 
-is_we=false
-ITEM_DIR=""
-WE_ID=""
-
-if [ -d "$TARGET" ] && [ -f "$TARGET/project.json" ]; then
-    is_we=true
-    ITEM_DIR="$TARGET"
-    WE_ID="$(basename "$TARGET")"
-elif [[ "$TARGET" =~ ^[0-9]+$ ]]; then
-    CANDIDATE="$HOME/.local/share/Steam/steamapps/workshop/content/431960/$TARGET"
-    if [ -d "$CANDIDATE" ] && [ -f "$CANDIDATE/project.json" ]; then
-        is_we=true
-        ITEM_DIR="$CANDIDATE"
-        WE_ID="$TARGET"
-    fi
-elif [ -f "$TARGET" ]; then
-    PARENT_DIR="$(dirname "$TARGET")"
-    if [ -f "$PARENT_DIR/project.json" ]; then
-        is_we=true
-        ITEM_DIR="$PARENT_DIR"
-        WE_ID="$(basename "$PARENT_DIR")"
-    fi
-fi
-
-ensure_awww() {
-    if ! pgrep -x awww-daemon >/dev/null 2>&1; then
-        awww-daemon &
-        for i in {1..30}; do
-            awww query >/dev/null 2>&1 && break
-            sleep 0.1
-        done
-    fi
-}
-
-if [ "$is_we" = true ]; then
-    killall -9 linux-wallpaperengine 2>/dev/null || true
-    echo "$ITEM_DIR" > "$STATE_FILE"
-
-    # 1. Resolve Best High-Resolution Poster
-    HQ_POSTER=""
-    if [ -n "$POSTER_ARG" ] && [ -f "$POSTER_ARG" ]; then
-        HQ_POSTER="$POSTER_ARG"
-    elif [ -n "$WE_ID" ] && [ -f "$POSTER_DIR/$WE_ID.png" ]; then
-        HQ_POSTER="$POSTER_DIR/$WE_ID.png"
-    elif [ -f "$ITEM_DIR/preview.jpg" ]; then
-        HQ_POSTER="$ITEM_DIR/preview.jpg"
-    elif [ -f "$ITEM_DIR/preview.png" ]; then
-        HQ_POSTER="$ITEM_DIR/preview.png"
-    elif [ -n "$WE_ID" ] && [ -f "$WE_THUMBS/$WE_ID.webp" ]; then
-        HQ_POSTER="$WE_THUMBS/$WE_ID.webp"
-    fi
-
-    # 2. Present Crisp High-Res Poster to AWWW (zero black screen, instant smooth transition)
-    if [ -n "$HQ_POSTER" ] && [ -f "$HQ_POSTER" ]; then
-        mkdir -p "$ACTIVE_DIR"
-        ln -sf "$HQ_POSTER" "$ACTIVE_DIR/current-wallpaper" 2>/dev/null || true
-        echo "$HQ_POSTER" > "$ACTIVE_DIR/current-wallpaper.txt" 2>/dev/null || true
-
-        ensure_awww
-        awww img "$HQ_POSTER" \
-            --transition-type "$TRANSITION" \
-            --transition-fps 144 \
-            --transition-step 240 \
-            --transition-bezier 0.25,0.1,0.25,1.0 || true
-    fi
-
-    if [[ -n "$HQ_POSTER" ]]; then
-        python3 "$PALETTE" "$HQ_POSTER" || true
-    fi
-
-    # 3. Launch Wallpaper Engine (OpenGL / EGL layer-shell with nohup and disown)
-    output_args=()
-    [[ -z "$PRIMARY_OUTPUT" ]] || output_args=(--screen-root "$PRIMARY_OUTPUT")
-    nohup linux-wallpaperengine \
-        --assets-dir "$ASSETS_DIR" \
-        "${output_args[@]}" \
-        --silent \
-        --fps 60 \
-        "$ITEM_DIR" </dev/null >/tmp/wallpaper-engine.log 2>&1 &
-    WE_PID=$!
-    disown "$WE_PID" 2>/dev/null || true
-
-    # Check if process launched successfully or exited due to unsupported shaders
-    sleep 0.5
-    if kill -0 "$WE_PID" 2>/dev/null; then
-        echo "linux-wallpaperengine (PID $WE_PID) running successfully for $ITEM_DIR" >> /tmp/wallpaper-engine.log
-    else
-        echo "linux-wallpaperengine exited; high-resolution poster preserved on screen." >> /tmp/wallpaper-engine.log
-    fi
-else
-    killall -9 linux-wallpaperengine 2>/dev/null || true
-    rm -f "$STATE_FILE" 2>/dev/null || true
-
-    mkdir -p "$ACTIVE_DIR"
-    ln -sf "$TARGET" "$ACTIVE_DIR/current-wallpaper" 2>/dev/null || true
-    echo "$TARGET" > "$ACTIVE_DIR/current-wallpaper.txt" 2>/dev/null || true
-
-    ensure_awww
-    awww img "$TARGET" \
-        --transition-type "$TRANSITION" \
-        --transition-fps 144 \
-        --transition-step 240 \
-        --transition-bezier 0.25,0.1,0.25,1.0
-    python3 "$PALETTE" "$TARGET" || true
-fi
+python3 "$(dirname "$(realpath -- "${BASH_SOURCE[0]}")")/matugen/update.py" "$target" || true

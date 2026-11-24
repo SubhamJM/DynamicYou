@@ -8,16 +8,12 @@ QtObject {
     // ==========================================
     // 1. INIR-INSPIRED MOTION CURVES & EASINGS
     // ==========================================
-    // Liquid morph curve from iNiR / PillMotion: cubic-bezier(0.16, 1, 0.3, 1)
-    // Front-loaded for immediate physical responsiveness, followed by a long, silky settle tail.
-    readonly property var curveMorph: [0.16, 1, 0.3, 1, 1, 1]
+    // Rounded starts and stops for the expanding and collapsing bar.
+    readonly property var curveMorph: [0.30, 0, 0.20, 1, 1, 1]
+    readonly property var curveAccel: [0.38, 0, 0.42, 1, 1, 1]
 
-    // Emphasized deceleration: cubic-bezier(0.05, 0.7, 0.1, 1)
+    // Emphasized deceleration for short effects.
     readonly property var curveDecel: [0.05, 0.7, 0.1, 1, 1, 1]
-
-    // Emphasized acceleration: cubic-bezier(0.3, 0, 0.8, 0.15)
-    // Crisp, snappy curve for dismissals and exits.
-    readonly property var curveAccel: [0.3, 0, 0.8, 0.15, 1, 1]
 
     // Expressive spatial overshoot: cubic-bezier(0.38, 1.21, 0.22, 1)
     readonly property var curveSpatial: [0.38, 1.21, 0.22, 1, 1, 1]
@@ -31,11 +27,11 @@ QtObject {
     // ==========================================
     // 2. CONTEXTUAL & INTUITION-BASED ANIMATION DURATIONS (ms)
     // ==========================================
-    // Opening / Expansion: Rich, fluid, liquid unfold downward (360ms)
-    readonly property int animNotchEnter: 360
+    // Opening / expansion.
+    readonly property int animNotchEnter: 260
 
-    // Closing / Collapse to Idle: Quick, confident, clean retreat (220ms)
-    readonly property int animNotchExit: 220
+    // Closing / collapse to idle.
+    readonly property int animNotchExit: 210
 
     // Switching between two expanded cards: Smooth glide (300ms)
     readonly property int animNotchSwitch: 300
@@ -44,10 +40,10 @@ QtObject {
     readonly property int animOsdMorph: 180
 
     // Content fade-in when expanding: starts with graceful deceleration
-    readonly property int animContentEnter: 240
+    readonly property int animContentEnter: 145
 
     // Content fade-out when closing: dissolves fast before notch collapses so cards don't clip
-    readonly property int animContentExit: 110
+    readonly property int animContentExit: 95
 
     // Dash idle layer fade transitions
     readonly property int animDashEnter: 180
@@ -64,7 +60,7 @@ QtObject {
     // 3. AUTO-COLLAPSE & POPUP TIMERS (ms)
     // ==========================================
     readonly property int timerAutoCollapse: 0      // Instantaneous collapse on mouse leave
-    readonly property int timerNotifPopup: 1600     // How long the notification popup island remains visible
+    readonly property int timerNotifPopup: 4000     // How long the notification popup island remains visible
     readonly property int timerStartupGrace: 600    // Grace window on startup to suppress notification replays
     readonly property int timerOsdSettle: 150       // OSD transition settle debounce
     readonly property int timerOsdHide: 1200        // Inactivity timeout to auto-hide OSD bar
@@ -74,7 +70,10 @@ QtObject {
     readonly property int timerNetPopup: 1500       // Duration for Network handoff island popup
     readonly property int timerIslandText: 3500     // Duration for Island textual info labels
     readonly property int timerFullscreenHideGrace: 250 // Duration before auto-hiding when leaving top hover in fullscreen
-    readonly property string scriptsDir: Quickshell.shellPath("scripts")
+    readonly property string scriptsDir: {
+        var localPath = Qt.resolvedUrl("scripts").toString().replace(/^file:\/\//, "");
+        return (localPath && localPath.length > 0) ? localPath : ((Quickshell.env("HOME") || "") + "/.config/quickshell/scripts");
+    }
 
     // ==========================================
     // 4. STATIC NOTCH BASE DIMENSIONS
@@ -87,31 +86,63 @@ QtObject {
 		"hover":         { width: 440, height: 44,  radius: 22 },
 		"switcher":      { width: 800, height: 420, radius: 22 },
         "launcher":      { width: 640, height: 215, radius: 22 },
-        "theme":         { width: 880, height: 360, radius: 24 },
-        "wallpaper":     { width: 880, height: 360, radius: 24 },
+        "theme":         { width: 620, height: 204, radius: 24 },
+        "wallpaper":     { width: 880, height: 400, radius: 24 },
+        "wallsort":      { width: 540, height: 362, radius: 22 },
         "lockscreen":    { width: 880, height: 360, radius: 24 },
         "engine":        { width: 840, height: 480, radius: 22 },
         "transition":    { width: 440, height: 320, radius: 22 },
         "osd":           { width: 280, height: 40,  radius: 16 },
         "wifi":          { width: 440, height: 460, radius: 22 },
         "bluetooth":     { width: 440, height: 360, radius: 22 },
-        "recorder":      { width: 440, height: 270, radius: 22 },
-        "battery":       { width: 440, height: 348, radius: 22 },
+        "recorder":      { width: 408, height: 350, radius: 24 },
+        "battery":       { width: 440, height: 460, radius: 22 },
         "powermenu":     { width: 440, height: 104, radius: 22 },
         "calendar":      { width: 720, height: 490, radius: 24 },
-        "clipboard":     { width: 440, height: 440, radius: 22 },
-        "utility":       { width: 440, height: 350, radius: 24 },
+        "clipboard":     { width: 480, height: 500, radius: 22 },
+        "utility":       { width: 408, height: 350, radius: 24 },
         "music":         { width: 560, height: 285, radius: 22 },
         "notes":         { width: 680, height: 480, radius: 22 },
         "cheatsheet":    { width: 800, height: 440, radius: 22 },
         "notifications": { width: 440, height: 380, radius: 22 },
-        "taskmanager":   { width: 880, height: 620, radius: 22 }
+        "taskmanager":   { width: 900, height: 660, radius: 22 }
     })
+
+    function revealBetween(value, start, end) {
+        const progress = Math.max(0, Math.min(1, (value - start) / (end - start)));
+        return progress * progress * (3 - 2 * progress);
+    }
+
+    function popupOpenDuration(width, height) {
+        const span = Math.max(height, width * 0.55);
+        return animNotchEnter + Math.round(Math.max(-32, Math.min(34, (span - 350) * 0.15)));
+    }
+
+    function popupReveal(mode, width, height, inset, surfaceWidth, surfaceHeight) {
+        const widthRatio = surfaceWidth / Math.max(1, width);
+        const heightRatio = surfaceHeight / Math.max(1, height);
+        switch (mode) {
+        case "theme":
+        case "wallpaper":
+        case "lockscreen":
+        case "transition":
+        case "switcher":
+            // The preview is centered, with controls on both sides or below it.
+            return Math.min(revealBetween(widthRatio, 0.71, 0.97), revealBetween(heightRatio, 0.56, 0.94));
+        case "powermenu":
+            // The short action row appears together.
+            return Math.min(revealBetween(widthRatio, 0.70, 0.94), revealBetween(heightRatio, 0.55, 0.91));
+        default:
+            // Keep the top controls in place and let the surface expose the rest of the panel.
+            const start = Math.min(height * 0.5, inset + 44);
+            const end = Math.max(start + 1, Math.min(height * 0.9, inset + 145));
+            return Math.min(revealBetween(widthRatio, 0.60, 0.95), revealBetween(surfaceHeight, start, end));
+        }
+    }
 
     function calculateUtilityHeight(activeSection) {
         if (activeSection === "audio") return 400;
         if (activeSection === "vpn") return 300;
-        if (activeSection === "pomo") return 370;
         return 350;
     }
 
@@ -129,7 +160,7 @@ QtObject {
 
     function calculateClipboardHeight(count) {
         if (count === 0) return 260;
-        return Math.min(520, Math.max(240, 120 + (count * 72)));
+        return Math.min(540, Math.max(280, 110 + (count * 64)));
     }
 
     function calculateLauncherHeight(count, allAppsLength, browsing = false) {

@@ -18,7 +18,7 @@ FocusScope {
 
     property string tab: "calendar"
     property bool tabSwitching: false
-    property bool expanded: true
+    readonly property bool expanded: visible && (typeof root === "undefined" || root.activeMode === "calendar")
 
     readonly property int pad: Theme.dp(16)
     readonly property var tabs: [
@@ -83,7 +83,7 @@ FocusScope {
             anchors.right: parent.right
             anchors.leftMargin: calRoot.pad
             anchors.rightMargin: calRoot.pad
-            height: Theme.dp(404)
+            height: Math.max(0, Math.min(Theme.dp(404), parent.height - y))
             clip: true
 
             Item {

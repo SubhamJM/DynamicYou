@@ -83,7 +83,7 @@ Item {
 
     // a typed 12-hour time means the half still to come: 12:04 at noon is pm
     function preferUpcoming() {
-        if (Prefs.clock24h || !page.past)
+        if (Prefs.clock24h || page.halfPicked || !page.past)
             return ;
 
         const flipped = (page.newHour + 12) % 24;
@@ -276,11 +276,12 @@ Item {
             anchors.centerIn: parent
             cell: Theme.dp(40)
             selected: page.selected
+            onTodayRequested: page.selectToday()
             onPicked: (y, m, d) => {
                 page.selected = { "year": y, "month": m, "day": d };
                 if (m !== month.monthIndex)
                     month.page(y * 12 + m > month.year * 12 + month.monthIndex ? 1 : -1);
-
+                page.freshTime();
             }
         }
 

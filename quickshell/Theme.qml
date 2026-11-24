@@ -125,9 +125,6 @@ QtObject {
     })
 
     // --- Modular Design & Icon Tokens (Inspired by Matushell) ---
-    property FontLoader iconFont: FontLoader {
-        source: "file://" + Quickshell.shellPath("assets/fonts/MaterialSymbolsRounded.ttf")
-    }
     readonly property string fontFamilyIcon: "Material Symbols Rounded"
     readonly property string fontFamilyNerd: "JetBrainsMono Nerd Font"
     readonly property string fontFamilyBody: "Noto Sans"
@@ -162,11 +159,29 @@ QtObject {
     readonly property var curveEmphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
     readonly property var curveGlide: [0.37, 0, 0.63, 1, 1, 1]
 
-    readonly property string activeThemeDir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/active-theme"
+    readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"
+    readonly property string activeThemeDir: configDir + "/active-theme"
+    readonly property bool presetApplying: presetApplyProcess.running
     property string currentThemeName: "default"
     property string activeTransition: "simple"
 
     signal themeReloaded()
+    signal presetApplyFinished(bool success)
+
+    function applyPreset(name) {
+        if (!name || presetApplying) return;
+        presetApplyProcess.command = ["bash", configDir + "/hypr/scripts/apply-theme.sh", name];
+        presetApplyProcess.running = true;
+    }
+
+    // The apply keeps running if the notch closes or switches panels.
+    property Process presetApplyProcess: Process {
+        onExited: (code, status) => {
+            const success = code === 0 && status === 0;
+            if (success) theme.reload();
+            theme.presetApplyFinished(success);
+        }
+    }
 
     function reload() {
         themeLoader.running = false;

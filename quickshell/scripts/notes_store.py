@@ -1,186 +1,129 @@
 #!/usr/bin/env python3
-import sys
-import os
+"""Store the Dynamic You scratchpad and checklist."""
+
+import fcntl
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import time
 import urllib.parse
 
-NOTES_FILE = os.path.expanduser("~/.cache/quickshell/notes.json")
 
-def ensure_file():
-    os.makedirs(os.path.dirname(NOTES_FILE), exist_ok=True)
-    if not os.path.exists(NOTES_FILE):
-        default_data = {
-            "notes": [
-                {
-                    "id": "tasks",
-                    "type": "tasks",
-                    "title": "Tasks & Projects",
-                    "content": "- [ ] Add your first task here",
-                    "todos": [],
-                    "updated_at": int(time.time())
-                },
-                {
-                    "id": "scratchpad",
-                    "type": "note",
-                    "title": "Scratchpad",
-                    "content": "# Scratchpad\n\nJot down quick thoughts, code snippets, or ideas here.\nSupports markdown formatting and auto-saves in real time.",
-                    "todos": [],
-                    "updated_at": int(time.time())
-                }
-            ],
-            "activeNoteId": "tasks",
-            "scratchpad": "",
-            "todos": []
-        }
-        with open(NOTES_FILE, "w", encoding="utf-8") as f:
-            json.dump(default_data, f, indent=2)
+NOTES_FILE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "quickshell/notes.json"
 
-def migrate_data(data):
+
+def load():
+    if not NOTES_FILE.exists():
+        return {"scratchpad": "", "todos": [], "notes": [], "activeNoteId": "tasks"}
+    data = json.loads(NOTES_FILE.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        data = {}
-    if "notes" not in data or not isinstance(data["notes"], list) or len(data["notes"]) == 0:
-        notes = []
-        existing_todos = data.get("todos", [])
-        if not isinstance(existing_todos, list):
-            existing_todos = []
+        raise ValueError("Expected a notes object")
+    return normalize(data)
 
-        task_lines = []
-        for t in existing_todos:
-            marker = "x" if t.get("done") else " "
-            task_lines.append("- [" + marker + "] " + t.get("text", ""))
 
-        tasks_content = "\n".join(task_lines) if task_lines else "- [ ] Add your first task here"
-
-        notes.append({
-            "id": "tasks",
-            "type": "tasks",
-            "title": "Tasks & Projects",
-            "content": tasks_content,
-            "todos": existing_todos,
-            "updated_at": int(time.time())
-        })
-
-        scratch = data.get("scratchpad", "")
-        if not scratch or scratch.strip() == ".,":
-            scratch = "# Scratchpad\n\nJot down quick thoughts, code snippets, or ideas here.\nSupports markdown formatting and auto-saves in real time."
-
-        notes.append({
-            "id": "scratchpad",
-            "type": "note",
-            "title": "Scratchpad",
-            "content": scratch,
-            "todos": [],
-            "updated_at": int(time.time()) - 60
-        })
-
-        data["notes"] = notes
-        data["activeNoteId"] = "tasks"
-        save_data(data)
+def normalize(data):
+    entries = data.get("notes", [])
+    if not isinstance(entries, list):
+        entries = []
+    data["notes"] = entries
+    for identifier, field, kind, default in (
+        ("scratchpad", "scratchpad", str, ""),
+        ("tasks", "todos", list, []),
+    ):
+        record = next((note for note in entries if isinstance(note, dict) and note.get("id") == identifier), {})
+        legacy = record.get("content" if identifier == "scratchpad" else "todos")
+        if not isinstance(data.get(field), kind):
+            data[field] = legacy if isinstance(legacy, kind) else default
     return data
 
-def load_data():
-    ensure_file()
-    try:
-        with open(NOTES_FILE, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-            return migrate_data(raw)
-    except Exception as e:
-        return migrate_data({})
 
-def save_data(data):
-    ensure_file()
-    try:
-        # Keep backward compatibility sync
-        if "notes" in data and isinstance(data["notes"], list):
-            for n in data["notes"]:
-                if n.get("type") == "tasks" or n.get("id") == "tasks":
-                    data["todos"] = n.get("todos", [])
-                if n.get("type") == "note" or n.get("id") == "scratchpad":
-                    data["scratchpad"] = n.get("content", "")
+def save(data):
+    data = normalize(data)
+    for ident, role, title in (("scratchpad", "note", "Scratchpad"), ("tasks", "tasks", "Tasks & Projects")):
+        entry = next((note for note in data["notes"] if isinstance(note, dict) and note.get("id") == ident), None)
+        if entry is None:
+            entry = {"id": ident, "type": role, "title": title, "todos": []}
+            data["notes"].append(entry)
+        if ident == "scratchpad":
+            entry["content"] = data["scratchpad"]
+        else:
+            entry["todos"] = data["todos"]
+            entry["content"] = "\n".join(
+                f"- [{'x' if task.get('done') else ' '}] {task.get('text', '')}" for task in data["todos"]
+            )
+        entry["updated_at"] = int(time.time())
+    data.setdefault("activeNoteId", "tasks")
+    write_atomic(NOTES_FILE, json.dumps(data, ensure_ascii=False, indent=2))
 
-        temp_file = NOTES_FILE + ".tmp"
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(temp_file, NOTES_FILE)
-        return True
-    except Exception as e:
-        print(f"Error saving notes: {e}", file=sys.stderr)
-        return False
+
+def write_atomic(target, content):
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, delete=False) as stream:
+        path = Path(stream.name)
+        try:
+            stream.write(content)
+            stream.flush()
+            path.replace(target)
+        finally:
+            path.unlink(missing_ok=True)
+
+
+def export(path, content):
+    target = Path(path).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(target.resolve(), content)
+    print("OK:" + str(target))
+
 
 def main():
-    if len(sys.argv) < 2:
-        print(json.dumps(load_data()))
+    action = sys.argv[1] if len(sys.argv) > 1 else "load"
+    if action in ("export_txt", "export_md"):
+        export(sys.argv[2], urllib.parse.unquote(sys.argv[3]))
+        return
+    if action in ("export-stdin", "copy-stdin"):
+        payload = json.loads(sys.stdin.readline())
+        if action == "export-stdin":
+            export(payload["path"], payload["text"])
+        else:
+            subprocess.run(["wl-copy", "--type", "text/plain"], input=payload["text"].encode(), check=True)
         return
 
-    cmd = sys.argv[1]
-
-    if cmd == "load":
-        print(json.dumps(load_data()))
-
-    elif cmd in ("save_notes_enc", "save_all_enc"):
-        content = urllib.parse.unquote(sys.argv[2])
-        try:
-            parsed = json.loads(content)
-            data = load_data()
-            if isinstance(parsed, list):
-                data["notes"] = parsed
-            elif isinstance(parsed, dict):
-                data.update(parsed)
-            save_data(data)
-            print("OK")
-        except Exception as e:
-            print(f"Invalid JSON: {e}", file=sys.stderr)
-            sys.exit(1)
-
-    elif cmd in ("save_scratchpad_b64", "save_scratchpad_enc"):
-        content = urllib.parse.unquote(sys.argv[2])
-        data = load_data()
-        data["scratchpad"] = content
-        # Sync to scratchpad or active note
-        active_id = data.get("activeNoteId", "scratchpad")
-        for n in data.get("notes", []):
-            if n.get("id") == active_id or n.get("id") == "scratchpad":
-                n["content"] = content
-                n["updated_at"] = int(time.time())
-                break
-        save_data(data)
+    NOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with NOTES_FILE.with_suffix(".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        data = load()
+        if action == "load":
+            print(json.dumps(data))
+            return
+        if action == "save-stdin":
+            payload = json.loads(sys.stdin.readline())
+            if not isinstance(payload["scratchpad"], str) or not isinstance(payload["todos"], list):
+                raise ValueError("Invalid notes snapshot")
+            data.update(scratchpad=payload["scratchpad"], todos=payload["todos"])
+        elif action in ("save_scratchpad_enc", "save_scratchpad_b64"):
+            data["scratchpad"] = urllib.parse.unquote(sys.argv[2])
+        elif action in ("save_todos_enc", "save_todos_b64"):
+            data["todos"] = json.loads(urllib.parse.unquote(sys.argv[2]))
+        elif action in ("save_notes_enc", "save_all_enc"):
+            payload = json.loads(urllib.parse.unquote(sys.argv[2]))
+            if isinstance(payload, list):
+                data = {key: value for key, value in data.items() if key not in ("scratchpad", "todos")}
+                data["notes"] = payload
+            elif isinstance(payload, dict):
+                data.update(payload)
+            else:
+                raise ValueError("Invalid notes data")
+        else:
+            raise ValueError("Unknown notes command")
+        save(data)
         print("OK")
 
-    elif cmd in ("save_todos_b64", "save_todos_enc"):
-        content = urllib.parse.unquote(sys.argv[2])
-        data = load_data()
-        try:
-            todos_list = json.loads(content)
-            data["todos"] = todos_list
-            for n in data.get("notes", []):
-                if n.get("type") == "tasks" or n.get("id") == "tasks":
-                    n["todos"] = todos_list
-                    lines = ["- [" + ("x" if t.get("done") else " ") + "] " + t.get("text", "") for t in todos_list]
-                    n["content"] = "\n".join(lines)
-                    n["updated_at"] = int(time.time())
-                    break
-            save_data(data)
-            print("OK")
-        except Exception as e:
-            print(f"Invalid JSON: {e}", file=sys.stderr)
-            sys.exit(1)
-
-    elif cmd in ("export_txt", "export_md"):
-        filepath = os.path.expanduser(sys.argv[2])
-        content = urllib.parse.unquote(sys.argv[3])
-        try:
-            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(content)
-            print("OK:" + filepath)
-        except Exception as e:
-            print(f"Error exporting file: {e}", file=sys.stderr)
-            sys.exit(1)
-
-    else:
-        print(f"Unknown command: {cmd}", file=sys.stderr)
-        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, KeyError, IndexError, TypeError, ValueError, subprocess.SubprocessError) as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)

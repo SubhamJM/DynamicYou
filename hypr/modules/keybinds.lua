@@ -12,7 +12,7 @@ local mainMod = "SUPER" -- Sets "Windows" key as main modifier
 
 -- My keybinds (MAIN)
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("command -v " .. browser .. " >/dev/null && exec " .. browser .. "; exec firefox"))
-hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }))
+hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "toggle", layout_aware = false }))
 hl.bind(mainMod .. " + SHIFT + Q", hl.dsp.exec_cmd("~/.config/quickshell/reload.sh"))
 hl.bind(mainMod .. " + Space", hl.dsp.global("quickshell:toggleNotchLauncher"))
 hl.bind(mainMod .. " + T", hl.dsp.global("quickshell:toggleThemeNotch"))

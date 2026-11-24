@@ -26,7 +26,7 @@ Item {
             fillMode: Image.PreserveAspectCrop
             visible: status === Image.Ready
             smooth: true
-            cache: true
+            cache: false
         }
 
         Text {

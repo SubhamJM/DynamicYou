@@ -274,7 +274,7 @@ Item {
                         source: slot.path === "" ? "" : !/\.(mp4|webm|mkv|mov|m4v)$/i.test(slot.path) ? "file://" + slot.path : slot.thumb !== "" ? "file://" + slot.thumb : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
-                        cache: true
+                        cache: false
                         sourceSize.width: Theme.dp(640)
                     }
 

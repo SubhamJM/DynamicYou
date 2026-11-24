@@ -27,6 +27,12 @@ Item {
     // this month as year * 12 + month, moved on by the day tick
     property int thisMonth: Loc.now().getFullYear() * 12 + Loc.now().getMonth()
     readonly property bool isCurrent: month.year * 12 + month.monthIndex === month.thisMonth
+    readonly property bool todaySelected: {
+        Agenda.checkedDay;
+        const now = Loc.now();
+        return month.selected?.year === now.getFullYear() && month.selected?.month === now.getMonth()
+            && month.selected?.day === now.getDate();
+    }
     readonly property var weekdays: month.mondayFirst ? ["M", "T", "W", "T", "F", "S", "S"] : ["S", "M", "T", "W", "T", "F", "S"]
     readonly property var cells: {
         Agenda.checkedDay;
@@ -49,6 +55,7 @@ Item {
     }
 
     signal picked(int y, int m, int d)
+    signal todayRequested()
 
     function page(dir) {
         let m = month.monthIndex + dir;
@@ -68,6 +75,8 @@ Item {
 
     function goToday() {
         const n = Loc.now();
+        if (month.year === n.getFullYear() && month.monthIndex === n.getMonth())
+            return;
         const dir = (n.getFullYear() * 12 + n.getMonth()) >= (month.year * 12 + month.monthIndex) ? 1 : -1;
         month.year = n.getFullYear();
         month.monthIndex = n.getMonth();
@@ -148,11 +157,12 @@ Item {
             spacing: 0
 
             IconButton {
-                visible: !month.isCurrent
+                visible: !month.isCurrent || (month.selected !== null && !month.todaySelected)
                 icon: "today"
                 size: "xs"
                 tintOverride: month.inkDim
-                onClicked: month.goToday()
+                Accessible.name: I18n.tr("Today")
+                onClicked: month.todayRequested()
             }
 
             IconButton {
@@ -253,7 +263,7 @@ Item {
                                 width: month.cell
                                 height: month.cell
                                 shape: "pentagon"
-                                color: month.accent
+                                color: c.isSelected || month.selected === null ? month.accent : Theme.alpha(month.accent, 0.23)
                                 scale: todayArea.pressed ? 0.92 : (todayArea.containsMouse ? 1.1 : 1)
                                 rotation: todayArea.containsMouse ? -12 : 0
 
@@ -330,7 +340,9 @@ Item {
                             role: "bodyMedium"
                             weight: c.modelData.today || c.isSelected ? 650 : 440
                             rounded: c.modelData.today ? 100 : 0
-                            color: c.modelData.today ? month.fgAccent : (c.isSelected ? month.pickInk : month.ink)
+                            color: c.modelData.today
+                                ? (c.isSelected || month.selected === null ? month.fgAccent : month.accent)
+                                : (c.isSelected ? month.pickInk : month.ink)
                             opacity: c.modelData.other && !c.modelData.today ? 0.35 : 1
                             text: c.modelData.day
                         }
@@ -343,7 +355,7 @@ Item {
                             width: Theme.dp(5)
                             height: Theme.dp(5)
                             radius: 2.5
-                            color: c.modelData.today ? month.fgAccent : month.markColor
+                            color: c.modelData.today && (c.isSelected || month.selected === null) ? month.fgAccent : month.markColor
                         }
 
                     }

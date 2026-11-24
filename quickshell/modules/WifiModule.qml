@@ -1,13 +1,18 @@
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Networking
+import "../"
 import "lucidwifi" as Lucid
 
 FocusScope {
     id: wifi
 
     property string activeTab: "wifi"
-    readonly property int calculatedHeight: Math.min(680, Math.max(220, header.height + scroller.anchors.topMargin + panel.implicitHeight + 28))
+    readonly property bool resizingRows: panel.resizingRows > 0
+    readonly property int calculatedHeight: Math.min(680, Math.max(220, header.height + tabs.height
+        + tabs.anchors.topMargin + scroller.anchors.topMargin + scroller.contentHeight + 24))
 
     function refreshStatus() {
         panel.refreshActiveNetwork();
@@ -19,7 +24,9 @@ FocusScope {
 
     focus: true
     Keys.onEscapePressed: (event) => {
-        if (panel.expandedKey !== "")
+        if (wifi.activeTab === "hotspot")
+            wifi.activeTab = "wifi";
+        else if (panel.expandedKey !== "")
             panel.expandedKey = "";
         else if (panel.hiddenFormOpen)
             panel.hiddenFormOpen = false;
@@ -28,60 +35,109 @@ FocusScope {
         event.accepted = true;
     }
 
-    Item {
+    ConnectivityHeader {
         id: header
 
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Lucid.Theme.dp(44)
+        height: implicitHeight
+        title: Lucid.I18n.tr("Internet")
+        status: !Networking.wifiHardwareEnabled ? Lucid.I18n.tr("Wi-Fi hardware disabled")
+            : !Networking.wifiEnabled ? Lucid.I18n.tr("Wi-Fi off") : panel.statusText
+        powered: Networking.wifiEnabled
+        powerAvailable: Networking.wifiHardwareEnabled
+        onBackRequested: wifi.navigate("switchMode", ["utility"])
+        onPowerRequested: enabled => Networking.wifiEnabled = enabled
+    }
 
-        Lucid.IconButton {
-            id: backChip
+    RowLayout {
+        id: tabs
+        anchors.top: header.bottom
+        anchors.topMargin: 8
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 32
+        spacing: 6
 
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            icon: "arrow_back"
-            tintOverride: Lucid.Theme.text
-            onClicked: wifi.navigate("switchMode", ["utility"])
-        }
-
-        Lucid.LText {
-            anchors.left: backChip.right
-            anchors.leftMargin: Lucid.Theme.dp(4)
-            anchors.verticalCenter: parent.verticalCenter
-            role: "titleMedium"
-            weight: 600
-            text: Lucid.I18n.tr("Internet")
-        }
-
-        Lucid.Switch {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            checked: Networking.wifiEnabled
-            onToggled: Networking.wifiEnabled = !Networking.wifiEnabled
+        Repeater {
+            model: [
+                { tab: "wifi", title: Lucid.I18n.tr("Wi-Fi"), icon: "wifi" },
+                { tab: "hotspot", title: "Hotspot", icon: "wifi_tethering" }
+            ]
+            delegate: Button {
+                id: tab
+                required property var modelData
+                readonly property bool selected: wifi.activeTab === modelData.tab
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 32
+                text: modelData.title
+                padding: 0
+                hoverEnabled: true
+                Accessible.role: Accessible.PageTab
+                onClicked: wifi.activeTab = modelData.tab
+                background: Rectangle {
+                    radius: 8
+                    color: tab.selected ? Theme.primaryContainer : tab.hovered ? Theme.surfaceHighest : Theme.surfaceHigh
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+                contentItem: Item {
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        MaterialSymbol {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: tab.modelData.icon
+                            iconSize: 15
+                            color: tab.selected ? Theme.fgPrimaryContainer : Theme.subtext
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: tab.text
+                            color: tab.selected ? Theme.fgPrimaryContainer : Theme.text
+                            font.family: Theme.fontFamilyBody
+                            font.pixelSize: 12
+                            font.weight: tab.selected ? Font.DemiBold : Font.Normal
+                        }
+                    }
+                }
+            }
         }
     }
 
     Flickable {
         id: scroller
 
-        anchors.top: header.bottom
-        anchors.topMargin: Lucid.Theme.dp(4)
+        anchors.top: tabs.bottom
+        anchors.topMargin: 8
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         contentWidth: width
-        contentHeight: panel.implicitHeight
+        contentHeight: wifi.activeTab === "hotspot" ? (hotspotPage.item?.implicitHeight ?? 0) : panel.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        Connections {
+            target: wifi
+            function onActiveTabChanged() { scroller.contentY = 0; }
+        }
 
         Lucid.WifiPanel {
             id: panel
 
             width: scroller.width
             height: implicitHeight
-            active: wifi.visible && wifi.enabled
+            visible: wifi.activeTab === "wifi"
+            active: wifi.visible && wifi.enabled && (typeof root === "undefined" || root.activeMode === "wifi")
+                && visible
+        }
+
+        Loader {
+            id: hotspotPage
+            width: scroller.width
+            active: wifi.activeTab === "hotspot"
+            sourceComponent: HotspotPanel { hotspot: root.hotspot }
         }
     }
 }

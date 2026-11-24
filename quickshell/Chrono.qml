@@ -328,10 +328,10 @@ Singleton {
         root.pomoLeft = root.pomoSpan;
     }
 
-    function pomoBegin(phase) {
+    function pomoBegin(phase, minutes = root.phaseMinutes(phase)) {
         root.now = Date.now();
         root.pomoPhase = phase;
-        root.pomoSpan = root.phaseMinutes(phase) * 60000;
+        root.pomoSpan = minutes * 60000;
         root.pomoLeft = root.pomoSpan;
         root.pomoEndsAt = root.now + root.pomoLeft;
         root.pomoRunning = true;
@@ -548,8 +548,7 @@ Singleton {
     FileView {
         id: file
 
-        __printErrors: false
-        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/dynamic-you/chrono.json"
+        path: Quickshell.env("HOME") + "/.config/quickshell/lucidbar/chrono.json"
         blockLoading: true
         // absent until the first timer; nothing to report
         printErrors: false

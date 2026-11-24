@@ -33,14 +33,6 @@ Rectangle {
             contentFlick.contentY = 0;
         }
     }
-    readonly property string localUser: Quickshell.env("USER") || Quickshell.env("HOME").split("/").pop() || ""
-    property string hostName: ""
-    Process {
-        running: true
-        command: ["cat", "/proc/sys/kernel/hostname"]
-        stdout: StdioCollector { onStreamFinished: root.hostName = text.trim() }
-    }
-
     property string searchQuery: ""
     property string keybindSearch: ""
     property string selectedKeybindCat: "All"
@@ -67,10 +59,7 @@ Rectangle {
     Process { id: hyprExecProc }
 
     function setHyprKeyword(keyword, val) {
-        const option = keyword.replace(/:/g, ".");
-        const raw = typeof val === "number" || typeof val === "boolean" ? String(val) :
-            (/^-?\d+(?:\.\d+)?$/.test(String(val)) ? String(val) : JSON.stringify(String(val)));
-        hyprExecProc.command = ["hyprctl", "eval", "hl.config({[" + JSON.stringify(option) + "] = " + raw + "})"];
+        hyprExecProc.command = ["hyprctl", "keyword", keyword, String(val)];
         hyprExecProc.running = false;
         hyprExecProc.running = true;
     }
@@ -281,7 +270,7 @@ print(json.dumps(res))
 
                         Text {
                             anchors.centerIn: parent
-                            text: root.localUser.slice(0, 1).toUpperCase()
+                            text: "K"
                             font.bold: true
                             font.pixelSize: 13
                             color: "#121214"
@@ -305,7 +294,7 @@ print(json.dumps(res))
                     spacing: 1
 
                     Text {
-                        text: root.localUser
+                        text: "kuro"
                         font.family: (typeof Theme !== "undefined" && Theme.fontFamilyBody) ? Theme.fontFamilyBody : "Noto Sans"
                         font.bold: true
                         font.pixelSize: 12
@@ -2279,7 +2268,7 @@ print(json.dumps(res))
                                     { k: "Host OS", v: "Arch Linux" },
                                     { k: "Compositor", v: "Hyprland Wayland" },
                                     { k: "Shell Architecture", v: "Dynamic-You + Quickshell" },
-                                    { k: "Active User", v: root.hostName ? root.localUser + "@" + root.hostName : root.localUser }
+                                    { k: "Active User", v: "kuro@archlinux" }
                                 ]
 
                                 Rectangle {

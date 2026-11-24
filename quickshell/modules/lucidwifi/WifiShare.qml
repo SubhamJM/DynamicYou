@@ -57,8 +57,6 @@ Item {
         height: share.qrSize
         radius: WifiUi.Theme.rad(14)
         color: share.paper
-        border.width: 1
-        border.color: WifiUi.Theme.alpha(WifiUi.Theme.outlineStrong, 0.4)
 
         Canvas {
             id: qr
@@ -138,8 +136,6 @@ Item {
             radius: WifiUi.Theme.rad(10)
             visible: share.ready && !share.open
             color: WifiUi.Theme.alpha(WifiUi.Theme.text, 0.06)
-            border.width: 1
-            border.color: WifiUi.Theme.outlineStrong
 
             Text {
                 anchors.left: parent.left

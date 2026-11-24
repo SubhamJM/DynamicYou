@@ -7,8 +7,7 @@ import "../"
 
 FocusScope {
     id: cheatsheetRoot
-    Layout.fillWidth: true
-    Layout.fillHeight: true
+    anchors.fill: parent
     focus: true
 
     Keys.forwardTo: isAddingMode ? [keyField] : [searchField]
@@ -446,8 +445,6 @@ FocusScope {
                 color: cheatsheetRoot.isAddingMode
                     ? "#ffffff"
                     : (addBtnMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : Qt.rgba(255, 255, 255, 0.05))
-                border.width: 0
-                Behavior on color { ColorAnimation { duration: 120 } }
                 border.width: 1
                 border.color: cheatsheetRoot.accentColor
                 Behavior on color { ColorAnimation { duration: 120 } }
@@ -963,13 +960,6 @@ FocusScope {
                             color: catPill.isCurrent ? "#121214" : Qt.rgba(255, 255, 255, 0.40)
                             anchors.verticalCenter: parent.verticalCenter
                             renderType: Text.NativeRendering
-                        }
-                    }
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: catPill.isCurrent ? cheatsheetRoot.accentColor : (Theme.colors.text_secondary ?? "#565f89")
-                            opacity: 0.8
-                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 

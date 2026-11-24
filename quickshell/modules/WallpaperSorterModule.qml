@@ -1,626 +1,384 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../"
 
-Item {
-    id: sorterModule
+FocusScope {
+    id: sorter
     focus: true
+
+    readonly property string home: Quickshell.env("HOME") || ""
+    readonly property string library: home + "/Pictures/Wallpapers"
+    readonly property bool sorting: worker.running
+    property bool browsingFolder: chooserProc.running
+    readonly property var themes: [
+        { name: "Abyss", shade: "#122641", color: "#25b4e5" },
+        { name: "Afterglow", shade: "#482550", color: "#e591ba" },
+        { name: "Crimson", shade: "#501b33", color: "#f76581" },
+        { name: "Frost", shade: "#3b4c64", color: "#c9e8f6" },
+        { name: "Solstice", shade: "#5b301d", color: "#f9bb64" },
+        { name: "Verdant", shade: "#183c34", color: "#75d99c" }
+    ]
+
+    property int current: 0
+    property int total: 0
+    property string currentFile: ""
+    property string failure: ""
+    property var result: null
+
     Keys.onEscapePressed: (event) => {
-        if (sorterModule.isSorting) {
-            // Busy sorting
-        } else {
-            root.switchMode("utility", true);
-        }
+        if (!sorting && !browsingFolder) root.switchMode("utility", true);
         event.accepted = true;
     }
 
-    // Palette & Styling
-    readonly property color colBg: Theme.colors.bg ?? "#000000"
-    readonly property color colCard: Qt.rgba(255, 255, 255, 0.055)
-    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.10)
-    readonly property color colCardActive: Qt.rgba(255, 255, 255, 0.16)
-    readonly property color colAccent: Theme.accent ?? "#7aa2f7"
-    readonly property color colText: Theme.colors.text_primary ?? "#f8fafc"
-    readonly property color colSubtext: Theme.colors.text_secondary ?? "#94a3b8"
-    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)
-    readonly property color colBorder: Qt.rgba(255, 255, 255, 0.08)
+    function startSorting() {
+        const source = folderPath.text.trim();
+        if (sorting || source === "") return;
+        current = 0;
+        total = 0;
+        currentFile = "";
+        failure = "";
+        result = null;
+        worker.command = ["python3", Quickshell.shellPath("scripts/wallpaper_sorter.py"),
+            "--dest", library, "--json", "--", source];
+        worker.running = true;
+    }
 
-    // State Variables - Default directory: ~/customwallpapers
-    property string sourceDirectory: (Quickshell.env("HOME") || "") + "/customwallpapers"
-    property string targetDirectory: (Quickshell.env("HOME") || "") + "/Pictures/Wallpapers"
-    property string copyMode: "copy"
-
-    property bool isSorting: false
-    property bool hasCompleted: false
-    property int currentProgress: 0
-    property int totalFiles: 0
-    property string currentFile: ""
-    property string currentTheme: ""
-    property string currentHex: ""
-    property int totalFound: 0
-    property int uniqueAdded: 0
-    property int duplicatesSkipped: 0
-    property var themeBreakdown: ({ "Abyss": 0, "Verdant": 0, "Crimson": 0, "Afterglow": 0, "Solstice": 0, "Frost": 0 })
-
-    // Zenity Native Folder Chooser Process
+    // Native Wayland asynchronous directory picker (zenity with kdialog fallback)
+    // Avoids QtQuick.Dialogs modal lockup on layer-shell overlay surfaces
     Process {
-        id: folderChooser
+        id: chooserProc
         running: false
         command: [
-            "zenity",
-            "--file-selection",
-            "--directory",
-            "--title=Select Wallpapers Folder",
-            "--filename=" + sorterModule.sourceDirectory + "/"
+            "bash", "-c",
+            "start_dir=\"$1\"; [ -d \"$start_dir\" ] || start_dir=\"$HOME\"; " +
+            "if command -v zenity >/dev/null 2>&1; then " +
+            "  zenity --file-selection --directory --filename=\"$start_dir/\" --title=\"Choose Wallpaper Source Folder\" 2>/dev/null; " +
+            "elif command -v kdialog >/dev/null 2>&1; then " +
+            "  kdialog --title \"Choose Wallpaper Source Folder\" --getexistingdirectory \"$start_dir\" 2>/dev/null; " +
+            "fi",
+            "sh",
+            folderPath.text.trim() || sorter.home
         ]
+
         stdout: StdioCollector {
             onStreamFinished: {
-                var selected = this.text.trim();
-                if (selected.length > 0) {
-                    sorterModule.sourceDirectory = selected;
-                    sorterModule.hasCompleted = false;
+                const picked = this.text.trim();
+                if (picked.length > 0) {
+                    folderPath.text = picked;
                 }
             }
         }
+
+        onExited: (code) => {
+            sorter.browsingFolder = false;
+        }
     }
 
-    // Backend Wallpaper Sorter Python Process
     Process {
-        id: sorterProcess
-        running: false
-        command: [
-            "python3",
-            (Quickshell.env("HOME") || "") + "/.config/quickshell/scripts/wallpaper_sorter.py",
-            sorterModule.sourceDirectory,
-            "--dest=" + sorterModule.targetDirectory,
-            "--mode=" + sorterModule.copyMode,
-            "--json"
-        ]
+        id: worker
+
         stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: (data) => {
-                var line = data.trim();
-                if (!line || line.length === 0) return;
+            onRead: line => {
                 try {
-                    var ev = JSON.parse(line);
-                    if (ev.type === "start") {
-                        sorterModule.totalFiles = ev.total_files;
-                        sorterModule.currentProgress = 0;
-                    } else if (ev.type === "progress") {
-                        sorterModule.currentProgress = ev.current;
-                        sorterModule.totalFiles = ev.total;
-                        sorterModule.currentFile = ev.filename;
-                        if (ev.status === "sorted") {
-                            sorterModule.currentTheme = ev.theme;
-                            sorterModule.currentHex = ev.hex;
-                        } else {
-                            sorterModule.currentTheme = "Duplicate";
-                            sorterModule.currentHex = "#eab308";
-                        }
-                    } else if (ev.type === "done") {
-                        sorterModule.isSorting = false;
-                        sorterModule.hasCompleted = true;
-                        sorterModule.totalFound = ev.total_found;
-                        sorterModule.uniqueAdded = ev.unique_added;
-                        sorterModule.duplicatesSkipped = ev.duplicates_skipped;
-                        sorterModule.themeBreakdown = ev.by_theme || ({});
-                        // Trigger reload of shell's global wallpaper cache
-                        if (typeof globalWallpaperScanner !== "undefined" && !globalWallpaperScanner.running) {
-                            globalWallpaperScanner.running = true;
-                        }
+                    const event = JSON.parse(line);
+                    if (event.type === "start") {
+                        sorter.total = event.total_files;
+                    } else if (event.type === "progress") {
+                        sorter.current = event.current;
+                        sorter.currentFile = event.filename;
+                    } else if (event.type === "error") {
+                        sorter.failure = event.message;
+                    } else if (event.type === "done") {
+                        sorter.result = event;
+                        if (event.unique_added > 0) root.refreshWallpaperCache();
                     }
-                } catch(e) {
-                    // Ignore non-json debug lines
-                }
+                } catch (_) {}
             }
         }
-        onExited: {
-            sorterModule.isSorting = false;
+        onExited: code => {
+            if ((code !== 0 || !sorter.result) && !sorter.failure)
+                sorter.failure = "Sorting couldn’t finish. Check that Pillow is installed and the wallpaper library is writable.";
         }
-    }
-
-    function startSorting() {
-        if (sorterModule.isSorting) return;
-        sorterModule.hasCompleted = false;
-        sorterModule.isSorting = true;
-        sorterModule.currentProgress = 0;
-        sorterModule.totalFiles = 0;
-        sorterModule.currentFile = "Scanning folder...";
-        sorterModule.currentTheme = "";
-        sorterProcess.running = true;
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.topMargin: 8
-        anchors.bottomMargin: 8
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        spacing: 7
+        anchors.leftMargin: 2
+        anchors.rightMargin: 2
+        spacing: 9
 
-        // ── 1. COMPACT HEADER BAR ──────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 28
             spacing: 8
 
-            // Tactile Back Button
-            Rectangle {
-                width: 28; height: 28; radius: 14
-                color: backMouse.containsMouse ? sorterModule.colCardHover : sorterModule.colCard
-                border.width: 1
-                border.color: sorterModule.colBorder
-                scale: backMouse.pressed ? 0.90 : 1.0
-                Behavior on scale { NumberAnimation { duration: 90 } }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: 15
-                    color: sorterModule.colAccent
-                }
-
-                MouseArea {
-                    id: backMouse
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    hoverEnabled: true
-                    onClicked: root.switchMode("utility", true)
-                }
+            SortButton {
+                text: "Back to Control Center"
+                glyph: "arrow_back"
+                iconOnly: true
+                enabled: !sorter.sorting
+                onClicked: root.switchMode("utility", true)
             }
 
-            // Title Only (Clean, Debloated)
             Text {
+                Layout.fillWidth: true
                 text: "Wallpaper Color Sorter"
-                font.family: "Noto Sans"
-                font.pixelSize: 13
+                color: Theme.text
+                font.family: Theme.fontFamilyBody
+                font.pixelSize: 15
                 font.weight: Font.DemiBold
-                color: sorterModule.colText
-                Layout.alignment: Qt.AlignVCenter
             }
-
-            Item { Layout.fillWidth: true }
         }
 
-        // ── 2. FOLDER SELECTION CARD ───────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
+            Layout.preferredHeight: sourceLayout.implicitHeight + 20
             radius: 12
-            color: sorterModule.colCard
-            border.width: 1
-            border.color: sorterModule.colBorder
+            color: Theme.surfaceHigh
 
             ColumnLayout {
+                id: sourceLayout
                 anchors.fill: parent
-                anchors.margins: 8
-                spacing: 5
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 7
-
-                    Text {
-                        text: "Source Folder:"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        font.weight: Font.Medium
-                        color: sorterModule.colSubtext
-                    }
-
-                    // Directory Path Input Box
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 24
-                        radius: 6
-                        color: Qt.rgba(0, 0, 0, 0.35)
-                        border.width: 1
-                        border.color: dirInput.activeFocus ? sorterModule.colAccent : sorterModule.colBorder
-
-                        TextInput {
-                            id: dirInput
-                            anchors.fill: parent
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 6
-                            verticalAlignment: TextInput.AlignVCenter
-                            text: sorterModule.sourceDirectory
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
-                            color: sorterModule.colText
-                            clip: true
-                            onEditingFinished: sorterModule.sourceDirectory = text.trim()
-                        }
-                    }
-
-                    // Browse Button
-                    Rectangle {
-                        width: 72; height: 24; radius: 6
-                        color: browseMouse.containsMouse ? sorterModule.colCardHover : Qt.rgba(255, 255, 255, 0.08)
-                        border.width: 1
-                        border.color: sorterModule.colBorder
-                        scale: browseMouse.pressed ? 0.94 : 1.0
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 3
-                            MaterialSymbol {
-                                text: "folder_open"
-                                iconSize: 12
-                                color: sorterModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: "Browse"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                                color: sorterModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: browseMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: folderChooser.running = true
-                        }
-                    }
-                }
-
-                // Quick Preset Chips (customwallpapers first)
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 5
-
-                    Text {
-                        text: "Presets:"
-                        font.family: "Noto Sans"
-                        font.pixelSize: 10
-                        color: sorterModule.colMuted
-                    }
-
-                    // Chip: ~/customwallpapers
-                    Rectangle {
-                        height: 18; radius: 4
-                        color: chipCustomMouse.containsMouse ? sorterModule.colCardHover : Qt.rgba(255, 255, 255, 0.04)
-                        border.width: 1; border.color: sorterModule.sourceDirectory.indexOf("customwallpapers") !== -1 ? sorterModule.colAccent : sorterModule.colBorder
-                        implicitWidth: chipCustomText.implicitWidth + 10
-                        Text {
-                            id: chipCustomText
-                            anchors.centerIn: parent
-                            text: "customwallpapers"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: sorterModule.sourceDirectory.indexOf("customwallpapers") !== -1 ? sorterModule.colAccent : sorterModule.colSubtext
-                        }
-                        MouseArea {
-                            id: chipCustomMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: {
-                                sorterModule.sourceDirectory = (Quickshell.env("HOME") || "") + "/customwallpapers";
-                                sorterModule.hasCompleted = false;
-                            }
-                        }
-                    }
-
-                    // Chip: Downloads
-                    Rectangle {
-                        height: 18; radius: 4
-                        color: chipDlMouse.containsMouse ? sorterModule.colCardHover : Qt.rgba(255, 255, 255, 0.04)
-                        border.width: 1; border.color: sorterModule.colBorder
-                        implicitWidth: chipDlText.implicitWidth + 10
-                        Text {
-                            id: chipDlText
-                            anchors.centerIn: parent
-                            text: "Downloads"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: sorterModule.colSubtext
-                        }
-                        MouseArea {
-                            id: chipDlMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: {
-                                sorterModule.sourceDirectory = (Quickshell.env("HOME") || "") + "/Downloads";
-                                sorterModule.hasCompleted = false;
-                            }
-                        }
-                    }
-
-                    // Chip: Pictures
-                    Rectangle {
-                        height: 18; radius: 4
-                        color: chipPicMouse.containsMouse ? sorterModule.colCardHover : Qt.rgba(255, 255, 255, 0.04)
-                        border.width: 1; border.color: sorterModule.colBorder
-                        implicitWidth: chipPicText.implicitWidth + 10
-                        Text {
-                            id: chipPicText
-                            anchors.centerIn: parent
-                            text: "Pictures"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 9
-                            color: sorterModule.colSubtext
-                        }
-                        MouseArea {
-                            id: chipPicMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: {
-                                sorterModule.sourceDirectory = (Quickshell.env("HOME") || "") + "/Pictures";
-                                sorterModule.hasCompleted = false;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── 3. TARGET THEMES PREVIEW ROW (COMPACT) ─────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            radius: 10
-            color: sorterModule.colCard
-            border.width: 1
-            border.color: sorterModule.colBorder
-
-            RowLayout {
-                anchors.centerIn: parent
+                anchors.margins: 10
                 spacing: 6
 
-                Repeater {
-                    model: [
-                        { name: "Abyss", col: "#00e5ff" },
-                        { name: "Verdant", col: "#05df72" },
-                        { name: "Crimson", col: "#ff2a5f" },
-                        { name: "Afterglow", col: "#f472b6" },
-                        { name: "Solstice", col: "#ff9e3b" },
-                        { name: "Frost", col: "#ffffff" }
-                    ]
-
-                    delegate: Rectangle {
-                        height: 20
-                        radius: 10
-                        color: Qt.rgba(255, 255, 255, 0.04)
-                        border.width: 1
-                        border.color: modelData.col
-                        implicitWidth: themePillRow.implicitWidth + 10
-
-                        Row {
-                            id: themePillRow
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Rectangle {
-                                width: 6; height: 6; radius: 3
-                                color: modelData.col
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: modelData.name
-                                font.family: "Readex Pro"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                                color: sorterModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-                    }
+                Text {
+                    text: "Source folder"
+                    color: Theme.subtext
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                 }
-            }
-        }
 
-        // ── 4. COMPACT ACTION & PROGRESS SECTION (NO GAPS) ─────────
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            radius: 12
-            color: sorterModule.colCard
-            border.width: 1
-            border.color: sorterModule.colBorder
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 9
-                spacing: 6
-
-                // Live status text
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
 
-                    MaterialSymbol {
-                        text: sorterModule.isSorting ? "sync" : (sorterModule.hasCompleted ? "check_circle" : "auto_awesome")
-                        iconSize: 14
-                        color: sorterModule.hasCompleted ? "#30d158" : sorterModule.colAccent
-                    }
-
-                    Text {
+                    TextField {
+                        id: folderPath
                         Layout.fillWidth: true
-                        text: sorterModule.isSorting
-                            ? `Sorting [${sorterModule.currentProgress}/${sorterModule.totalFiles}]: ${sorterModule.currentFile}`
-                            : (sorterModule.hasCompleted
-                                ? `Completed! Added ${sorterModule.uniqueAdded} unique wallpapers (${sorterModule.duplicatesSkipped} duplicates skipped)`
-                                : "Ready to scan and sort wallpapers into theme directories.")
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        font.weight: Font.Medium
-                        color: sorterModule.colText
-                        elide: Text.ElideMiddle
+                        Layout.preferredHeight: 32
+                        text: sorter.home + "/Downloads"
+                        placeholderText: "Enter a folder path"
+                        selectByMouse: true
+                        readOnly: sorter.sorting || sorter.browsingFolder
+                        color: Theme.text
+                        placeholderTextColor: Theme.subtext
+                        font.family: Theme.fontFamilyBody
+                        font.pixelSize: 12
+                        selectionColor: Theme.accent
+                        selectedTextColor: Theme.fgPrimary
+                        background: Rectangle {
+                            radius: 8
+                            color: folderPath.activeFocus ? Theme.surfaceHighest : Theme.bg
+                        }
+                        onTextChanged: {
+                            if (!sorter.sorting) {
+                                sorter.failure = "";
+                                sorter.result = null;
+                            }
+                        }
                     }
 
-                    // Progress percentage
-                    Text {
-                        visible: sorterModule.isSorting && sorterModule.totalFiles > 0
-                        text: Math.round((sorterModule.currentProgress / Math.max(1, sorterModule.totalFiles)) * 100) + "%"
-                        font.family: "Readex Pro"
-                        font.pixelSize: 11
-                        font.weight: Font.Bold
-                        color: sorterModule.colAccent
-                    }
-                }
-
-                // Progress Bar
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 4
-                    radius: 2
-                    color: Qt.rgba(255, 255, 255, 0.08)
-                    visible: sorterModule.isSorting
-
-                    Rectangle {
-                        height: parent.height
-                        radius: 2
-                        color: sorterModule.colAccent
-                        width: parent.width * (sorterModule.currentProgress / Math.max(1, sorterModule.totalFiles))
-                        Behavior on width { NumberAnimation { duration: 90 } }
+                    SortButton {
+                        text: sorter.browsingFolder ? "Choosing…" : "Browse"
+                        baseColor: Theme.surfaceHighest
+                        glyph: "folder_open"
+                        enabled: !sorter.sorting && !sorter.browsingFolder
+                        onClicked: {
+                            sorter.browsingFolder = true;
+                            chooserProc.running = true;
+                        }
                     }
                 }
 
-                // Completion Grid / Summary
-                GridLayout {
-                    visible: sorterModule.hasCompleted
+                RowLayout {
                     Layout.fillWidth: true
-                    columns: 3
-                    rowSpacing: 4
-                    columnSpacing: 5
+                    spacing: 6
 
                     Repeater {
                         model: [
-                            { name: "Abyss", count: sorterModule.themeBreakdown["Abyss"] || 0, col: "#00e5ff" },
-                            { name: "Verdant", count: sorterModule.themeBreakdown["Verdant"] || 0, col: "#05df72" },
-                            { name: "Crimson", count: sorterModule.themeBreakdown["Crimson"] || 0, col: "#ff2a5f" },
-                            { name: "Afterglow", count: sorterModule.themeBreakdown["Afterglow"] || 0, col: "#f472b6" },
-                            { name: "Solstice", count: sorterModule.themeBreakdown["Solstice"] || 0, col: "#ff9e3b" },
-                            { name: "Frost", count: sorterModule.themeBreakdown["Frost"] || 0, col: "#ffffff" }
+                            { title: "Downloads", path: sorter.home + "/Downloads" },
+                            { title: "Pictures", path: sorter.home + "/Pictures" },
+                            { title: "Wallpapers", path: sorter.library },
+                            { title: "Custom", path: sorter.home + "/customwallpapers" }
                         ]
-
-                        delegate: Rectangle {
+                        delegate: SortButton {
+                            required property var modelData
                             Layout.fillWidth: true
-                            height: 22
-                            radius: 5
-                            color: Qt.rgba(255, 255, 255, 0.04)
-                            border.width: 1
-                            border.color: modelData.col
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 6
-                                anchors.rightMargin: 6
-                                spacing: 4
-
-                                Rectangle {
-                                    width: 6; height: 6; radius: 3
-                                    color: modelData.col
-                                }
-                                Text {
-                                    text: modelData.name
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 9
-                                    color: sorterModule.colText
-                                }
-                                Item { Layout.fillWidth: true }
-                                Text {
-                                    text: "+" + modelData.count
-                                    font.family: "Readex Pro"
-                                    font.pixelSize: 10
-                                    font.weight: Font.Bold
-                                    color: modelData.col
-                                }
-                            }
+                            Layout.preferredWidth: 1
+                            baseColor: Theme.bg
+                            text: modelData.title
+                            selected: folderPath.text.trim() === modelData.path
+                            enabled: !sorter.sorting && !sorter.browsingFolder
+                            onClicked: folderPath.text = modelData.path
                         }
                     }
                 }
+            }
+        }
 
-                // Action Buttons
-                RowLayout {
+        Text {
+            Layout.fillWidth: true
+            text: "Copies images by color into the theme folders in ~/Pictures/Wallpapers."
+            color: Theme.subtext
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 11
+            wrapMode: Text.WordWrap
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+
+            Repeater {
+                model: sorter.themes
+
+                delegate: Rectangle {
+                    id: themeTile
+                    required property var modelData
+                    readonly property int copied: sorter.result?.by_theme[modelData.name] ?? 0
                     Layout.fillWidth: true
-                    spacing: 7
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 65
+                    radius: 9
+                    color: Theme.surfaceHigh
+                    Accessible.name: modelData.name + (sorter.result ? ", " + copied + " copied" : "")
 
-                    // View Wallpapers Button (when completed)
                     Rectangle {
-                        visible: sorterModule.hasCompleted
-                        Layout.fillWidth: true
-                        height: 30
-                        radius: 7
-                        color: viewMouse.containsMouse ? sorterModule.colCardHover : sorterModule.colCard
-                        border.width: 1
-                        border.color: sorterModule.colBorder
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 5
-                            MaterialSymbol {
-                                text: "wallpaper"
-                                iconSize: 14
-                                color: sorterModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: "Open Wallpaper Picker"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 11
-                                font.weight: Font.Medium
-                                color: sorterModule.colText
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: viewMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            onClicked: root.switchMode("wallpaper", false)
+                        id: swatch
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 4
+                        height: 35
+                        radius: 6
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: themeTile.modelData.shade }
+                            GradientStop { position: 1; color: themeTile.modelData.color }
                         }
                     }
 
-                    // Main Sort Button
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 30
-                        radius: 7
-                        color: sortMouse.containsMouse ? Qt.lighter(sorterModule.colAccent, 1.15) : sorterModule.colAccent
-                        scale: sortMouse.pressed ? 0.96 : 1.0
-                        opacity: sorterModule.isSorting ? 0.6 : 1.0
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 5
-                            MaterialSymbol {
-                                text: sorterModule.isSorting ? "sync" : "auto_awesome"
-                                iconSize: 14
-                                color: Theme.colors.bg ?? "#000000"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            Text {
-                                text: sorterModule.isSorting ? "Sorting In Progress..." : "Sort Wallpapers Now"
-                                font.family: "Noto Sans"
-                                font.pixelSize: 11
-                                font.weight: Font.Bold
-                                color: Theme.colors.bg ?? "#000000"
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: sortMouse
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            enabled: !sorterModule.isSorting
-                            onClicked: sorterModule.startSorting()
-                        }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 5
+                        text: themeTile.modelData.name + (sorter.result ? " · " + themeTile.copied : "")
+                        color: Theme.text
+                        font.family: Theme.fontFamilyBody
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
                     }
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
+        Text {
+            Layout.fillWidth: true
+            visible: sorter.sorting || sorter.result !== null || sorter.failure !== ""
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            text: {
+                if (sorter.failure) return sorter.failure;
+                if (sorter.sorting) return sorter.total > 0
+                    ? sorter.current + " / " + sorter.total + " · " + sorter.currentFile : "Scanning folder…";
+                if (!sorter.result) return "";
+                if (sorter.result.total_found === 0) return "No supported images found in this folder.";
+                let summary = sorter.result.unique_added + " copied · " + sorter.result.duplicates_skipped + " duplicate names skipped";
+                if (sorter.result.failed > 0) summary += " · " + sorter.result.failed + " failed";
+                return summary;
+            }
+            color: sorter.failure ? Theme.error : Theme.subtext
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 11
+        }
+
+        ProgressBar {
+            Layout.fillWidth: true
+            visible: sorter.sorting
+            from: 0
+            to: Math.max(1, sorter.total)
+            value: sorter.current
+            indeterminate: sorter.total === 0
+            palette.highlight: Theme.accent
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 6
+
+            SortButton {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                text: "Open Wallpaper Picker"
+                glyph: "wallpaper"
+                enabled: !sorter.sorting
+                onClicked: root.switchMode("wallpaper", true)
+            }
+            SortButton {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                text: sorter.sorting ? "Sorting…" : "Sort Wallpapers"
+                glyph: "auto_awesome_mosaic"
+                primary: true
+                enabled: !sorter.sorting && folderPath.text.trim() !== ""
+                onClicked: sorter.startSorting()
+            }
+        }
+    }
+
+    component SortButton: Button {
+        id: button
+        property string glyph: ""
+        property bool primary: false
+        property bool selected: false
+        property bool iconOnly: false
+        property color baseColor: Theme.surfaceHigh
+
+        implicitHeight: 32
+        implicitWidth: iconOnly ? 32 : caption.implicitWidth + (glyph ? 36 : 20)
+        padding: 0
+        hoverEnabled: true
+        Accessible.name: text
+        ToolTip.visible: iconOnly && hovered
+        ToolTip.text: text
+
+        background: Rectangle {
+            radius: 8
+            color: button.primary ? Theme.accent
+                : button.hovered || button.selected ? Theme.surfaceHighest : button.baseColor
+            opacity: button.enabled ? 1 : 0.4
+            Behavior on color { ColorAnimation { duration: 120 } }
+        }
+
+        contentItem: Item {
+            opacity: button.enabled ? 1 : 0.6
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: button.glyph !== ""
+                    text: button.glyph
+                    iconSize: 15
+                    color: button.primary ? Theme.fgPrimary : Theme.subtext
+                }
+                Text {
+                    id: caption
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !button.iconOnly
+                    text: button.text
+                    color: button.primary ? Theme.fgPrimary : Theme.text
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                 }
             }
         }

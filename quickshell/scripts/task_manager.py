@@ -665,6 +665,7 @@ def get_all_pss():
 def list_processes():
     mem_info = get_mem_info()
     cpu_info = get_cpu_info()
+    cpu_count = cpu_info.get("cpu_count") or 1
     client_pids = get_hyprland_windows()
     pss_map = get_all_pss()
 
@@ -709,7 +710,8 @@ def list_processes():
                 'pid': pid,
                 'ppid': ppid,
                 'user': user,
-                'cpu': cpu,
+                'cpu_raw': cpu,
+                'cpu': round(cpu / cpu_count, 1),
                 'mem_pct': proc_mem_pct,
                 'mem_kb': pss_kb,
                 'rss_kb': rss_kb,
@@ -797,7 +799,8 @@ def list_processes():
         disp_name, icon_name, icon_sym = resolve_app_info(comm, p_class)
 
         all_pids = [w_pid] + [c['pid'] for c in children]
-        tot_cpu = round((root_proc['cpu'] if root_proc else 0.0) + sum(c['cpu'] for c in children), 1)
+        raw_cpu = (root_proc['cpu_raw'] if root_proc else 0.0) + sum(c['cpu_raw'] for c in children)
+        tot_cpu = round(raw_cpu / cpu_count, 1)
         if children:
             tot_mem_kb = (root_proc['mem_kb'] if root_proc else 0) + sum(c['mem_kb'] for c in children)
         else:
@@ -817,10 +820,11 @@ def list_processes():
                 "title": c_title,
                 "icon": c_icon,
                 "cpu": c['cpu'],
+                "cpu_raw": c['cpu_raw'],
                 "mem_mb": c['mem_mb'],
                 "mem_percent": c['mem_pct']
             })
-        clean_children.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
+        clean_children.sort(key=lambda x: (x['cpu_raw'], x['mem_mb']), reverse=True)
 
         apps_list.append({
             "pid": w_pid,
@@ -831,6 +835,7 @@ def list_processes():
             "class": p_class,
             "category": "app",
             "cpu": tot_cpu,
+            "cpu_raw": raw_cpu,
             "mem_bytes": tot_mem_kb * 1024,
             "mem_mb": tot_mb,
             "mem_percent": tot_pct,
@@ -853,7 +858,8 @@ def list_processes():
         disp_name, icon_name, icon_sym = resolve_app_info(comm, '')
 
         all_pids = [s_pid] + [c['pid'] for c in children]
-        tot_cpu = round(s_proc['cpu'] + sum(c['cpu'] for c in children), 1)
+        raw_cpu = s_proc['cpu_raw'] + sum(c['cpu_raw'] for c in children)
+        tot_cpu = round(raw_cpu / cpu_count, 1)
         if children:
             tot_mem_kb = s_proc['mem_kb'] + sum(c['mem_kb'] for c in children)
         else:
@@ -872,10 +878,11 @@ def list_processes():
                 "title": c_title,
                 "icon": c_icon,
                 "cpu": c['cpu'],
+                "cpu_raw": c['cpu_raw'],
                 "mem_mb": c['mem_mb'],
                 "mem_percent": c['mem_pct']
             })
-        clean_children.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
+        clean_children.sort(key=lambda x: (x['cpu_raw'], x['mem_mb']), reverse=True)
 
         apps_list.append({
             "pid": s_pid,
@@ -886,6 +893,7 @@ def list_processes():
             "class": "",
             "category": "app",
             "cpu": tot_cpu,
+            "cpu_raw": raw_cpu,
             "mem_bytes": tot_mem_kb * 1024,
             "mem_mb": tot_mb,
             "mem_percent": tot_pct,
@@ -901,7 +909,7 @@ def list_processes():
             "children": clean_children
         })
 
-    apps_list.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
+    apps_list.sort(key=lambda x: (x['cpu_raw'], x['mem_mb']), reverse=True)
 
     # Claimed PIDs across all apps and their children
     app_claimed_pids = set()
@@ -923,6 +931,7 @@ def list_processes():
             "class": "",
             "category": "background",
             "cpu": p['cpu'],
+            "cpu_raw": p['cpu_raw'],
             "mem_bytes": p['rss_kb'] * 1024,
             "mem_mb": p['mem_mb'],
             "mem_percent": p['mem_pct'],
@@ -937,7 +946,7 @@ def list_processes():
             "proc_count": 1,
             "children": []
         })
-    bg_list.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
+    bg_list.sort(key=lambda x: (x['cpu_raw'], x['mem_mb']), reverse=True)
 
     # Build ALL Processes List
     all_list = []
@@ -954,6 +963,7 @@ def list_processes():
             "class": win_info.get('class', ''),
             "category": "app" if is_client else "background",
             "cpu": p['cpu'],
+            "cpu_raw": p['cpu_raw'],
             "mem_bytes": p['rss_kb'] * 1024,
             "mem_mb": p['mem_mb'],
             "mem_percent": p['mem_pct'],
@@ -968,7 +978,7 @@ def list_processes():
             "proc_count": 1,
             "children": []
         })
-    all_list.sort(key=lambda x: (x['cpu'], x['mem_mb']), reverse=True)
+    all_list.sort(key=lambda x: (x['cpu_raw'], x['mem_mb']), reverse=True)
 
     hw_info = get_hardware_info()
 

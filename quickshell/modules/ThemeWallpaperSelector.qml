@@ -256,8 +256,16 @@ Item {
         if (themeCarousel.currentIndex >= 0 && themeCarousel.currentIndex < filteredThemes.length) {
             var t = filteredThemes[themeCarousel.currentIndex];
             if (t && t.rawName) {
-                const config = Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config");
-                Quickshell.execDetached(["bash", config + "/hypr/scripts/apply-theme.sh", t.rawName]);
+                var home = Quickshell.env("HOME") || "";
+                var cmd = `
+                    for s in "$HOME/.config/hypr/scripts/apply-theme.sh"; do
+                        if [ -x "$s" ] || [ -f "$s" ]; then
+                            exec bash "$s" "${t.rawName}"
+                        fi
+                    done
+                    apply-theme.sh "${t.rawName}"
+                `;
+                Quickshell.execDetached(["bash", "-c", cmd]);
                 Theme.currentThemeName = t.rawName;
                 if (typeof root !== "undefined") root.collapseToIdle();
             }
@@ -412,7 +420,7 @@ import os, glob, subprocess
 
 theme = '${Theme.currentThemeName}'.strip()
 if not theme or theme.lower() == 'default':
-    name_file = os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'active-theme/theme-name.txt')
+    name_file = os.path.expanduser('~/.config/active-theme/theme-name.txt')
     if os.path.exists(name_file):
         try:
             with open(name_file, 'r') as f:
@@ -573,7 +581,7 @@ for f in sorted_files:
             }
             var trans = (Theme.activeTransition && Theme.activeTransition.trim()) || "simple";
             Quickshell.execDetached([
-                Quickshell.shellPath("scripts/apply_wallpaper.sh"),
+                Quickshell.env("HOME") + "/.config/quickshell/scripts/apply_wallpaper.sh",
                 path,
                 trans
             ]);
@@ -1484,7 +1492,7 @@ for f in sorted_files:
                                         source: filePath ? ("file://" + filePath) : ""
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
-                                        cache: true
+                                        cache: false
                                         smooth: true
                                         mipmap: false
                                         sourceSize.width: 480
@@ -1770,7 +1778,7 @@ for f in sorted_files:
                                         source: modelData.preview ? ("file://" + modelData.preview) : ""
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
-                                        cache: true
+                                        cache: false
                                         smooth: true
                                     }
 

@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Networking
+import ".." as Connectivity
 import "." as WifiUi
 
 Item {
@@ -9,6 +10,7 @@ Item {
 
     property bool active: false
     property string expandedKey: ""
+    property int resizingRows: 0
     property var scanDevice: null
 
     function setScanning(enabled) {
@@ -126,9 +128,11 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: WifiUi.Theme.dp(54)
-            radius: netItem.isExpanded ? WifiUi.Theme.rad(20) : WifiUi.Theme.rad(14)
-            color: netItem.isExpanded ? WifiUi.Theme.withBlur(WifiUi.Theme.surfaceHighest) : (rowArea.containsMouse ? WifiUi.Theme.withBlur(WifiUi.Theme.layer(WifiUi.Theme.surfaceHigh, WifiUi.Theme.text, WifiUi.Theme.stateHover)) : WifiUi.Theme.withBlur(WifiUi.Theme.surfaceHigh))
+            height: WifiUi.Theme.dp(50)
+            radius: WifiUi.Theme.rad(12)
+            color: netItem.isConnected
+                ? WifiUi.Theme.alpha(WifiUi.Theme.accent, netItem.isExpanded || rowArea.containsMouse ? 0.18 : 0.13)
+                : (netItem.isExpanded || rowArea.containsMouse ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.08) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.045))
 
             Behavior on radius {
                 NumberAnimation {
@@ -255,12 +259,13 @@ Item {
 
         }
 
-        Item {
+        Connectivity.ConnectivityDisclosure {
             id: expandArea
 
             width: parent.width
-            height: netItem.isExpanded ? expandContent.implicitHeight : 0
-            clip: true
+            panel: root
+            expanded: netItem.isExpanded
+            contentHeight: expandContent.implicitHeight
 
             Column {
                 id: expandContent
@@ -271,8 +276,8 @@ Item {
                 topPadding: WifiUi.Theme.dp(6)
                 bottomPadding: WifiUi.Theme.dp(14)
                 spacing: WifiUi.Theme.dp(10)
-                y: netItem.isExpanded ? 0 : -WifiUi.Theme.dp(8)
-                opacity: netItem.isExpanded ? 1 : 0
+                opacity: expandArea.reveal
+                enabled: netItem.isExpanded
 
                 Rectangle {
                     id: passwordBox
@@ -281,9 +286,14 @@ Item {
                     width: parent.width - expandContent.leftPadding - expandContent.rightPadding
                     height: WifiUi.Theme.dp(32)
                     radius: WifiUi.Theme.rad(8)
-                    color: WifiUi.Theme.withBlur(WifiUi.Theme.bgSunken)
-                    border.width: 1
-                    border.color: netItem.connectFailed ? WifiUi.Theme.error : (passwordInput.activeFocus ? WifiUi.Theme.accent : WifiUi.Theme.bgHigh)
+                    color: netItem.connectFailed
+                        ? WifiUi.Theme.alpha(WifiUi.Theme.error, 0.18)
+                        : (passwordInput.activeFocus ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.10) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.055))
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: WifiUi.Theme.barMs(120)
+                        }
+                    }
 
                     Text {
                         anchors.left: parent.left
@@ -317,14 +327,6 @@ Item {
 
                         }
                     }
-
-                    Behavior on border.color {
-                        ColorAnimation {
-                            duration: WifiUi.Theme.barMs(150)
-                        }
-
-                    }
-
                 }
 
                 Row {
@@ -404,9 +406,7 @@ Item {
                         width: (parent.width - shareBtn.width - WifiUi.Theme.dp(16)) / 2
                         height: parent.height
                         radius: WifiUi.Theme.dp(999)
-                        color: forgetArea.containsMouse ? WifiUi.Theme.withBlur(WifiUi.Theme.outlineStrong) : "transparent"
-                        border.width: 1
-                        border.color: WifiUi.Theme.outlineStrong
+                        color: forgetArea.containsMouse ? WifiUi.Theme.alpha(WifiUi.Theme.error, 0.20) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.08)
                         scale: forgetArea.pressed ? 0.96 : 1
 
                         Text {
@@ -467,9 +467,7 @@ Item {
                         radius: WifiUi.Theme.dp(999)
                         color: netItem.sharing 
                             ? (shareArea.containsMouse ? Qt.darker(WifiUi.Theme.accent, 1.15) : WifiUi.Theme.accent) 
-                            : (shareArea.containsMouse ? WifiUi.Theme.withBlur(WifiUi.Theme.outlineStrong) : "transparent")
-                        border.width: netItem.sharing ? 0 : 1
-                        border.color: WifiUi.Theme.outlineStrong
+                            : (shareArea.containsMouse ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.12) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.07))
                         scale: shareArea.pressed ? 0.94 : 1
 
                         Icon {
@@ -545,9 +543,15 @@ Item {
                         width: WifiUi.Theme.dp(15)
                         height: WifiUi.Theme.dp(15)
                         radius: WifiUi.Theme.dp(4)
-                        color: checked ? WifiUi.Theme.accent : "transparent"
-                        border.width: 1.5
-                        border.color: checked ? WifiUi.Theme.accent : WifiUi.Theme.outlineStrong
+                        color: checked ? WifiUi.Theme.accent : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.14)
+
+                        Icon {
+                            anchors.centerIn: parent
+                            visible: autoBox.checked
+                            name: "check"
+                            size: WifiUi.Theme.dp(12)
+                            color: WifiUi.Theme.on_primary ?? "#000000"
+                        }
 
                         MouseArea {
                             anchors.fill: parent
@@ -583,31 +587,7 @@ Item {
 
                 }
 
-                Behavior on y {
-                    NumberAnimation {
-                        duration: WifiUi.Theme.barMs(220)
-                        easing.type: Easing.OutCubic
-                    }
-
-                }
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: WifiUi.Theme.barMs(180)
-                    }
-
-                }
-
             }
-
-            Behavior on height {
-                NumberAnimation {
-                    duration: WifiUi.Theme.barMs(240)
-                    easing.type: Easing.OutCubic
-                }
-
-            }
-
         }
 
     }
@@ -1111,9 +1091,7 @@ Item {
                 width: WifiUi.Theme.dp(78)
                 height: WifiUi.Theme.dp(26)
                 radius: WifiUi.Theme.dp(999)
-                color: ethDisconnectArea.containsMouse ? WifiUi.Theme.outlineStrong : "transparent"
-                border.width: 1
-                border.color: WifiUi.Theme.outlineStrong
+                color: ethDisconnectArea.containsMouse ? WifiUi.Theme.alpha(WifiUi.Theme.error, 0.20) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.08)
 
                 Text {
                     anchors.centerIn: parent
@@ -1149,118 +1127,55 @@ Item {
 
         }
 
-        Text {
-            visible: !Networking.wifiHardwareEnabled
+        Rectangle {
+            visible: !Networking.wifiHardwareEnabled || !Networking.wifiEnabled || !root.wifiDevice
             width: parent.width
-            text: WifiUi.I18n.tr("Wi-Fi is disabled by a hardware switch")
-            color: WifiUi.Theme.subtext
-            font.family: WifiUi.Theme.fontFamily
-            font.pixelSize: WifiUi.Theme.fs(11)
-            font.variableAxes: WifiUi.Theme.axes(WifiUi.Theme.fs(11), 420, 0)
-            wrapMode: Text.WordWrap
+            height: wifiHelp.implicitHeight + 24
+            radius: WifiUi.Theme.dp(12)
+            color: WifiUi.Theme.alpha(WifiUi.Theme.text, 0.055)
+
+            Text {
+                id: wifiHelp
+                anchors.fill: parent
+                anchors.margins: 12
+                text: !Networking.wifiHardwareEnabled ? WifiUi.I18n.tr("Check the hardware switch or airplane mode.")
+                    : !Networking.wifiEnabled ? WifiUi.I18n.tr("Turn on Wi-Fi to see nearby networks.")
+                    : WifiUi.I18n.tr("No Wi-Fi adapter found.")
+                color: WifiUi.Theme.subtext
+                font.family: WifiUi.Theme.fontFamily
+                font.pixelSize: WifiUi.Theme.fs(13)
+                wrapMode: Text.WordWrap
+            }
         }
 
-        Item {
+        Connectivity.ConnectivityScanButton {
             id: scanButton
 
-            property int dotCount: 0
-            readonly property bool scanning: root.wifiDevice ? root.wifiDevice.scannerEnabled : false
-
+            scanning: !!(root.wifiDevice && root.wifiDevice.scannerEnabled)
             onScanningChanged: {
                 if (!scanning)
                     root.scanDevice = null;
             }
 
-            visible: Networking.wifiEnabled && Networking.wifiHardwareEnabled
+            visible: Networking.wifiEnabled && Networking.wifiHardwareEnabled && root.wifiDevice !== null
             width: parent.width
-            height: WifiUi.Theme.dp(44)
-
-            Timer {
-                interval: 400
-                running: scanButton.scanning
-                repeat: true
-                onTriggered: scanButton.dotCount = (scanButton.dotCount + 1) % 4
-            }
+            glyph: "wifi_find"
+            text: scanning ? WifiUi.I18n.tr("Scanning for networks…") : WifiUi.I18n.tr("Scan for networks")
+            actionLabel: scanning ? WifiUi.I18n.tr("Stop") : ""
+            onClicked: root.setScanning(!scanning)
 
             Timer {
                 interval: 20000
-                // a stopped scan drops every network not connected, and with it an open row and its half-typed password
+                // Keep the scan alive while a network is expanded so the password form stays in place.
                 running: scanButton.scanning && root.expandedKey === ""
                 onTriggered: root.setScanning(false)
             }
-
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: scanButton.scanning ? WifiUi.Theme.withBlur(WifiUi.Theme.secondaryContainer) : WifiUi.Theme.withBlur(WifiUi.Theme.surfaceHigh)
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: WifiUi.Theme.durDefaultEffects
-                    }
-
-                }
-
-                StateLayer {
-                    radius: parent.radius
-                    tint: scanButton.scanning ? WifiUi.Theme.fgSecondaryContainer : WifiUi.Theme.text
-                    onClicked: root.setScanning(!scanButton.scanning)
-                }
-
-                Row {
-                    anchors.left: parent.left
-                    anchors.leftMargin: WifiUi.Theme.dp(12)
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: WifiUi.Theme.dp(10)
-
-                    Item {
-                        width: WifiUi.Theme.dp(24)
-                        height: WifiUi.Theme.dp(24)
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        LoadingIndicator {
-                            anchors.fill: parent
-                            visible: scanButton.scanning
-                            color: WifiUi.Theme.fgSecondaryContainer
-                        }
-
-                        Icon {
-                            anchors.centerIn: parent
-                            visible: !scanButton.scanning
-                            name: "wifi_find"
-                            size: WifiUi.Theme.dp(20)
-                            color: WifiUi.Theme.subtext
-                        }
-
-                    }
-
-                    LText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        role: "labelLarge"
-                        text: scanButton.scanning ? WifiUi.I18n.tr("Looking for networks") : WifiUi.I18n.tr("Search for networks")
-                        color: scanButton.scanning ? WifiUi.Theme.fgSecondaryContainer : WifiUi.Theme.text
-                    }
-
-                }
-
-                LText {
-                    anchors.right: parent.right
-                    anchors.rightMargin: WifiUi.Theme.dp(16)
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: scanButton.scanning
-                    role: "labelMedium"
-                    text: WifiUi.I18n.tr("Stop")
-                    color: WifiUi.Theme.fgSecondaryContainer
-                }
-
-            }
-
         }
 
         Column {
             id: listCol
 
-            visible: Networking.wifiEnabled && Networking.wifiHardwareEnabled
+            visible: Networking.wifiEnabled && Networking.wifiHardwareEnabled && !!root.wifiDevice
             width: parent.width
             spacing: WifiUi.Theme.dp(14)
 
@@ -1271,7 +1186,7 @@ Item {
 
                 Text {
                     text: WifiUi.I18n.tr("Connected")
-                    color: WifiUi.Theme.primary
+                    color: WifiUi.Theme.subtext
                     font.family: WifiUi.Theme.fontFamily
                     font.bold: true
                     font.pixelSize: WifiUi.Theme.fs(12)
@@ -1300,7 +1215,7 @@ Item {
 
                 Text {
                     text: WifiUi.I18n.tr("Saved")
-                    color: WifiUi.Theme.primary
+                    color: WifiUi.Theme.subtext
                     font.family: WifiUi.Theme.fontFamily
                     font.bold: true
                     font.pixelSize: WifiUi.Theme.fs(12)
@@ -1328,7 +1243,7 @@ Item {
 
                 Text {
                     text: WifiUi.I18n.tr("Nearby")
-                    color: WifiUi.Theme.primary
+                    color: WifiUi.Theme.subtext
                     font.family: WifiUi.Theme.fontFamily
                     font.bold: true
                     font.pixelSize: WifiUi.Theme.fs(12)
@@ -1404,9 +1319,12 @@ Item {
                         width: parent.width - WifiUi.Theme.dp(8)
                         height: WifiUi.Theme.dp(30)
                         radius: WifiUi.Theme.rad(8)
-                        color: WifiUi.Theme.withBlur(WifiUi.Theme.bgSunken)
-                        border.width: 1
-                        border.color: hiddenSsidInput.activeFocus ? WifiUi.Theme.accent : WifiUi.Theme.bgHigh
+                        color: hiddenSsidInput.activeFocus ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.10) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.055)
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: WifiUi.Theme.barMs(120)
+                            }
+                        }
 
                         Text {
                             anchors.left: parent.left
@@ -1434,23 +1352,18 @@ Item {
                             selectByMouse: true
                             onTextChanged: root.hiddenSsid = text
                         }
-
-                        Behavior on border.color {
-                            ColorAnimation {
-                                duration: WifiUi.Theme.barMs(150)
-                            }
-
-                        }
-
                     }
 
                     Rectangle {
                         width: parent.width - WifiUi.Theme.dp(8)
                         height: WifiUi.Theme.dp(30)
                         radius: WifiUi.Theme.rad(8)
-                        color: WifiUi.Theme.withBlur(WifiUi.Theme.bgSunken)
-                        border.width: 1
-                        border.color: root.hiddenFailed ? WifiUi.Theme.error : (hiddenPskInput.activeFocus ? WifiUi.Theme.accent : WifiUi.Theme.bgHigh)
+                        color: root.hiddenFailed ? WifiUi.Theme.alpha(WifiUi.Theme.error, 0.18) : (hiddenPskInput.activeFocus ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.10) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.055))
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: WifiUi.Theme.barMs(120)
+                            }
+                        }
 
                         Text {
                             anchors.left: parent.left
@@ -1481,14 +1394,6 @@ Item {
                             onTextChanged: root.hiddenPsk = text
                             onAccepted: root.connectHidden()
                         }
-
-                        Behavior on border.color {
-                            ColorAnimation {
-                                duration: WifiUi.Theme.barMs(150)
-                            }
-
-                        }
-
                     }
 
                     Text {
@@ -1537,9 +1442,7 @@ Item {
                             width: WifiUi.Theme.dp(70)
                             height: parent.height
                             radius: WifiUi.Theme.dp(999)
-                            color: "transparent"
-                            border.width: 1
-                            border.color: WifiUi.Theme.outlineStrong
+                            color: cancelArea.containsMouse ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.12) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.07)
 
                             Text {
                                 anchors.centerIn: parent
@@ -1552,6 +1455,7 @@ Item {
                             }
 
                             MouseArea {
+                                id: cancelArea
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor

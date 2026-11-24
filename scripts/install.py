@@ -109,6 +109,9 @@ def install_plan():
         changes.append(Change(CONFIG / "gtk-3.0", ROOT / "gtk/gtk-3.0", "install"))
     if (ROOT / "gtk/gtk-4.0").is_dir():
         changes.append(Change(CONFIG / "gtk-4.0", ROOT / "gtk/gtk-4.0", "install"))
+    icon_fonts = ROOT / "quickshell/assets/fonts"
+    if (icon_fonts / "MaterialSymbolsRounded.ttf").is_file():
+        changes.append(Change(DATA / "fonts/dynamic-you", icon_fonts, "install"))
     changes.extend((Change(CONFIG / "active-theme", None, "initialize"),
                     Change(SETTINGS, None, "save app choices")))
     for name in ("palette.json", "material.json"):
@@ -251,9 +254,9 @@ def install_deps(selected, browser):
         raise ValueError("--deps is available on Arch-based distributions. Install dependencies with your package manager.")
     core = ("hyprland hyprlock hypridle hyprpicker hyprlauncher hyprpolkitagent hyprsunset "
             "xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xorg-xwayland xdg-utils "
-            "awww matugen imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg "
-            "kitty yazi playerctl brightnessctl pamixer cava upower networkmanager bluez bluez-utils "
-            "pipewire pipewire-pulse wireplumber gnome-keyring libsecret dnsmasq iptables "
+            "awww matugen imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg wf-recorder "
+            "kitty yazi playerctl brightnessctl pamixer cava upower networkmanager iw bluez bluez-utils "
+            "pipewire pipewire-pulse wireplumber power-profiles-daemon gnome-keyring libsecret dnsmasq iptables "
             "dbus jq socat libnotify python python-dbus python-gobject python-pillow qrencode "
             "noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inter-font fastfetch fish").split()
     if runtime_version("qs") < (0, 3, 2):

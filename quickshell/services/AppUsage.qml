@@ -37,7 +37,7 @@ Singleton {
      * Record an app launch - stores timestamp for frecency calculation
      */
     function recordLaunch(appId) {
-        if (!Config.options.search.frecencyData.trackApps || !appId || appId.length === 0) return;
+        if (!appId || appId.length === 0) return;
 
         const now = new Date().getTime();
         let updated = Object.assign({}, root.launchData);

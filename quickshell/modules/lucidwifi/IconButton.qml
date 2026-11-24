@@ -80,8 +80,6 @@ Item {
         anchors.fill: parent
         radius: area.pressed ? Math.min(WifiUi.Theme.pill(ib.btnH), WifiUi.Theme.rad(10)) : (ib.on && ib.variant !== "standard" ? Math.min(WifiUi.Theme.pill(ib.btnH), WifiUi.Theme.rad(12)) : WifiUi.Theme.pill(ib.btnH))
         color: ib.container
-        border.width: ib.variant === "outlined" && !ib.on ? 1 : 0
-        border.color: WifiUi.Theme.outline
 
         Behavior on radius {
             NumberAnimation {

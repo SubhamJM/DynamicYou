@@ -19,6 +19,9 @@ Item {
         if (btn.variant === "tonal")
             return btn.destructive ? WifiUi.Theme.errorContainer : WifiUi.Theme.secondaryContainer;
 
+        if (btn.variant === "outlined")
+            return btn.destructive ? WifiUi.Theme.alpha(WifiUi.Theme.error, 0.15) : WifiUi.Theme.alpha(WifiUi.Theme.text, 0.08);
+
         return "transparent";
     }
     readonly property color fgColor: {
@@ -51,8 +54,6 @@ Item {
         // shape morph: full -> medium while held
         radius: area.pressed ? WifiUi.Theme.shapeMd : WifiUi.Theme.pill(btn.size)
         color: btn.baseColor
-        border.width: btn.variant === "outlined" ? 1 : 0
-        border.color: WifiUi.Theme.outlineStrong
 
         Rectangle {
             anchors.fill: parent

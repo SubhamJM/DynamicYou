@@ -465,7 +465,7 @@ Singleton {
         // Env owns the theme names and knows what is installed, so the matching
         // GTK and icon variants are swapped there
         root.colorModeApplied(mode);
-        Quickshell.execDetached(["python3", Quickshell.shellPath("scripts/matugen/update.py"), "--mode", mode]);
+        Quickshell.execDetached([Quickshell.env("HOME") + "/.config/lucid/set-mode.sh", mode]);
     }
 
     property alias barEnabled: s.barEnabled
@@ -485,7 +485,7 @@ Singleton {
         root.autoColorMode = on;
         // the picture on screen now, measured the same way a new one would be
         if (on)
-            Quickshell.execDetached(["python3", Quickshell.shellPath("scripts/matugen/update.py"), "--mode", "auto"]);
+            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/lucid/set-mode.sh", "auto"]);
     }
 
     property alias barZoneGap: s.barZoneGap
@@ -1640,7 +1640,7 @@ Singleton {
     Process {
         id: userThemeScan
 
-        command: ["python3", "-c", "import json,glob,os;print(json.dumps([json.load(open(f)) for f in sorted(glob.glob(os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'themes/*/meta.json')))]))"]
+        command: ["python3", "-c", "import json,glob,os;print(json.dumps([json.load(open(f)) for f in sorted(glob.glob(os.path.expanduser('~/.config/lucid/themes/*/meta.json')))]))"]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -1662,8 +1662,7 @@ Singleton {
     Component.onCompleted: root.rescanThemes()
 
     FileView {
-        __printErrors: false
-        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/active-theme/theme-name.txt"
+        path: Quickshell.env("HOME") + "/.cache/current_theme"
         blockLoading: true
         watchChanges: true
         onFileChanged: reload()
@@ -1671,8 +1670,7 @@ Singleton {
     }
 
     FileView {
-        __printErrors: false
-        path: (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache") + "/dynamic-you/mode.txt"
+        path: Quickshell.env("HOME") + "/.cache/current_mode"
         blockLoading: true
         watchChanges: true
         onFileChanged: reload()
@@ -1707,8 +1705,7 @@ Singleton {
     FileView {
         id: prefsFile
 
-        __printErrors: false
-        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/dynamic-you/prefs.json"
+        path: Quickshell.env("HOME") + "/.config/quickshell/lucidprefs/prefs.json"
         blockLoading: true
         watchChanges: true
         onFileChanged: reload()

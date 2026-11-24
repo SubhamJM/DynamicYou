@@ -69,7 +69,7 @@ Singleton {
     }
 
     // languages the user added; a file here wins over a shipped one of the same code
-    readonly property string userDir: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/dynamic-you/i18n"
+    readonly property string userDir: Quickshell.env("HOME") + "/.config/lucid/i18n"
     // what the last import or export said, for the Language page
     property string report: ""
     property bool reportBad: false

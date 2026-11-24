@@ -1,749 +1,661 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import "../"
 
-ColumnLayout {
-    id: clipModule
-    spacing: 10
-    Layout.fillWidth: true
-    Layout.fillHeight: true
+FocusScope {
+    id: clipboard
     focus: true
-    Keys.forwardTo: [searchInput]
-    Keys.onEscapePressed: (event) => {
-        root.collapseToIdle();
-        event.accepted = true;
+
+    readonly property int targetWidth: previewOpen ? 720 : 480
+    readonly property int calculatedCount: results.count
+    readonly property int calculatedHeight: previewOpen ? 500 : Math.min(480, Math.max(246,
+        120 + Math.min(results.count, 7) * 44 + (failure ? 20 : 0)))
+    readonly property string scriptPath: Quickshell.shellPath("scripts/clipboard_manager.py")
+    readonly property color secondary: Theme.alpha(Theme.text, 0.72)
+    readonly property color outline: Theme.alpha(Theme.text, 0.10)
+
+    property alias searchInput: search
+    property var clips: []
+    property string filter: "all"
+    property string copiedId: ""
+    property string failure: ""
+    property bool confirmClear: false
+    property bool loaded: false
+    property bool previewOpen: false
+    property var previewItem: null
+    property string previewText: ""
+    property string previewImage: ""
+    property var previewImages: []
+    property int previewImageIndex: 0
+    readonly property string previewPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dynamic-you-clipboard-preview-" + Quickshell.env("USER")
+
+    function closePreview() {
+        previewOpen = false;
+        previewImage = "";
+        previewImages = [];
+        previewText = "";
+        previewItem = null;
+        if (previewLoader.running) previewLoader.running = false;
+        Quickshell.execDetached(["rm", "-f", "--", previewPath]);
+        if (root.activeMode === "clipboard") search.forceActiveFocus();
     }
-
-    // Material You (Material 3) Tonal Palette
-    readonly property color colAccent: Theme.accent ?? "#89b4fa"
-    readonly property color colOnAccent: "#0a0e14"
-    readonly property color colAccentContainer: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.18)
-    readonly property color colSurface: "#000000"
-    readonly property color colCard: Qt.rgba(255, 255, 255, 0.05)
-    readonly property color colCardHover: Qt.rgba(255, 255, 255, 0.09)
-    readonly property color colCardActive: Qt.rgba(colAccent.r, colAccent.g, colAccent.b, 0.16)
-    readonly property color colChipBg: Qt.rgba(255, 255, 255, 0.08)
-    readonly property color colText: "#f8fafc"
-    readonly property color colSubtext: Qt.rgba(255, 255, 255, 0.65)
-    readonly property color colMuted: Qt.rgba(255, 255, 255, 0.38)
-    readonly property color colGreen: "#51cf66"
-    readonly property color colRed: "#f87171"
-    readonly property var motionCurve: [0.05, 0.7, 0.1, 1, 1, 1]
-
-    property alias searchInput: searchInput
-    property var allClips: []
-    property string activeFilterChip: "all" // "all", "text", "image"
-    ListModel { id: clipModel }
-
-    readonly property int calculatedCount: clipModel.count
-    readonly property int imageClipCount: {
-        var cnt = 0;
-        for (var i = 0; i < allClips.length; i++) {
-            if (allClips[i].isImage) cnt++;
+    function openPreview() {
+        if (rows.currentIndex < 0 || rows.currentIndex >= results.count) return;
+        const item = results.get(rows.currentIndex);
+        if (!/^\d+$/.test(item.clipId)) return;
+        previewItem = { clipId: item.clipId, isImage: item.isImage, binary: item.binary, imgPath: item.imgPath, title: item.title };
+        previewText = "";
+        previewImage = "";
+        previewImages = [];
+        previewImageIndex = 0;
+        previewOpen = true;
+        {
+            previewLoader.running = false;
+            previewLoader.binary = item.isImage && item.binary;
+            previewLoader.command = previewLoader.binary
+                ? ["sh", "-c", 'umask 077; cliphist decode "$1" > "$2"', "clipboard-preview", item.clipId, previewPath]
+                : ["cliphist", "decode", item.clipId];
+            previewLoader.running = true;
         }
-        return cnt;
+        clipboard.forceActiveFocus();
     }
-    readonly property int textClipCount: Math.max(0, allClips.length - imageClipCount)
+
+    onFilterChanged: rebuild()
 
     function refresh() {
-        if (clipScanner.running) clipScanner.running = false;
-        clipScanner.running = true;
+        if (!scanner.running) scanner.running = true;
     }
 
-    function applyFilter() {
-        clipModel.clear();
-        var query = searchInput.text.toLowerCase().trim();
-        for (var i = 0; i < allClips.length; i++) {
-            var item = allClips[i];
-            var matchesChip = (clipModule.activeFilterChip === "all") ||
-                              (clipModule.activeFilterChip === "image" && item.isImage) ||
-                              (clipModule.activeFilterChip === "text" && !item.isImage);
-            if (!matchesChip) continue;
-
-            if (query === "" || item.description.toLowerCase().includes(query) || (item.isImage && "image".includes(query))) {
-                clipModel.append(item);
-            }
+    function rebuild() {
+        const query = search.text.trim().toLowerCase();
+        results.clear();
+        for (const item of clips) {
+            const code = ["code", "cmd", "json"].includes(item.type);
+            if (filter === "image" && !item.isImage || filter === "text" && (item.isImage || code)
+                    || filter === "code" && !code)
+                continue;
+            if (query && ![item.title, item.subtitle, item.description].some(value => (value || "").toLowerCase().includes(query)))
+                continue;
+            results.append(item);
         }
-        if (clipModel.count > 0) clipList.currentIndex = 0;
+        rows.currentIndex = results.count ? 0 : -1;
+        rows.positionViewAtBeginning();
     }
 
+    function navDown() {
+        if (rows.currentIndex >= results.count - 1) return false;
+        rows.incrementCurrentIndex();
+        rows.positionViewAtIndex(rows.currentIndex, ListView.Contain);
+        return true;
+    }
+
+    function navUp() {
+        if (rows.currentIndex <= 0) return false;
+        rows.decrementCurrentIndex();
+        rows.positionViewAtIndex(rows.currentIndex, ListView.Contain);
+        return true;
+    }
+
+    function activateSelected() {
+        if (rows.currentIndex < 0 || rows.currentIndex >= results.count) return false;
+        return copyClip(results.get(rows.currentIndex).clipId);
+    }
+
+    function copyClip(id) {
+        if (copier.running || copiedId !== "" || !/^\d+$/.test(id)) return false;
+        failure = "";
+        copier.command = ["bash", "-o", "pipefail", "-c", 'cliphist decode "$1" | wl-copy', "clipboard", id];
+        copier.clipId = id;
+        copier.running = true;
+        return true;
+    }
+
+    function changeHistory(action, id, description) {
+        if (mutation.running) return;
+        failure = "";
+        mutation.command = ["python3", scriptPath, action].concat(id ? [id] : [], description ? [description] : []);
+        mutation.action = action;
+        mutation.running = true;
+    }
+
+    function handleEscape() {
+        if (previewOpen) {
+            closePreview();
+        } else if (confirmClear) {
+            confirmClear = false;
+            confirmTimer.stop();
+        } else if (search.text !== "") {
+            search.clear();
+        } else {
+            root.collapseToIdle();
+        }
+    }
+
+    Keys.onDownPressed: event => { navDown(); event.accepted = true; }
+    Keys.onUpPressed: event => { navUp(); event.accepted = true; }
+    Keys.onRightPressed: event => { if (!previewOpen) { openPreview(); event.accepted = true; } }
+    Keys.onLeftPressed: event => { if (previewOpen) { closePreview(); event.accepted = true; } }
+    Keys.onReturnPressed: event => { activateSelected(); event.accepted = true; }
+    Keys.onEnterPressed: event => { activateSelected(); event.accepted = true; }
+    Keys.onEscapePressed: event => { handleEscape(); event.accepted = true; }
+    Keys.onDeletePressed: event => {
+        if (event.modifiers & Qt.ShiftModifier && rows.currentIndex >= 0) {
+            changeHistory("delete", results.get(rows.currentIndex).clipId);
+            event.accepted = true;
+        }
+    }
+
+    Component.onCompleted: refresh()
     Connections {
         target: root
         function onActiveModeChanged() {
-            if (root.activeMode === "clipboard") {
-                clipModule.refresh();
+            if (root.activeMode !== "clipboard") {
+                if (clipboard.previewOpen) clipboard.closePreview();
+                closeTimer.stop();
+                clipboard.copiedId = "";
+                clipboard.confirmClear = false;
+                confirmTimer.stop();
+                return;
             }
+            clipboard.failure = "";
+            clipboard.refresh();
         }
     }
 
-    onVisibleChanged: {
-        if (visible && root.activeMode === "clipboard") {
-            clipModule.refresh();
-        }
-    }
-
-    Component.onCompleted: clipModule.refresh()
+    ListModel { id: results }
 
     Process {
-        id: clipScanner
-        running: false
-        command: ["sh", "-c", `
-            python3 -c "
-import subprocess, os, re
-
-thumb_dir = '/tmp/cliphist_thumbs'
-os.makedirs(thumb_dir, exist_ok=True)
-
-try:
-    p = subprocess.run(['cliphist', 'list'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    raw = p.stdout.decode('utf-8', errors='ignore')
-except Exception:
-    raw = ''
-
-lines = [l for l in raw.splitlines() if l.strip()][:60]
-
-for line in lines:
-    parts = line.split('\t', 1)
-    if len(parts) < 2:
-        continue
-    c_id = parts[0].strip()
-    c_desc = parts[1].strip()
-    
-    is_img = ('binary data' in c_desc.lower() or bool(re.search(r'\\b(png|jpe?g|webp|bmp|gif)\\b', c_desc, re.I)))
-    img_path = ''
-    
-    if is_img:
-        img_path = f'{thumb_dir}/clip_{c_id}.png'
-        if not os.path.exists(img_path) or os.path.getsize(img_path) == 0:
-            try:
-                dec = subprocess.run(['cliphist', 'decode', c_id], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=0.5)
-                if dec.stdout:
-                    with open(img_path, 'wb') as f:
-                        f.write(dec.stdout)
-            except Exception:
-                pass
-        
-        if not (os.path.exists(img_path) and os.path.getsize(img_path) > 0):
-            img_path = ''
-
-    clean_desc = c_desc.replace('|||', ' ')
-    print(f'{c_id}|||{is_img}|||{img_path}|||{clean_desc}')
-"
-        `]
+        id: previewLoader
+        property bool binary: false
         stdout: StdioCollector {
             onStreamFinished: {
-                var textRaw = this.text ? this.text.trim() : "";
-                if (!textRaw) {
-                    clipModule.allClips = [];
-                    clipModel.clear();
-                    return;
-                }
+                if (!clipboard.previewOpen || previewLoader.binary) return;
+                const lines = text.trim().split(/\r?\n/).filter(line => line.trim() !== "");
+                const images = lines.filter(line => /^(file:\/\/|\/)/i.test(line.trim()) && /\.(png|jpe?g|webp|gif|avif|bmp|svg)(?:\?.*)?$/i.test(line.trim()));
+                if (images.length && images.length === lines.length) {
+                    clipboard.previewImages = images.map(line => line.trim().startsWith("file://") ? line.trim() : "file://" + line.trim());
+                    clipboard.previewImageIndex = 0;
+                    clipboard.previewImage = clipboard.previewImages[0];
+                } else clipboard.previewText = text;
+            }
+        }
+        onExited: code => {
+            if (!clipboard.previewOpen) return;
+            if (code !== 0) clipboard.previewText = "Couldn’t load this item.";
+            else if (binary) clipboard.previewImage = "file://" + clipboard.previewPath;
+        }
+    }
 
-                var lines = textRaw.split("\n");
-                var temp = [];
-
-                for (var i = 0; i < lines.length; i++) {
-                    var parts = lines[i].split("|||");
-                    if (parts.length >= 4) {
-                        temp.push({
-                            "clipId": parts[0].trim(),
-                            "isImage": (parts[1].trim() === "True"),
-                            "imgPath": parts[2].trim(),
-                            "description": parts[3].trim()
-                        });
-                    }
+    Process {
+        id: scanner
+        command: ["python3", clipboard.scriptPath, "scan"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const entries = JSON.parse(text);
+                    if (!Array.isArray(entries)) throw new Error("Expected a clipboard list");
+                    clipboard.clips = entries;
+                    clipboard.loaded = true;
+                    clipboard.rebuild();
+                } catch (_) {
+                    clipboard.failure = "Couldn’t load clipboard history.";
                 }
-                clipModule.allClips = temp;
-                clipModule.applyFilter();
             }
         }
     }
 
-    Process { id: clipPaster; running: false }
-
-    function copyItemToTop(id) {
-        if (clipPaster.running) clipPaster.running = false;
-        clipPaster.command = ["sh", "-c", "cliphist decode " + id + " | wl-copy"];
-        clipPaster.running = true;
-        root.collapseToIdle();
+    Process {
+        id: copier
+        property string clipId: ""
+        onExited: code => {
+            if (root.activeMode !== "clipboard") return;
+            if (code === 0) {
+                clipboard.copiedId = clipId;
+                closeTimer.restart();
+            } else {
+                clipboard.failure = "Couldn’t copy this item.";
+            }
+        }
     }
 
-    // ========================================================
-    // 1. TOP SEARCH & ACTION BAR (Material You M3 Capsule)
-    // ========================================================
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 10
+    Process {
+        id: mutation
+        property string action: ""
+        onExited: code => {
+            if (code !== 0) {
+                clipboard.failure = "Couldn’t update clipboard history.";
+            } else if (action === "wipe") {
+                clipboard.clips = [];
+                clipboard.rebuild();
+                if (root.activeMode === "clipboard") root.collapseToIdle();
+            } else {
+                Qt.callLater(clipboard.refresh);
+            }
+        }
+    }
 
-        // Back to Utility Button — Circular Minimal Pill
-        IrisIconButton {
-            width: 34
-            height: 34
-            buttonSize: 34
-            buttonRadius: 17
-            icon: "arrow_back"
-            iconSize: 18
-            backgroundColor: Qt.rgba(255, 255, 255, 0.05)
-            backgroundHoverColor: Qt.rgba(255, 255, 255, 0.12)
-            iconColor: "#ffffff"
-            onClicked: root.switchMode("utility", true)
+    Timer {
+        id: closeTimer
+        interval: 230
+        onTriggered: {
+            if (root.activeMode === "clipboard") root.collapseToIdle();
+            clipboard.copiedId = "";
+        }
+    }
+    Timer {
+        id: confirmTimer
+        interval: 3500
+        onTriggered: clipboard.confirmClear = false
+    }
+
+    ColumnLayout {
+        visible: !clipboard.previewOpen
+        anchors.fill: parent
+        anchors.leftMargin: 2
+        anchors.rightMargin: 2
+        spacing: 8
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            ActionButton {
+                glyph: "arrow_back"
+                text: "Back to Control Center"
+                iconOnly: true
+                onClicked: root.switchMode("utility", true)
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "Clipboard"
+                color: Theme.text
+                font.family: Theme.fontFamilyBody
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+
+            ActionButton {
+                Layout.preferredWidth: 112
+                glyph: clipboard.confirmClear ? "warning" : "delete_sweep"
+                text: clipboard.confirmClear ? "Confirm clear" : "Clear history"
+                tone: clipboard.confirmClear ? Theme.error : clipboard.secondary
+                enabled: clipboard.clips.length > 0 && !mutation.running
+                onClicked: {
+                    if (clipboard.confirmClear) {
+                        clipboard.confirmClear = false;
+                        confirmTimer.stop();
+                        clipboard.changeHistory("wipe");
+                    } else {
+                        clipboard.confirmClear = true;
+                        confirmTimer.restart();
+                    }
+                }
+            }
         }
 
-        // Search Bar Capsule
+        Controls.TextField {
+            id: search
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+            focus: true
+            leftPadding: 32
+            rightPadding: clearSearch.visible ? 32 : 10
+            selectByMouse: true
+            placeholderText: "Search clipboard"
+            placeholderTextColor: clipboard.secondary
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 12
+            color: Theme.text
+            selectionColor: Theme.accent
+            selectedTextColor: Theme.fgPrimary
+            Keys.forwardTo: [clipboard]
+            onTextChanged: clipboard.rebuild()
+
+            background: Rectangle {
+                radius: 10
+                color: Theme.alpha(Theme.text, 0.055)
+                border.color: search.activeFocus ? Theme.alpha(Theme.accent, 0.52) : clipboard.outline
+
+                MaterialSymbol {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "search"
+                    iconSize: 15
+                    color: clipboard.secondary
+                }
+            }
+
+            ActionButton {
+                id: clearSearch
+                anchors.right: parent.right
+                anchors.rightMargin: 2
+                anchors.verticalCenter: parent.verticalCenter
+                visible: search.text !== ""
+                text: "Clear search"
+                glyph: "close"
+                iconOnly: true
+                onClicked: search.clear()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Repeater {
+                model: [
+                    { key: "all", label: "All" },
+                    { key: "text", label: "Text" },
+                    { key: "image", label: "Images" },
+                    { key: "code", label: "Code" }
+                ]
+
+                ActionButton {
+                    required property var modelData
+                    text: modelData.label
+                    selected: clipboard.filter === modelData.key
+                    onClicked: {
+                        clipboard.filter = modelData.key;
+                        search.forceActiveFocus();
+                    }
+                }
+            }
+            Item { Layout.fillWidth: true }
+        }
+
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            radius: 17
-            color: Qt.rgba(255, 255, 255, 0.05)
-            border.width: 0
+            Layout.fillHeight: true
+            radius: 12
+            color: Theme.alpha(Theme.text, 0.035)
+            border.color: clipboard.outline
 
-            RowLayout {
+            ListView {
+                id: rows
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 10
-                spacing: 8
+                anchors.margins: 3
+                clip: true
+                cacheBuffer: 0
+                boundsBehavior: Flickable.StopAtBounds
+                model: results
 
-                MaterialSymbol {
-                    text: "search"
-                    iconSize: 18
-                    color: searchInput.activeFocus ? "#ffffff" : Qt.rgba(255, 255, 255, 0.40)
-                    Behavior on color { ColorAnimation { duration: 150 } }
-                }
+                Controls.ScrollBar.vertical: Controls.ScrollBar { width: 5; policy: Controls.ScrollBar.AsNeeded }
 
-                TextField {
-                    id: searchInput
-                    focus: true
-                    Layout.fillWidth: true
-                    color: "#ffffff"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    placeholderText: "Search clipboard history…"
-                    placeholderTextColor: Qt.rgba(255, 255, 255, 0.35)
-                    verticalAlignment: TextInput.AlignVCenter
-                    selectByMouse: true
-                    background: Item {}
-                    renderType: Text.NativeRendering
+                delegate: Rectangle {
+                    id: row
+                    required property int index
+                    required property string clipId
+                    required property string type
+                    required property string icon
+                    required property string imgPath
+                    required property string title
+                    required property string subtitle
+                    required property string description
+                    required property bool isImage
+                    required property bool isPinned
+                    required property bool binary
 
-                    onTextChanged: clipModule.applyFilter()
+                    readonly property bool selected: ListView.isCurrentItem
+                    readonly property bool hot: selected || pointer.hovered
+                    readonly property bool copied: clipboard.copiedId === clipId
 
-                    Keys.onDownPressed: (event) => {
-                        if (clipList.currentIndex < clipModel.count - 1) {
-                            clipList.currentIndex++;
-                            clipList.positionViewAtIndex(clipList.currentIndex, ListView.Contain);
-                        }
-                        event.accepted = true;
-                    }
-                    Keys.onUpPressed: (event) => {
-                        if (clipList.currentIndex > 0) {
-                            clipList.currentIndex--;
-                            clipList.positionViewAtIndex(clipList.currentIndex, ListView.Contain);
-                        }
-                        event.accepted = true;
-                    }
-                    Keys.onEscapePressed: root.collapseToIdle()
-                    Keys.onReturnPressed: {
-                        if (clipModel.count > 0 && clipList.currentIndex >= 0) {
-                            copyItemToTop(clipModel.get(clipList.currentIndex).clipId);
-                        }
-                    }
-                }
-
-                // Clear Search Text Icon
-                IrisIconButton {
-                    visible: searchInput.text.length > 0
-                    width: 24
-                    height: 24
-                    buttonSize: 24
-                    buttonRadius: 12
-                    flat: true
-                    icon: "close"
-                    iconSize: 14
-                    iconColor: Qt.rgba(255, 255, 255, 0.50)
-                    hoverIconColor: "#ffffff"
-                    onClicked: {
-                        searchInput.text = "";
-                        searchInput.forceActiveFocus();
-                    }
-                }
-            }
-        }
-
-        // Clear All History — Minimal Pill
-        Rectangle {
-            Layout.preferredHeight: 34
-            Layout.preferredWidth: clearRow.implicitWidth + 22
-            radius: 17
-            color: clearMouse.containsMouse ? Qt.rgba(248, 113, 113, 0.22) : Qt.rgba(248, 113, 113, 0.12)
-            border.width: 0
-            Behavior on color { ColorAnimation { duration: 120 } }
-
-            RowLayout {
-                id: clearRow
-                anchors.centerIn: parent
-                spacing: 5
-
-                MaterialSymbol {
-                    text: "delete_sweep"
-                    iconSize: 16
-                    color: "#f87171"
-                }
-                Text {
-                    text: "Clear"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    color: "#f87171"
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            MouseArea {
-                id: clearMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    Quickshell.execDetached(["sh", "-c", "cliphist wipe && rm -rf /tmp/cliphist_thumbs/*"]);
-                    clipModule.allClips = [];
-                    clipModel.clear();
-                    root.collapseToIdle();
-                }
-            }
-        }
-    }
-
-    // ========================================================
-    // 2. LUXURY MINIMAL FILTER CHIPS (All / Text / Images)
-    // ========================================================
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-
-        // Chip: All
-        Rectangle {
-            Layout.preferredHeight: 28
-            Layout.preferredWidth: chipAllRow.implicitWidth + 18
-            radius: 14
-            color: clipModule.activeFilterChip === "all" ? "#ffffff" : (chipAllMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
-            border.width: 0
-            Behavior on color { ColorAnimation { duration: 120 } }
-
-            RowLayout {
-                id: chipAllRow
-                anchors.centerIn: parent
-                spacing: 5
-                Text {
-                    text: "All"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: clipModule.activeFilterChip === "all" ? Font.DemiBold : Font.Normal
-                    color: clipModule.activeFilterChip === "all" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
-                    renderType: Text.NativeRendering
-                }
-                Rectangle {
-                    height: 16
+                    width: rows.width - (rows.contentHeight > rows.height ? 6 : 0)
+                    height: 44
                     radius: 8
-                    color: clipModule.activeFilterChip === "all" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
-                    implicitWidth: allCountText.implicitWidth + 8
-                    Text {
-                        id: allCountText
-                        anchors.centerIn: parent
-                        text: "" + clipModule.allClips.length
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        color: clipModule.activeFilterChip === "all" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
-                        renderType: Text.NativeRendering
-                    }
-                }
-            }
-            MouseArea {
-                id: chipAllMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    clipModule.activeFilterChip = "all";
-                    clipModule.applyFilter();
-                }
-            }
-        }
+                    color: selected ? Theme.alpha(Theme.accent, 0.13)
+                        : pointer.hovered ? Theme.alpha(Theme.text, 0.06) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
 
-        // Chip: Text
-        Rectangle {
-            Layout.preferredHeight: 28
-            Layout.preferredWidth: chipTextRow.implicitWidth + 18
-            radius: 14
-            color: clipModule.activeFilterChip === "text" ? "#ffffff" : (chipTextMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
-            border.width: 0
-            Behavior on color { ColorAnimation { duration: 120 } }
+                    HoverHandler { id: pointer }
 
-            RowLayout {
-                id: chipTextRow
-                anchors.centerIn: parent
-                spacing: 5
-                MaterialSymbol {
-                    text: "description"
-                    iconSize: 13
-                    color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
-                }
-                Text {
-                    text: "Text"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: clipModule.activeFilterChip === "text" ? Font.DemiBold : Font.Normal
-                    color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
-                    renderType: Text.NativeRendering
-                }
-                Rectangle {
-                    height: 16
-                    radius: 8
-                    color: clipModule.activeFilterChip === "text" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
-                    implicitWidth: textCountText.implicitWidth + 8
-                    Text {
-                        id: textCountText
-                        anchors.centerIn: parent
-                        text: "" + clipModule.textClipCount
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        color: clipModule.activeFilterChip === "text" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
-                        renderType: Text.NativeRendering
-                    }
-                }
-            }
-            MouseArea {
-                id: chipTextMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    clipModule.activeFilterChip = "text";
-                    clipModule.applyFilter();
-                }
-            }
-        }
-
-        // Chip: Images
-        Rectangle {
-            Layout.preferredHeight: 28
-            Layout.preferredWidth: chipImgRow.implicitWidth + 18
-            radius: 14
-            color: clipModule.activeFilterChip === "image" ? "#ffffff" : (chipImgMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.10) : Qt.rgba(255, 255, 255, 0.05))
-            border.width: 0
-            Behavior on color { ColorAnimation { duration: 120 } }
-
-            RowLayout {
-                id: chipImgRow
-                anchors.centerIn: parent
-                spacing: 5
-                MaterialSymbol {
-                    text: "image"
-                    iconSize: 13
-                    color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
-                }
-                Text {
-                    text: "Images"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.weight: clipModule.activeFilterChip === "image" ? Font.DemiBold : Font.Normal
-                    color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.75)
-                    renderType: Text.NativeRendering
-                }
-                Rectangle {
-                    height: 16
-                    radius: 8
-                    color: clipModule.activeFilterChip === "image" ? Qt.rgba(0, 0, 0, 0.15) : Qt.rgba(255, 255, 255, 0.08)
-                    implicitWidth: imgCountText.implicitWidth + 8
-                    Text {
-                        id: imgCountText
-                        anchors.centerIn: parent
-                        text: "" + clipModule.imageClipCount
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 10
-                        font.weight: Font.DemiBold
-                        color: clipModule.activeFilterChip === "image" ? "#121214" : Qt.rgba(255, 255, 255, 0.60)
-                        renderType: Text.NativeRendering
-                    }
-                }
-            }
-            MouseArea {
-                id: chipImgMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    clipModule.activeFilterChip = "image";
-                    clipModule.applyFilter();
-                }
-            }
-        }
-
-        Item { Layout.fillWidth: true }
-
-        // Hint: Enter to copy
-        Text {
-            text: "↵ copy"
-            font.family: "Noto Sans"
-            font.pixelSize: 10
-            color: Qt.rgba(255, 255, 255, 0.35)
-            renderType: Text.NativeRendering
-            Layout.alignment: Qt.AlignVCenter
-            Layout.rightMargin: 4
-        }
-    }
-
-    // ========================================================
-    // 3. CLIPBOARD ITEMS LIST (Dynamic Material You Tonal Cards)
-    // ========================================================
-    ListView {
-        id: clipList
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        clip: true
-        spacing: 8
-        model: clipModel
-        currentIndex: 0
-        boundsBehavior: Flickable.StopAtBounds
-
-        highlightFollowsCurrentItem: true
-        highlightRangeMode: ListView.ApplyRange
-        preferredHighlightBegin: 40
-        preferredHighlightEnd: height - 60
-
-        onCurrentIndexChanged: {
-            if (currentIndex >= 0 && currentIndex < count) {
-                positionViewAtIndex(currentIndex, ListView.Contain);
-            }
-        }
-
-        ScrollBar.vertical: ScrollBar {
-            id: clipScroll
-            active: clipList.moving || clipList.flicking
-            policy: ScrollBar.AsNeeded
-            width: 3
-            contentItem: Rectangle {
-                radius: 1.5
-                color: clipModule.colChipBg
-            }
-        }
-
-        WheelHandler {
-            target: clipList
-            onWheel: (event) => {
-                var step = event.angleDelta.y > 0 ? -60 : 60;
-                clipList.contentY = Math.max(0, Math.min(Math.max(0, clipList.contentHeight - clipList.height), clipList.contentY + step));
-            }
-        }
-
-        // Empty State — Material 3 Squircle Badge
-        Item {
-            anchors.fill: parent
-            visible: clipModel.count === 0
-
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 8
-
-                Rectangle {
-                    Layout.alignment: Qt.AlignHCenter
-                    width: 48
-                    height: 48
-                    radius: 16
-                    color: clipModule.colChipBg
-                    border.width: 0
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "content_paste_off"
-                        iconSize: 24
-                        color: clipModule.colMuted
-                    }
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: searchInput.text.trim() !== "" ? "No matching clips found" : "Clipboard history is empty"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    renderType: Text.NativeRendering
-                    color: clipModule.colSubtext
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: searchInput.text.trim() !== "" ? "Try a different search term" : "Items you copy will automatically appear here"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    renderType: Text.NativeRendering
-                    color: clipModule.colMuted
-                }
-            }
-        }
-
-        // Delegate — Dynamic Height Material 3 Tonal Card
-        delegate: Rectangle {
-            id: clipCard
-            width: ListView.view ? (ListView.view.width - (clipScroll.visible ? 6 : 0)) : 500
-            implicitHeight: Math.max(isImage ? 96 : 64, cardLayout.implicitHeight + 24)
-            height: implicitHeight
-            readonly property bool isSelected: ListView.isCurrentItem
-            radius: 14
-            color: isSelected 
-                ? Qt.rgba(clipModule.colAccent.r, clipModule.colAccent.g, clipModule.colAccent.b, 0.18)
-                : (clipMouse.containsMouse ? clipModule.colCardHover : clipModule.colCard)
-            border.width: 0
-
-            Behavior on color { ColorAnimation { duration: 110; easing.type: Easing.OutCubic } }
-
-            RowLayout {
-                id: cardLayout
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 12
-                spacing: 12
-
-                // Preview Thumbnail or Format Squircle Badge
-                Rectangle {
-                    Layout.preferredWidth: isImage ? 92 : 40
-                    Layout.preferredHeight: isImage ? 72 : 40
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: isImage ? 0 : 2
-                    radius: isImage ? 12 : 14
-                    color: isImage ? clipModule.colChipBg : (isSelected ? clipModule.colAccent : clipModule.colChipBg)
-                    border.width: 0
-                    clip: true
-                    Behavior on color { ColorAnimation { duration: 110; easing.type: Easing.OutCubic } }
-
-                    Image {
-                        id: clipImg
+                    Controls.AbstractButton {
                         anchors.fill: parent
-                        anchors.margins: 2
-                        visible: isImage && imgPath !== "" && status === Image.Ready
-                        source: (isImage && imgPath !== "") ? ("file://" + imgPath) : ""
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        cache: false
-                        sourceSize.width: 140
-                        sourceSize.height: 100
-                    }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        visible: !isImage || imgPath === "" || (isImage && clipImg.status !== Image.Ready)
-                        text: isImage ? "image" : "content_paste"
-                        iconSize: isImage ? 20 : 18
-                        color: isImage ? clipModule.colSubtext : (isSelected ? clipModule.colOnAccent : clipModule.colSubtext)
-                    }
-                }
-
-                // Description Text & Metadata Column
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    spacing: 5
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: isImage ? "Image Clip" : description
-                        color: clipModule.colText
-                        font.family: "Noto Sans"
-                        font.pixelSize: 13
-                        font.weight: Font.Normal
-                        renderType: Text.NativeRendering
-                        wrapMode: Text.WrapAnywhere
-                        maximumLineCount: isImage ? 1 : 4
-                        elide: Text.ElideRight
-                        lineHeight: 1.2
+                        background: null
+                        Accessible.name: "Copy " + row.title
+                        onClicked: {
+                            rows.currentIndex = row.index;
+                            clipboard.copyClip(row.clipId);
+                        }
                     }
 
                     RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        spacing: 7
 
-                        Text {
-                            text: isImage ? (description || "Image preview") : (description.length + " characters")
-                            color: isSelected ? clipModule.colAccent : clipModule.colSubtext
-                            font.family: "Noto Sans"
-                            font.pixelSize: 11
-                            font.weight: Font.Normal
-                            renderType: Text.NativeRendering
-                            elide: Text.ElideRight
-                            Behavior on color { ColorAnimation { duration: 110 } }
-                        }
-
-                        // Format / Type Pill tag
                         Rectangle {
-                            height: 16
-                            radius: 8
-                            color: isSelected ? Qt.alpha(clipModule.colAccent, 0.20) : clipModule.colChipBg
-                            implicitWidth: typeTagText.implicitWidth + 10
-                            Behavior on color { ColorAnimation { duration: 110 } }
+                            Layout.preferredWidth: 26
+                            Layout.preferredHeight: 26
+                            radius: 6
+                            color: row.type === "color" ? row.title : Theme.alpha(Theme.text, 0.06)
 
-                            Text {
-                                id: typeTagText
+                            MaterialSymbol {
                                 anchors.centerIn: parent
-                                text: isImage ? "IMAGE" : (description.startsWith("http://") || description.startsWith("https://") ? "URL" : (description.startsWith("{") || description.startsWith("[") ? "JSON" : "TEXT"))
-                                font.family: "Noto Sans"
-                                font.pixelSize: 9
-                                font.weight: Font.Bold
-                                color: isSelected ? clipModule.colAccent : clipModule.colMuted
-                                renderType: Text.NativeRendering
+                                visible: row.type !== "color" && thumbnail.status !== Image.Ready
+                                text: row.icon
+                                iconSize: 15
+                                color: row.selected ? Theme.accent : clipboard.secondary
+                            }
+
+                            Image {
+                                id: thumbnail
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                cache: false
+                                sourceSize: Qt.size(52, 52)
+                                source: row.isImage && !row.binary && row.imgPath ? "file://" + row.imgPath : ""
+                            }
+
+                            Process {
+                                command: ["python3", clipboard.scriptPath, "thumbnail", row.clipId, row.description]
+                                running: row.binary
+                                stdout: StdioCollector {
+                                    onStreamFinished: {
+                                        const path = text.trim();
+                                        if (path) thumbnail.source = "file://" + path;
+                                    }
+                                }
                             }
                         }
-                    }
-                }
 
-                // Quick Copy Pill Button
-                Rectangle {
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 36
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: 2
-                    radius: 18
-                    color: isSelected ? clipModule.colAccent : (copyBtnMouse.containsMouse ? clipModule.colCardHover : clipModule.colChipBg)
-                    border.width: 0
-                    Behavior on color { ColorAnimation { duration: 110; easing.type: Easing.OutCubic } }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 0
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "content_copy"
-                        iconSize: 16
-                        color: isSelected ? clipModule.colOnAccent : (copyBtnMouse.containsMouse ? clipModule.colText : clipModule.colSubtext)
-                    }
+                            Text {
+                                Layout.fillWidth: true
+                                text: row.title || row.description
+                                textFormat: Text.PlainText
+                                color: Theme.text
+                                font.family: ["code", "cmd", "json", "color"].includes(row.type) ? Theme.fontFamilyNerd : Theme.fontFamilyBody
+                                font.pixelSize: 12
+                                font.weight: row.selected ? Font.DemiBold : Font.Normal
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
 
-                    MouseArea {
-                        id: copyBtnMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: {
-                            clipList.currentIndex = index;
-                            clipModule.copyItemToTop(clipId);
+                            Text {
+                                Layout.fillWidth: true
+                                visible: row.subtitle !== ""
+                                text: row.subtitle
+                                textFormat: Text.PlainText
+                                font.family: Theme.fontFamilyBody
+                                font.pixelSize: 10
+                                color: clipboard.secondary
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        ActionButton {
+                            Layout.preferredWidth: 68
+                            opacity: row.selected || row.copied ? 1 : 0
+                            enabled: row.selected && !copier.running
+                            text: row.copied ? "Copied" : "Copy"
+                            primary: true
+                            onClicked: clipboard.copyClip(row.clipId)
+                        }
+
+                        ActionButton {
+                            glyph: "push_pin"
+                            iconOnly: true
+                            text: row.isPinned ? "Unpin" : "Pin"
+                            tone: row.isPinned ? Theme.accent : clipboard.secondary
+                            opacity: row.hot || row.isPinned ? 1 : 0
+                            enabled: (row.hot || row.isPinned) && !mutation.running
+                            onClicked: clipboard.changeHistory("pin", row.clipId, row.description)
+                        }
+
+                        ActionButton {
+                            glyph: "delete"
+                            iconOnly: true
+                            text: "Delete"
+                            tone: hovered ? Theme.error : clipboard.secondary
+                            opacity: row.hot ? 1 : 0
+                            enabled: row.hot && !mutation.running
+                            onClicked: clipboard.changeHistory("delete", row.clipId)
                         }
                     }
                 }
-            }
 
-            MouseArea {
-                id: clipMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                z: -1
-                onEntered: clipList.currentIndex = index
-                onClicked: {
-                    clipList.currentIndex = index;
-                    clipModule.copyItemToTop(clipId);
+                Text {
+                    anchors.centerIn: parent
+                    visible: results.count === 0
+                    text: !clipboard.loaded && !clipboard.failure ? "Loading clipboard…"
+                        : clipboard.failure ? "Clipboard unavailable"
+                        : search.text.trim() || clipboard.filter !== "all" ? "No matching items" : "Clipboard history is empty"
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 12
+                    color: clipboard.secondary
                 }
-                onWheel: (wheel) => {
-                    var step = wheel.angleDelta.y > 0 ? -60 : 60;
-                    clipList.contentY = Math.max(0, Math.min(Math.max(0, clipList.contentHeight - clipList.height), clipList.contentY + step));
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: clipboard.failure !== ""
+            text: clipboard.failure
+            font.family: Theme.fontFamilyBody
+            font.pixelSize: 11
+            color: Theme.error
+        }
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        visible: clipboard.previewOpen
+        spacing: 10
+        RowLayout {
+            Layout.fillWidth: true
+            ActionButton { glyph: "arrow_back"; iconOnly: true; text: "Back"; onClicked: clipboard.closePreview() }
+            Text {
+                Layout.fillWidth: true
+                text: clipboard.previewItem?.isImage || clipboard.previewImages.length ? "Image preview" : "Text preview"
+                font.family: Theme.fontFamilyBody
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                color: Theme.text
+            }
+            ActionButton { text: "Copy"; primary: true; onClicked: clipboard.copyClip(clipboard.previewItem.clipId) }
+        }
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            visible: clipboard.previewImages.length > 1
+            ActionButton { glyph: "chevron_left"; iconOnly: true; text: "Previous image"; enabled: clipboard.previewImageIndex > 0; onClicked: { clipboard.previewImageIndex--; clipboard.previewImage = clipboard.previewImages[clipboard.previewImageIndex]; } }
+            Text { text: (clipboard.previewImageIndex + 1) + " / " + clipboard.previewImages.length; color: clipboard.secondary; font.pixelSize: 12 }
+            ActionButton { glyph: "chevron_right"; iconOnly: true; text: "Next image"; enabled: clipboard.previewImageIndex < clipboard.previewImages.length - 1; onClicked: { clipboard.previewImageIndex++; clipboard.previewImage = clipboard.previewImages[clipboard.previewImageIndex]; } }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            radius: 12
+            color: Theme.alpha(Theme.text, 0.045)
+            clip: true
+            Image {
+                anchors.fill: parent
+                anchors.margins: 14
+                visible: clipboard.previewImage !== ""
+                source: clipboard.previewImage
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
+            }
+            Controls.ScrollView {
+                anchors.fill: parent
+                anchors.margins: 14
+                visible: clipboard.previewImage === "" && (!clipboard.previewItem || !clipboard.previewItem.isImage || clipboard.previewText !== "")
+                clip: true
+                Controls.TextArea {
+                    text: clipboard.previewText
+                    textFormat: TextEdit.PlainText
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    color: Theme.text
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 13
+                    background: null
+                }
+            }
+        }
+    }
+
+    component ActionButton: Controls.Button {
+        id: button
+        property string glyph: ""
+        property bool iconOnly: false
+        property bool selected: false
+        property bool primary: false
+        property color tone: clipboard.secondary
+
+        implicitHeight: 32
+        implicitWidth: iconOnly ? 32 : Math.max(48, label.implicitWidth + (glyph ? 35 : 18))
+        padding: 0
+        hoverEnabled: true
+        focusPolicy: Qt.NoFocus
+        Accessible.name: text
+        Controls.ToolTip.visible: iconOnly && hovered
+        Controls.ToolTip.text: text
+        Controls.ToolTip.delay: 500
+
+        background: Rectangle {
+            radius: 8
+            color: button.primary ? Theme.accent : button.selected ? Theme.alpha(Theme.accent, 0.16)
+                : Theme.alpha(Theme.text, button.down ? 0.12 : button.hovered ? 0.08 : 0)
+            Behavior on color { ColorAnimation { duration: 120 } }
+        }
+
+        contentItem: Item {
+            opacity: button.enabled || button.primary ? 1 : 0.45
+            Row {
+                anchors.centerIn: parent
+                spacing: 5
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: button.glyph !== ""
+                    text: button.glyph
+                    iconSize: 15
+                    color: button.tone
+                }
+
+                Text {
+                    id: label
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !button.iconOnly
+                    text: button.text
+                    font.family: Theme.fontFamilyBody
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    color: button.primary ? Theme.fgPrimary : button.selected ? Theme.accent : button.tone
                 }
             }
         }
