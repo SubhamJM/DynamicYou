@@ -1926,7 +1926,7 @@ print(json.dumps(res))
                                                 anchors.fill: parent
                                                 cursorShape: Qt.PointingHandCursor
                                                 hoverEnabled: true
-                                                onClicked: root.runShellCmd(["hyprctl", "keyword", "monitor", "eDP-1,1920x1200@" + modelData + ",0x0,1.2"])
+                                                onClicked: root.runShellCmd(["hyprctl", "keyword", "monitor", "eDP-1,1920x1200@" + modelData + ",0x0,1.0"])
                                             }
                                         }
                                     }
@@ -2174,7 +2174,7 @@ print(json.dumps(res))
                                     spacing: 2
                                     Text { text: "Active Display (eDP-1)"; font.bold: true; font.pixelSize: 13; color: "#ffffff" }
                                     Text {
-                                        text: "1920×1200 @ 144Hz · Scale 1.20× · CSOT MNG007QX2-2"
+                                        text: "1920×1200 @ 144Hz · Scale 1.00× · CSOT MNG007QX2-2"
                                         font.pixelSize: 11
                                         color: Qt.rgba(255, 255, 255, 0.45)
                                     }

@@ -1,0 +1,76 @@
+add_newline = true
+palette = "custom"
+
+format = """
+$directory$git_branch$git_status$cmd_duration
+$character"""
+
+[directory]
+home_symbol = "~"
+read_only = " 󰌾"
+style = "bold lavender"
+truncation_length = 5
+truncate_to_repo = false
+truncation_symbol = "…/"
+format = "[󰉋 $path]($style) "
+
+[git_branch]
+style = "subtext"
+symbol = "󰘬 "
+format = "on [$symbol$branch]($style) "
+truncation_length = 16
+truncation_symbol = "…"
+
+[git_status]
+style = "bold yellow"
+format = "([\\[$all_status$ahead_behind\\]]($style) )"
+conflicted = "󰞇 "
+ahead = "⇡"
+behind = "⇣"
+diverged = "⇕"
+untracked = "?"
+stashed = "$"
+modified = "!"
+staged = "+"
+renamed = "»"
+deleted = "✘"
+
+[cmd_duration]
+min_time = 2000
+style = "bold yellow"
+format = "took [$duration]($style) "
+
+[hostname]
+ssh_only = true
+format = "[$hostname]($style) "
+style = "dimmed subtext"
+
+[username]
+show_always = false
+style_user = "bold lavender"
+style_root = "bold red"
+format = "[$user]($style) "
+
+[package]
+disabled = true
+
+[character]
+success_symbol = "[❯](bold green) "
+error_symbol = "[❯](bold red) "
+
+[palettes.custom]
+bg = "#0b1712"
+mantle = "#12241b"
+crust = "#1a3327"
+surface0 = "#234936"
+surface1 = "#234936"
+surface2 = "#05df72"
+overlay0 = "#6ee7b7"
+text = "#ecfdf5"
+subtext = "#6ee7b7"
+lavender = "#05df72"
+mauve = "#d699b6"
+blue = "#7fbbb3"
+red = "#e67e80"
+green = "#05df72"
+yellow = "#dbbc7f"

@@ -19,6 +19,8 @@ import QtQuick.Effects
 import Quickshell.Services.Notifications
 import "./modules"
 import "./" // Imports NotchConfig singleton
+import qs
+import qs.services
 
 ShellRoot {
     id: root
@@ -553,6 +555,7 @@ for f in sorted_files:
             case "music":         return Qt.resolvedUrl("modules/MusicModule.qml");
             case "notes":         return Qt.resolvedUrl("modules/NotesModule.qml");
             case "cheatsheet":    return Qt.resolvedUrl("modules/KeybindsModule.qml");
+            case "wallhaven":     return Qt.resolvedUrl("modules/WallhavenModule.qml");
             case "taskmanager":   return Qt.resolvedUrl("modules/TaskManagerModule.qml");
             default:              return "";
         }
@@ -579,11 +582,19 @@ for f in sorted_files:
     readonly property var musicMod:      (root.loadedExpandedMode === "music") ? moduleLoader.item : null
     readonly property var notesMod:      (root.loadedExpandedMode === "notes") ? moduleLoader.item : null
     readonly property var cheatsheetMod: (root.loadedExpandedMode === "cheatsheet") ? moduleLoader.item : null
+    readonly property var wallhavenMod:  (root.loadedExpandedMode === "wallhaven") ? moduleLoader.item : null
     readonly property var taskMgrMod:    (root.loadedExpandedMode === "taskmanager") ? moduleLoader.item : null
 
+    property string requestedClockTab: ""
     function openClockTab(tab) {
-        if (root.activeMode !== "calendar") root.switchMode("calendar", true);
-        if (root.calMod) root.calMod.showTab(tab);
+        root.requestedClockTab = tab || "calendar";
+        if (root.activeMode !== "calendar") {
+            root.switchMode("calendar", true);
+        }
+        if (root.calMod && typeof root.calMod.showTab === "function") {
+            root.calMod.showTab(tab);
+            root.requestedClockTab = "";
+        }
     }
 
     function openUtility(section = "", fromShortcut = false) {
@@ -698,7 +709,7 @@ for f in sorted_files:
     }
     
     readonly property int targetHeight: {
-        var calculatedHeight = 32;
+        var calculatedHeight = NotchConfig.modeDimensions["idle"] ? NotchConfig.modeDimensions["idle"].height : 38;
         if (root.isScreenshotIslandActive && root.isDashMode) {
             calculatedHeight = 44;
         } else if (root.isNotifPopupActive && root.isDashMode) {
@@ -749,12 +760,14 @@ for f in sorted_files:
                 : 400;
         } else if (activeMode === "music") {
             calculatedHeight = (root.musicMod && root.musicMod.calculatedHeight) ? root.musicMod.calculatedHeight : 265;
+        } else if (activeMode === "wallhaven") {
+            calculatedHeight = (root.wallhavenMod && root.wallhavenMod.targetHeight > 0) ? root.wallhavenMod.targetHeight : 860;
         } else if (activeMode === "taskmanager") {
             calculatedHeight = (NotchConfig.modeDimensions["taskmanager"] && NotchConfig.modeDimensions["taskmanager"].height !== undefined)
                 ? NotchConfig.modeDimensions["taskmanager"].height
                 : 620;
         } else if (activeMode === "idle") {
-            calculatedHeight = 32;
+            calculatedHeight = NotchConfig.modeDimensions["idle"] ? NotchConfig.modeDimensions["idle"].height : 38;
         } else if (activeMode === "hover") {
             calculatedHeight = 44;
         } else {
@@ -770,7 +783,7 @@ for f in sorted_files:
             return 21;
         }
         if (activeMode === "idle") {
-            return 16;
+            return NotchConfig.modeDimensions["idle"] ? NotchConfig.modeDimensions["idle"].radius : 19;
         }
         if (activeMode === "hover") {
             return 22;
@@ -1085,6 +1098,10 @@ for f in sorted_files:
                 return "OK: " + root.calMod.tab;
             }
             return "calMod null";
+        }
+        function openClockTab(tabName: string): string {
+            root.openClockTab(tabName);
+            return "OK";
         }
         function isOverviewOpen(): string {
             return "" + (typeof GlobalStates !== "undefined" ? GlobalStates.overviewOpen : false);
@@ -1823,6 +1840,11 @@ for f in sorted_files:
                                 }
                             } else if (root.loadedExpandedMode === "switcher") {
                                 if (typeof item.refreshClients === "function") item.refreshClients();
+                            } else if (root.loadedExpandedMode === "calendar") {
+                                if (root.requestedClockTab !== "" && typeof item.showTab === "function") {
+                                    item.showTab(root.requestedClockTab);
+                                    root.requestedClockTab = "";
+                                }
                             }
                             root.regainFocus();
                         }
@@ -1888,109 +1910,361 @@ for f in sorted_files:
             }
         }
 
-        // Inir-style Floating Screen Recording Bubble (Squircle Island next to the bar)
-        Item {
-            id: recordingBubble
+        // Inir-style Floating Activity Island Bubbles (Detached stadium pills floating next to the notch bar)
+        Row {
+            id: floatingRightBubbles
             z: 2
-            visible: opacity > 0.001
-            opacity: root.isScreenRecording ? 1.0 : 0.0
-            scale: root.isScreenRecording ? 1.0 : 0.75
-            transformOrigin: Item.Center
-
-            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
-
-            // Align organically to the right wing of the notch
             anchors.left: notchContainer.right
             anchors.leftMargin: 8
-            anchors.top: notchContainer.top
-            anchors.topMargin: (notch.height <= 36) ? Math.max(0, (notch.height - height) / 2) : 2
+            anchors.top: parent.top
+            anchors.topMargin: root.notchHidden ? -50 : 4
+            spacing: 6
 
-            width: bubbleContentRow.implicitWidth + 24
-            height: 32
-
-            Rectangle {
-                id: bubbleSilhouette
-                anchors.fill: parent
-                radius: 12
-                color: root.notchSurfaceColor
-                visible: false
-            }
-
-            MultiEffect {
-                anchors.fill: bubbleSilhouette
-                source: bubbleSilhouette
-                z: -1
-                shadowEnabled: NotchConfig.shadowEnabled
-                shadowColor: NotchConfig.shadowColor
-                shadowOpacity: NotchConfig.shadowOpacity
-                shadowBlur: NotchConfig.shadowBlur
-                shadowVerticalOffset: NotchConfig.shadowVerticalOffset
-            }
-
-            Rectangle {
-                id: bubbleBg
-                anchors.fill: parent
-                radius: 12
-                color: root.notchSurfaceColor
-                border.width: 0
-
-                // Subtle hover highlight
-                Rectangle {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    color: bubbleMouse.containsMouse
-                        ? (bubbleMouse.pressed ? Qt.rgba(255, 84, 73, 0.22) : Qt.rgba(255, 84, 73, 0.14))
-                        : "transparent"
-                    Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on anchors.topMargin {
+                NumberAnimation {
+                    duration: root.notchHidden ? NotchConfig.animNotchExit : NotchConfig.animNotchEnter
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.notchHidden ? NotchConfig.curveAccel : NotchConfig.curveMorph
                 }
             }
 
-            Row {
-                id: bubbleContentRow
-                anchors.centerIn: parent
-                spacing: 6
+            // 1. Screen Recording Floating Bubble
+            Item {
+                id: recordingBubble
+                readonly property int bubbleHeight: 30
+                readonly property int bubbleRadius: 15
 
-                // Pulsing red recording dot
+                visible: opacity > 0.001
+                opacity: root.isScreenRecording ? 1.0 : 0.0
+                scale: root.isScreenRecording ? 1.0 : 0.75
+                transformOrigin: Item.Center
+
+                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+
+                width: root.isScreenRecording ? (recContentRow.implicitWidth + 24) : 0
+                height: bubbleHeight
+                clip: true
+
+                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
                 Rectangle {
-                    width: 7
-                    height: 7
-                    radius: 3.5
-                    color: root.isScreenRecordingPaused
-                        ? (Theme.colors.warning || "#fbbf24")
-                        : (Theme.colors.error || "#ff5449")
-                    anchors.verticalCenter: parent.verticalCenter
+                    id: recSilhouette
+                    anchors.fill: parent
+                    radius: recordingBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    visible: false
+                }
 
-                    SequentialAnimation on opacity {
-                        running: root.isScreenRecording && !root.isScreenRecordingPaused
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.25; duration: 600; easing.type: Easing.InOutQuad }
-                        NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                MultiEffect {
+                    anchors.fill: recSilhouette
+                    source: recSilhouette
+                    z: -1
+                    shadowEnabled: NotchConfig.shadowEnabled
+                    shadowColor: NotchConfig.shadowColor
+                    shadowOpacity: 0.4
+                    shadowBlur: 10
+                    shadowVerticalOffset: 2
+                }
+
+                Rectangle {
+                    id: recBg
+                    anchors.fill: parent
+                    radius: recordingBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    border.width: 1
+                    border.color: Qt.rgba(255, 255, 255, 0.12)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: recMouse.containsMouse
+                            ? (recMouse.pressed ? Qt.rgba(255, 84, 73, 0.22) : Qt.rgba(255, 84, 73, 0.14))
+                            : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
                     }
                 }
 
-                // Live elapsed duration readout
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.formatRecTime(root.screenRecordSeconds)
-                    color: root.isScreenRecordingPaused
-                        ? (Theme.colors.warning || "#fbbf24")
-                        : (Theme.colors.error || "#ff5449")
-                    font.family: "Readex Pro"
-                    font.pixelSize: 12
-                    font.weight: Font.Bold
-                    font.features: ({ "tnum": 1 })
-                    renderType: Text.NativeRendering
+                Row {
+                    id: recContentRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: root.isScreenRecordingPaused
+                            ? (Theme.colors.warning || "#fbbf24")
+                            : (Theme.colors.error || "#ff5449")
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        SequentialAnimation on opacity {
+                            running: root.isScreenRecording && !root.isScreenRecordingPaused
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.25; duration: 600; easing.type: Easing.InOutQuad }
+                            NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                        }
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.formatRecTime(root.screenRecordSeconds)
+                        color: root.isScreenRecordingPaused
+                            ? (Theme.colors.warning || "#fbbf24")
+                            : (Theme.colors.error || "#ff5449")
+                        font.family: "Readex Pro"
+                        font.pixelSize: 12
+                        font.weight: Font.Bold
+                        font.features: ({ "tnum": 1 })
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                MouseArea {
+                    id: recMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: {
+                        root.switchMode("recorder", true);
+                    }
                 }
             }
 
-            MouseArea {
-                id: bubbleMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    root.switchMode("recorder", true);
+            // 2. Stopwatch Floating Bubble
+            Item {
+                id: stopwatchBubble
+                readonly property int bubbleHeight: 30
+                readonly property int bubbleRadius: 15
+                readonly property bool swRunning: (typeof Chrono !== "undefined" && Chrono.swRunning)
+                    || (typeof TimerService !== "undefined" && TimerService.stopwatchRunning)
+                readonly property bool swActive: (typeof Chrono !== "undefined" && Chrono.swActive)
+                    || (typeof TimerService !== "undefined" && (TimerService.stopwatchRunning || TimerService.stopwatchTime > 0))
+
+                visible: opacity > 0.001
+                opacity: swActive ? 1.0 : 0.0
+                scale: swActive ? 1.0 : 0.75
+                transformOrigin: Item.Center
+
+                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+
+                width: swActive ? (swContentRow.implicitWidth + 24) : 0
+                height: bubbleHeight
+                clip: true
+
+                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                Rectangle {
+                    id: swSilhouette
+                    anchors.fill: parent
+                    radius: stopwatchBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    visible: false
+                }
+
+                MultiEffect {
+                    anchors.fill: swSilhouette
+                    source: swSilhouette
+                    z: -1
+                    shadowEnabled: NotchConfig.shadowEnabled
+                    shadowColor: NotchConfig.shadowColor
+                    shadowOpacity: 0.4
+                    shadowBlur: 10
+                    shadowVerticalOffset: 2
+                }
+
+                Rectangle {
+                    id: swBg
+                    anchors.fill: parent
+                    radius: stopwatchBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    border.width: 1
+                    border.color: Qt.rgba(255, 255, 255, 0.12)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: swMouse.containsMouse
+                            ? (swMouse.pressed ? Qt.rgba(37, 180, 229, 0.22) : Qt.rgba(37, 180, 229, 0.14))
+                            : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+                }
+
+                Row {
+                    id: swContentRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "timer"
+                        iconSize: 15
+                        color: stopwatchBubble.swRunning
+                            ? (Theme.colors.primary || "#25b4e5")
+                            : (Theme.colors.subtext || "#888888")
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: {
+                            if (typeof Chrono !== "undefined" && Chrono.swActive) {
+                                return Chrono.clock(Chrono.swElapsed, false);
+                            }
+                            if (typeof TimerService !== "undefined" && (TimerService.stopwatchRunning || TimerService.stopwatchTime > 0)) {
+                                const totalSec = Math.floor(TimerService.stopwatchTime / 100);
+                                const m = Math.floor(totalSec / 60);
+                                const s = totalSec % 60;
+                                return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                            }
+                            return "00:00";
+                        }
+                        color: stopwatchBubble.swRunning
+                            ? (Theme.colors.text || "#ffffff")
+                            : (Theme.colors.subtext || "#888888")
+                        font.family: "Readex Pro"
+                        font.pixelSize: 12
+                        font.weight: Font.Bold
+                        font.features: ({ "tnum": 1 })
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                MouseArea {
+                    id: swMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: {
+                        root.openClockTab("stopwatch");
+                    }
+                }
+            }
+
+            // 3. Countdown Timer Floating Bubble
+            Item {
+                id: timerBubble
+                readonly property int bubbleHeight: 30
+                readonly property int bubbleRadius: 15
+                readonly property var chronoHeadline: (typeof Chrono !== "undefined" && Chrono.headline) ? Chrono.headline : null
+                readonly property bool chronoTimerActive: chronoHeadline !== null && (chronoHeadline.kind === "timer" || chronoHeadline.kind === "pomodoro")
+                readonly property var tsCountdown: (typeof TimerService !== "undefined" && TimerService.countdowns)
+                    ? (TimerService.countdowns.find(c => !c.notified) ?? null)
+                    : null
+                readonly property bool timerActive: chronoTimerActive
+                    || (tsCountdown !== null)
+                    || (typeof TimerService !== "undefined" && TimerService.pomodoroRunning)
+
+                readonly property bool isFinished: (chronoHeadline && chronoHeadline.left <= 0 && chronoHeadline.total > 0)
+                    || (tsCountdown && tsCountdown.notified)
+
+                visible: opacity > 0.001
+                opacity: timerActive ? 1.0 : 0.0
+                scale: timerActive ? 1.0 : 0.75
+                transformOrigin: Item.Center
+
+                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+
+                width: timerActive ? (timerContentRow.implicitWidth + 24) : 0
+                height: bubbleHeight
+                clip: true
+
+                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
+                Rectangle {
+                    id: timerSilhouette
+                    anchors.fill: parent
+                    radius: timerBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    visible: false
+                }
+
+                MultiEffect {
+                    anchors.fill: timerSilhouette
+                    source: timerSilhouette
+                    z: -1
+                    shadowEnabled: NotchConfig.shadowEnabled
+                    shadowColor: NotchConfig.shadowColor
+                    shadowOpacity: 0.4
+                    shadowBlur: 10
+                    shadowVerticalOffset: 2
+                }
+
+                Rectangle {
+                    id: timerBg
+                    anchors.fill: parent
+                    radius: timerBubble.bubbleRadius
+                    color: root.notchSurfaceColor
+                    border.width: 1
+                    border.color: Qt.rgba(255, 255, 255, 0.12)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        color: timerMouse.containsMouse
+                            ? (timerMouse.pressed ? Qt.rgba(251, 191, 36, 0.22) : Qt.rgba(251, 191, 36, 0.14))
+                            : "transparent"
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+                }
+
+                Row {
+                    id: timerContentRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: timerBubble.isFinished ? "alarm_on" : (timerBubble.chronoHeadline?.kind === "pomodoro" ? "timelapse" : "hourglass_top")
+                        iconSize: 15
+                        color: timerBubble.isFinished
+                            ? (Theme.colors.warning || "#fbbf24")
+                            : (Theme.colors.primary || "#25b4e5")
+
+                        SequentialAnimation on opacity {
+                            running: timerBubble.isFinished
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.3; duration: 400; easing.type: Easing.InOutQuad }
+                            NumberAnimation { to: 1.0; duration: 400; easing.type: Easing.InOutQuad }
+                        }
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: {
+                            if (timerBubble.chronoTimerActive) {
+                                return Chrono.countdown(timerBubble.chronoHeadline.left);
+                            }
+                            if (timerBubble.tsCountdown) {
+                                return TimerService.formatCountdownDuration(TimerService.countdownSecondsLeft(timerBubble.tsCountdown));
+                            }
+                            if (typeof TimerService !== "undefined" && TimerService.pomodoroRunning) {
+                                return TimerService.formatCountdownDuration(TimerService.pomodoroSecondsLeft);
+                            }
+                            return "00:00";
+                        }
+                        color: timerBubble.isFinished
+                            ? (Theme.colors.warning || "#fbbf24")
+                            : (Theme.colors.text || "#ffffff")
+                        font.family: "Readex Pro"
+                        font.pixelSize: 12
+                        font.weight: Font.Bold
+                        font.features: ({ "tnum": 1 })
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                MouseArea {
+                    id: timerMouse
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: {
+                        root.openClockTab("timer");
+                    }
                 }
             }
         }

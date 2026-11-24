@@ -11,102 +11,35 @@ QtObject {
     property string mediaAccent: ""
     property string currentArtSource: ""
 
-    readonly property color accent: theme.wallpaperColors.primary || theme.mediaAccent || theme.baseAccent
+    readonly property color accent: theme.baseAccent
+    readonly property color onAccent: (accent.r * 0.2126 + accent.g * 0.7152 + accent.b * 0.0722) > 0.52 ? "#101014" : "#ffffff"
 
     function setMediaAccent(colorStr) {
         var next = (colorStr || "").trim();
         if (theme.mediaAccent !== next) {
             theme.mediaAccent = next;
-            theme._rebuildColors();
         }
     }
 
     property var rawThemeColors: ({})
-    property var wallpaperColors: ({})
-    readonly property bool wallpaperPaletteActive: !!wallpaperColors.primary
-    readonly property string wallpaperPalettePath: (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache") + "/dynamic-you/palette.json"
-
-    property FileView wallpaperPalette: FileView {
-        path: theme.wallpaperPalettePath
-        watchChanges: true
-        __printErrors: false
-        onFileChanged: reload()
-        onLoadFailed: {
-            theme.wallpaperColors = ({});
-            theme._rebuildColors();
-        }
-        onLoaded: {
-            try {
-                theme.wallpaperColors = JSON.parse(text());
-                theme._rebuildColors();
-            } catch (error) {
-                console.warn("[Quickshell Theme] Invalid wallpaper palette: " + error);
-            }
-        }
-    }
-
     function _rebuildColors() {
         var activeAcc = theme.accent;
         var raw = theme.rawThemeColors || {};
-        const wallpaper = theme.wallpaperColors;
-        if (theme.wallpaperPaletteActive) {
-            theme.colors = {
-                "bg": wallpaper.surface,
-                "card_bg": wallpaper.surface_container,
-                "hover_bg": wallpaper.surface_container_high,
-                "border": "transparent",
-                "border_hover": wallpaper.outline_variant,
-                "text_primary": wallpaper.on_surface,
-                "text_secondary": wallpaper.on_surface_variant,
-                "text_muted": wallpaper.outline,
-                "accent": wallpaper.primary,
-                "accent_secondary": wallpaper.primary_container,
-                "error": wallpaper.error,
-                "warning": wallpaper.tertiary
-            };
-            theme.themeReloaded();
-            return;
-        }
         theme.colors = {
-            "bg": "#000000",
+            "bg": raw.bg || "#030a16",
             "card_bg": raw.card_bg || "#1c1b1f",
             "hover_bg": raw.hover_bg || "#2b2930",
             "border": "transparent",
-            "border_hover": "transparent",
+            "border_hover": raw.border_hover || activeAcc,
             "text_primary": raw.text_primary || "#f0dfd7",
             "text_secondary": raw.text_secondary || "#d7c2b8",
             "text_muted": raw.text_muted || "#9f8d84",
             "accent": activeAcc,
+            "accent_secondary": raw.border || activeAcc,
             "error": raw.error || "#ffb4ab",
             "warning": raw.warning || "#fbbf24"
         };
         theme.themeReloaded();
-    }
-
-    // Dynamic Artwork Color Quantizer for whole shell synchronization
-    property var artQuantizer: ColorQuantizer {
-        id: themeQuantizer
-        source: (theme.currentArtSource && !theme.currentArtSource.startsWith("http")) ? theme.currentArtSource : ""
-        depth: 3
-        rescaleSize: 48
-        onColorsChanged: {
-            if (theme.currentArtSource !== "" && colors && colors.length > 0) {
-                let best = null;
-                let bestScore = -1;
-                for (let i = 0; i < colors.length; i++) {
-                    const c = colors[i];
-                    const score = Math.max(0, c.hslSaturation) * (1 - Math.abs(c.hslLightness - 0.5));
-                    if (score > bestScore) { bestScore = score; best = c; }
-                }
-                if (best && best.hslSaturation >= 0.12 && best.hslHue >= 0) {
-                    const extracted = Qt.hsla(best.hslHue, Math.max(0.48, best.hslSaturation),
-                        Math.max(0.64, Math.min(0.78, best.hslLightness + 0.20)), 1);
-                    theme.setMediaAccent(extracted.toString());
-                    return;
-                }
-            }
-            theme.setMediaAccent("");
-        }
     }
 
     // Material 3 Palette with clean borderless surfaces and reactive accent
@@ -120,6 +53,7 @@ QtObject {
         "text_secondary": "#d7c2b8",
         "text_muted": "#9f8d84",
         "accent": "#ffb68b",
+        "accent_secondary": "#ffb68b",
         "error": "#ffb4ab",
         "warning": "#fbbf24"
     })
@@ -295,34 +229,34 @@ QtObject {
 
     readonly property color bg: theme.colors.bg
     readonly property color bgTile: theme.colors.card_bg
-    readonly property color fgAccent: theme.wallpaperColors.on_primary || ("#ffffff")
+    readonly property color fgAccent: theme.onAccent
     readonly property color text: theme.colors.text_primary
     readonly property color subtext: theme.colors.text_secondary
     readonly property color subtextDim: theme.colors.text_muted
     readonly property color primary: theme.colors.accent
-    readonly property color fgPrimary: theme.wallpaperColors.on_primary || ("#101014")
-    readonly property color primaryContainer: theme.wallpaperColors.primary_container || (theme.colors.accent_secondary || theme.colors.accent)
-    readonly property color fgPrimaryContainer: theme.wallpaperColors.on_primary_container || ("#ffffff")
-    readonly property color secondary: theme.wallpaperColors.secondary || (theme.colors.accent)
-    readonly property color fgSecondary: theme.wallpaperColors.on_secondary || ("#101014")
-    readonly property color secondaryContainer: theme.wallpaperColors.secondary_container || (Qt.rgba(255, 255, 255, 0.08))
-    readonly property color fgSecondaryContainer: theme.wallpaperColors.on_secondary_container || ("#ffffff")
-    readonly property color tertiary: theme.wallpaperColors.tertiary || (theme.colors.accent)
-    readonly property color tertiaryContainer: theme.wallpaperColors.tertiary_container || (Qt.rgba(255, 255, 255, 0.08))
-    readonly property color fgTertiaryContainer: theme.wallpaperColors.on_tertiary_container || ("#ffffff")
+    readonly property color fgPrimary: theme.onAccent
+    readonly property color primaryContainer: theme.colors.accent_secondary
+    readonly property color fgPrimaryContainer: theme.colors.text_primary
+    readonly property color secondary: theme.colors.accent
+    readonly property color fgSecondary: theme.onAccent
+    readonly property color secondaryContainer: theme.colors.card_bg
+    readonly property color fgSecondaryContainer: theme.colors.text_primary
+    readonly property color tertiary: theme.colors.accent
+    readonly property color tertiaryContainer: theme.colors.hover_bg
+    readonly property color fgTertiaryContainer: theme.colors.text_primary
     readonly property color surfaceHigh: theme.colors.card_bg
     readonly property color surfaceHighest: theme.colors.hover_bg
-    readonly property color outline: theme.wallpaperColors.outline_variant || (Qt.rgba(255, 255, 255, 0.12))
-    readonly property color outlineStrong: theme.wallpaperColors.outline || (Qt.rgba(255, 255, 255, 0.20))
-    readonly property color divider: theme.wallpaperColors.outline_variant || (Qt.rgba(255, 255, 255, 0.12))
+    readonly property color outline: theme.rawThemeColors.border || (Qt.rgba(255, 255, 255, 0.12))
+    readonly property color outlineStrong: theme.rawThemeColors.border_hover || theme.accent
+    readonly property color divider: theme.rawThemeColors.border || (Qt.rgba(255, 255, 255, 0.12))
     readonly property color success: theme.colors.green || "#50fa7b"
     readonly property color error: theme.colors.error
-    readonly property color errorContainer: theme.wallpaperColors.error_container || (Qt.rgba(235, 87, 87, 0.2))
-    readonly property color fgErrorContainer: theme.wallpaperColors.on_error_container || (theme.colors.error || "#eb5757")
+    readonly property color errorContainer: Qt.rgba(0.4, 0.12, 0.14, 1)
+    readonly property color fgErrorContainer: theme.colors.error
     readonly property real disabledContainer: 0.12
     readonly property real disabledContent: 0.38
-    readonly property color inverseSurface: theme.wallpaperColors.inverse_surface || ("#f8fafc")
-    readonly property color fgInverseSurface: theme.wallpaperColors.inverse_on_surface || ("#101014")
+    readonly property color inverseSurface: theme.colors.text_primary
+    readonly property color fgInverseSurface: theme.colors.bg
 
     readonly property int shapeFull: 9999
     readonly property int shapeXlInc: 24

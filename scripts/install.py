@@ -23,9 +23,9 @@ from backups import Backup, backup_root, copy, exists, replace
 HOME = Path.home()
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
 DATA = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
-PALETTE_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "dynamic-you"
 BIN = Path(os.environ.get("XDG_BIN_HOME") or HOME / ".local/bin")
-SETTINGS = CONFIG / "dynamic-you/matugen.json"
+SETTINGS = CONFIG / "dynamic-you/install.json"
+LEGACY_SETTINGS = CONFIG / "dynamic-you/matugen.json"
 APPS = {
     "kitty": "Kitty terminal colors",
     "zen": "Zen Browser and supported site colors",
@@ -39,11 +39,12 @@ APPS = {
 
 
 def preferences():
-    if not SETTINGS.is_file():
+    source = SETTINGS if SETTINGS.is_file() else LEGACY_SETTINGS
+    if not source.is_file():
         return {}
-    data = json.loads(SETTINGS.read_text())
+    data = json.loads(source.read_text())
     if not isinstance(data, dict):
-        raise ValueError(f"Expected a JSON object in {SETTINGS}")
+        raise ValueError(f"Expected a JSON object in {source}")
     return data
 
 
@@ -68,7 +69,7 @@ def integration_choices(args, previous):
             raise ValueError(f"Unknown app integration(s): {', '.join(sorted(names - APPS.keys()))}")
         return {app: app in names for app in APPS}
     if sys.stdin.isatty() and not (args.yes or args.dry_run):
-        print("Choose which apps should follow the Dynamic You wallpaper.")
+        print("Choose which apps should follow the Dynamic You theme.")
         for app, label in APPS.items():
             enabled[app] = confirm(f"Use Dynamic You colors for {label}?", enabled[app])
     return enabled
@@ -114,9 +115,6 @@ def install_plan():
         changes.append(Change(DATA / "fonts/dynamic-you", icon_fonts, "install"))
     changes.extend((Change(CONFIG / "active-theme", None, "initialize"),
                     Change(SETTINGS, None, "save app choices")))
-    for name in ("palette.json", "material.json"):
-        palette = PALETTE_CACHE / name
-        changes.append(Change(palette, None, "keep" if exists(palette) else "seed palette"))
     optional_links = {
         HOME / "Pictures/Wallpapers": ROOT / "Wallpapers",
         DATA / "quickshell-lockscreen": ROOT / "lockscreen",
@@ -174,6 +172,12 @@ def initialize_theme(stage, old):
         if not destination.is_file():
             destination.unlink(missing_ok=True)
             copy(ROOT / "active-theme" / name, destination)
+    palette_script = ROOT / "quickshell/scripts/theme_palette.py"
+    subprocess.run([sys.executable, str(palette_script), str(stage / "quickshell-colors.json"),
+                    str(stage / "material.json")], check=True)
+    (stage / "starship.toml").write_text(
+        (ROOT / "fish/base.toml").read_text() + "\n" + (stage / "starship-colors.toml").read_text()
+    )
     wallpaper = stage / "current-wallpaper"
     if (old / wallpaper.name).is_file() and wallpaper.is_symlink():
         wallpaper.unlink()
@@ -228,8 +232,6 @@ def prepare(changes, stage, prefs, backup, browser):
             initialize_theme(payload, change.target)
         elif change.action == "link":
             payload.symlink_to(change.source)
-        elif change.action == "seed palette":
-            payload.write_text("{}\n")
         else:
             payload.write_text(json.dumps({**prefs, "installId": backup.directory.name}, indent=2) + "\n")
         prepared.append((change.target, payload))
@@ -254,7 +256,7 @@ def install_deps(selected, browser):
         raise ValueError("--deps is available on Arch-based distributions. Install dependencies with your package manager.")
     core = ("hyprland hyprlock hypridle hyprpicker hyprlauncher hyprpolkitagent hyprsunset "
             "xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xorg-xwayland xdg-utils "
-            "awww matugen imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg wf-recorder "
+            "awww imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg wf-recorder "
             "kitty yazi playerctl brightnessctl pamixer cava upower networkmanager iw bluez bluez-utils "
             "pipewire pipewire-pulse wireplumber power-profiles-daemon gnome-keyring libsecret dnsmasq iptables "
             "dbus jq socat libnotify python python-dbus python-gobject python-pillow qrencode "

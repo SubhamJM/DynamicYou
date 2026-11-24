@@ -126,6 +126,14 @@ FocusScope {
     }
 
     function activateSelected(): bool {
+        var raw = searchInputField.text.trim().toLowerCase();
+        if (raw === "wallhaven" || raw === ">wallhaven") {
+            searchInputField.clear();
+            if (typeof root !== "undefined" && typeof root.switchMode === "function") {
+                root.switchMode("wallhaven", true);
+                return true;
+            }
+        }
         if (resultsModel.count === 0) return false;
         var idx = selectedIndex;
         if (idx < 0 || idx >= resultsModel.count) idx = 0;
@@ -157,6 +165,12 @@ FocusScope {
             ]);
         } else if (k === "web") {
             Qt.openUrlExternally(String(row.payload));
+        } else if (k === "wallhaven") {
+            searchInputField.clear();
+            if (typeof root !== "undefined" && typeof root.switchMode === "function") {
+                root.switchMode("wallhaven", true);
+            }
+            return true;
         } else if (k === "cmd") {
             if (row.payload === "settings") {
                 if (typeof root !== "undefined" && typeof root.openSettings === "function") {
@@ -282,7 +296,7 @@ FocusScope {
         { name: "Take Screenshot (Area)", desc: "Capture selective screen region", payload: "grimblast copy area", glyph: "screenshot_monitor" },
         { name: "Take Screenshot (Full)", desc: "Capture full monitor screen", payload: "grimblast copy screen", glyph: "screenshot_monitor" },
         { name: "Open Terminal", desc: "Launch default command line terminal", payload: "xdg-terminal-exec", glyph: "terminal_2" },
-        { name: "Reload Notch Theme", desc: "Refresh Matugen colors and styles", payload: "qs ipc call notch reloadTheme", glyph: "palette" },
+        { name: "Reload Notch Theme", desc: "Refresh the selected theme colors", payload: "qs ipc call notch reloadTheme", glyph: "palette" },
         { name: "Suspend System", desc: "Put system to sleep", payload: "systemctl suspend", glyph: "bedtime" },
         { name: "Reboot System", desc: "Restart the operating system", payload: "systemctl reboot", glyph: "restart_alt" },
         { name: "Power Off", desc: "Shutdown computer", payload: "systemctl poweroff", glyph: "power_settings_new" },
@@ -369,6 +383,21 @@ FocusScope {
                 iconName: "",
                 glyph: "calculate",
                 actionText: "Copy",
+                rawEntry: null
+            });
+        }
+
+        // 1.5. Wallhaven Online Wallpapers Quick-Action
+        if (q.indexOf("wallhaven") !== -1) {
+            rows.push({
+                kind: "wallhaven",
+                title: "Wallhaven Wallpapers",
+                subtitle: "Browse and set online wallpapers from wallhaven.cc",
+                payload: "wallhaven",
+                exec: "",
+                iconName: "",
+                glyph: "wallpaper",
+                actionText: "Open",
                 rawEntry: null
             });
         }

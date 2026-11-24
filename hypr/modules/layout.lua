@@ -20,7 +20,7 @@ hl.config({
     -- Match scrolling-dots: full-width columns, Super+D cycles half/full.
     scrolling = {
         direction = "right",
-        fullscreen_on_one_column = true,
+        fullscreen_on_one_column = false,
         focus_fit_method = 1,
         column_width = 1.0,
         follow_focus = 1,

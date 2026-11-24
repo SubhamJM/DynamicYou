@@ -4897,7 +4897,7 @@ Singleton {
                     property bool enableWorkspace: true
                     property real workspaceZoom: 1.07 // Relative to wallpaper size
                     property bool enableSidebar: true
-                    property real widgetsFactor: 1.2
+                    property real widgetsFactor: 1.0
                     property bool loop: true
                     property bool invertHorizontal: false
                     property bool invertVertical: false

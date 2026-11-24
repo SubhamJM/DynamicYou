@@ -42,7 +42,7 @@ FocusScope {
         failure = "";
         result = null;
         worker.command = ["python3", Quickshell.shellPath("scripts/wallpaper_sorter.py"),
-            "--dest", library, "--json", "--", source];
+            "--json", "--in-place", "--", source];
         worker.running = true;
     }
 
@@ -222,7 +222,7 @@ FocusScope {
 
         Text {
             Layout.fillWidth: true
-            text: "Copies images by color into the theme folders in ~/Pictures/Wallpapers."
+            text: "Moves images into color theme folders inside the selected source folder."
             color: Theme.subtext
             font.family: Theme.fontFamilyBody
             font.pixelSize: 11
@@ -289,7 +289,7 @@ FocusScope {
                     ? sorter.current + " / " + sorter.total + " · " + sorter.currentFile : "Scanning folder…";
                 if (!sorter.result) return "";
                 if (sorter.result.total_found === 0) return "No supported images found in this folder.";
-                let summary = sorter.result.unique_added + " copied · " + sorter.result.duplicates_skipped + " duplicate names skipped";
+                let summary = sorter.result.unique_added + " organized · " + sorter.result.duplicates_skipped + " duplicate names skipped";
                 if (sorter.result.failed > 0) summary += " · " + sorter.result.failed + " failed";
                 return summary;
             }
@@ -315,15 +315,15 @@ FocusScope {
             SortButton {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                text: "Open Wallpaper Picker"
-                glyph: "wallpaper"
+                text: "Open Sorted Folder"
+                glyph: "folder_open"
                 enabled: !sorter.sorting
-                onClicked: root.switchMode("wallpaper", true)
+                onClicked: Quickshell.execDetached(["xdg-open", folderPath.text.trim()])
             }
             SortButton {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                text: sorter.sorting ? "Sorting…" : "Sort Wallpapers"
+                text: sorter.sorting ? "Sorting…" : "Sort This Folder"
                 glyph: "auto_awesome_mosaic"
                 primary: true
                 enabled: !sorter.sorting && folderPath.text.trim() !== ""

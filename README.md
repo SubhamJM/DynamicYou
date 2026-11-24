@@ -15,7 +15,7 @@ An expressive, modern Linux rice built on **Arch Linux**, **Hyprland**, and **Qu
 
 ## ✨ Features
 
-- 🎨 **Material You Dynamic Theming** from the active wallpaper, with six bundled wallpaper collections and opt-in app palettes.
+- 🎨 **Six preset color themes** for the shell and desktop, independent of the wallpaper.
 - 🏝️ **Dynamic Notch QuickShell**: Fluid, animated notch expanding into:
   - 📝 **Zen Editorial Notepad & Todo list** (distraction-free, Material 3 rounded pill styling).
   - 📋 **Material You Clipboard History** (dynamic sizing, smooth arrow transitions, soft dim borders).
@@ -35,9 +35,9 @@ From a Dynamic You checkout, run the installer as your normal desktop user.
 ./install.sh
 ```
 
-The installer previews the paths it will change, asks which apps should follow the wallpaper, and asks before deploying Hyprland and Quickshell. It preserves named Quickshell configs, nonconflicting custom files, existing app settings, and your wallpaper library. The install uses your existing login manager and network setup.
+The installer previews the paths it will change, asks which apps should follow the selected theme, and asks before deploying Hyprland and Quickshell. It preserves named Quickshell configs, nonconflicting custom files, existing app settings, and your wallpaper library. The install uses your existing login manager and network setup.
 
-On a fresh Arch install, run `./install.sh --deps` as your normal user with access to `sudo`. With your approval it installs Python if needed, then installs the supported Arch packages, including Quickshell with its NetworkManager integration, Matugen, and `qrencode`. Basic installation uses Arch's official repositories. Quickshell 0.3.2 and Hyprland 0.57.2 are the tested versions.
+On a fresh Arch install, run `./install.sh --deps` as your normal user with access to `sudo`. With your approval it installs Python if needed, then installs the supported Arch packages, including Quickshell with its NetworkManager integration, and `qrencode`. Basic installation uses Arch's official repositories. Quickshell 0.3.2 and Hyprland 0.57.2 are the tested versions.
 
 The installer offers to start NetworkManager and BlueZ if they are inactive. Wi-Fi and Bluetooth need their respective services and supported hardware. Use `--enable-services` to opt in from a noninteractive install. The installer keeps an already active network manager. After installing, start a Hyprland session to launch the bar.
 
@@ -59,7 +59,7 @@ Scrolling is the default layout. `Super+Ctrl+↑/↓` switches workspaces and ad
 
 ### Wallpaper-derived colors
 
-Matugen derives the shell, compositor, terminal, and app colors from your wallpaper. See the [wallpaper color setup](quickshell/scripts/matugen/README.md) for settings, Zen integration, and existing installations.
+The theme switcher applies preset colors to Quickshell, Hyprland, Kitty, GTK, and Starship. Changing wallpapers keeps the selected theme colors.
 
 ## ⌨️ Keybindings Cheat Sheet
 

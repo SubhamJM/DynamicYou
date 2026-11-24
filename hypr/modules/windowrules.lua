@@ -5,7 +5,7 @@
 hl.window_rule({
     name = "spotify-transparency",
     match = { class = "spotify" },
-    opacity = "0.90 0.80"
+    opacity = "1.0 1.0"
 })
 
 hl.window_rule({
@@ -107,7 +107,7 @@ hl.window_rule({
     keep_aspect_ratio = true,
     move = {"72%", "7%"},
     size = {"(monitor_w*0.3)", "(monitor_h*0.3)"},
-    opacity = "0.95 0.75"
+    opacity = "1.0 1.0"
 })
 
 hl.window_rule({
@@ -294,7 +294,7 @@ apply_window_rule({
   match = { tag = "viewer" },
   float = true,
   center = true,
-  opacity = "0.82 0.75"
+  opacity = "1.0 1.0"
 })
 
 apply_window_rule({
@@ -387,12 +387,12 @@ apply_window_rule({
 -- Opacities
 apply_window_rule({
   match = { class = "^(gedit|org.gnome.TextEditor|mousepad)$" },
-  opacity = "0.8 0.7"
+  opacity = "1.0 1.0"
 })
 
 apply_window_rule({
   match = { class = "^(deluge|seahorse)$" },
-  opacity = "0.9 0.8"
+  opacity = "1.0 1.0"
 })
 
 

@@ -21,6 +21,7 @@ import json
 import math
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from PIL import Image
 
@@ -178,15 +179,15 @@ def copy_image(source, destination):
         os.replace(temporary, destination)
 
 
-def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
+def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=False):
     """
     Scans source_dir for images, deduplicates by filename, classifies via Material You,
     and sorts into partitioned theme subdirectories in dest_dir.
     """
     source_path = Path(source_dir).expanduser().resolve()
-    dest_path = Path(dest_dir).expanduser().resolve()
+    dest_path = source_path if in_place else Path(dest_dir).expanduser().resolve()
 
-    if not source_path.is_dir() or source_path.is_relative_to(dest_path):
+    if not source_path.is_dir() or (not in_place and source_path.is_relative_to(dest_path)):
         message = (f"Source folder does not exist: {source_path}" if not source_path.is_dir()
                    else "Choose a source folder outside ~/Pictures/Wallpapers.")
         if as_json:
@@ -197,14 +198,22 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
 
     extensions = {".jpg", ".jpeg", ".png", ".webp"}
     files = []
+    theme_names = set(THEME_ANCHORS)
     for folder, directories, names in os.walk(source_path):
         folder = Path(folder)
-        directories[:] = [name for name in directories if folder / name != dest_path]
+        directories[:] = [name for name in directories
+                          if folder / name != dest_path
+                          and not (in_place and folder == source_path and name in theme_names)]
         files.extend(folder / name for name in names
                      if Path(name).suffix.lower() in extensions and (folder / name).is_file())
     total_files = len(files)
 
-    existing_names = collect_existing_names(dest_path)
+    existing_names = (collect_existing_names(dest_path) if not in_place else {
+        item.name.lower()
+        for theme in THEME_ANCHORS
+        for item in (dest_path / theme).glob("*")
+        if item.is_file() and item.suffix.lower() in extensions
+    })
     seen_in_batch = set()
 
     if as_json:
@@ -226,6 +235,7 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
     duplicates_skipped = 0
     unique_added = 0
     failed = 0
+    manifest_path = (source_path / (".wallpaper-sort-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".jsonl")) if in_place else None
 
     for idx, file_path in enumerate(sorted(files, key=lambda f: f.name.lower()), start=1):
         file_key = file_path.name.lower()
@@ -253,7 +263,11 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
             theme_dir.mkdir(parents=True, exist_ok=True)
             if dest_file.exists() or dest_file.is_symlink():
                 raise FileExistsError(dest_file)
-            if mode == "symlink":
+            if in_place:
+                shutil.move(file_path, dest_file)
+                with manifest_path.open("a", encoding="utf-8") as manifest:
+                    manifest.write(json.dumps({"from": str(file_path), "to": str(dest_file)}) + "\n")
+            elif mode == "symlink":
                 dest_file.symlink_to(file_path)
             elif mode == "move":
                 shutil.move(file_path, dest_file)
@@ -294,7 +308,8 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False):
             "unique_added": unique_added,
             "duplicates_skipped": duplicates_skipped,
             "failed": failed,
-            "by_theme": stats
+            "by_theme": stats,
+            "manifest": str(manifest_path) if manifest_path else ""
         }), flush=True)
     else:
         print("\n" + "═" * 70)
@@ -319,9 +334,11 @@ def main():
     parser.add_argument("--mode", choices=["copy", "symlink", "move"], default="copy",
                         help="Operation mode: copy (default), symlink, or move")
     parser.add_argument("--json", action="store_true", help="Emit line-by-line JSON events for UI consumers")
+    parser.add_argument("--in-place", action="store_true", help="Move images into theme folders inside the source folder")
 
     args = parser.parse_args()
-    return 0 if sort_directory(args.source, args.dest, mode=args.mode, as_json=args.json) else 1
+    return 0 if sort_directory(args.source, args.dest, mode=args.mode, as_json=args.json,
+                               in_place=args.in_place) else 1
 
 if __name__ == "__main__":
     sys.exit(main())

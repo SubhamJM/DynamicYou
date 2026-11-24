@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.modules.common.functions
 import qs.services
 import "HyprlandBlur.js" as HyprlandBlur
@@ -53,75 +54,75 @@ Singleton {
     m3colors: QtObject {
         property bool darkmode: true
         property bool transparent: false
-        property color m3background: "#141313"
-        property color m3onBackground: "#e6e1e1"
-        property color m3surface: "#141313"
-        property color m3surfaceDim: "#141313"
-        property color m3surfaceBright: "#3a3939"
-        property color m3surfaceContainerLowest: "#0f0e0e"
-        property color m3surfaceContainerLow: "#1c1b1c"
-        property color m3surfaceContainer: "#201f20"
-        property color m3surfaceContainerHigh: "#2b2a2a"
-        property color m3surfaceContainerHighest: "#363435"
-        property color m3onSurface: "#e6e1e1"
-        property color m3surfaceVariant: "#49464a"
-        property color m3onSurfaceVariant: "#cbc5ca"
-        property color m3inverseSurface: "#e6e1e1"
-        property color m3inverseOnSurface: "#313030"
-        property color m3outline: "#948f94"
-        property color m3outlineVariant: "#49464a"
+        property color m3background: Theme.bg
+        property color m3onBackground: Theme.text
+        property color m3surface: Theme.bg
+        property color m3surfaceDim: Theme.bg
+        property color m3surfaceBright: Theme.surfaceHighest
+        property color m3surfaceContainerLowest: Theme.bg
+        property color m3surfaceContainerLow: Theme.bgTile
+        property color m3surfaceContainer: Theme.bgTile
+        property color m3surfaceContainerHigh: Theme.surfaceHigh
+        property color m3surfaceContainerHighest: Theme.surfaceHighest
+        property color m3onSurface: Theme.text
+        property color m3surfaceVariant: Theme.bgTile
+        property color m3onSurfaceVariant: Theme.subtext
+        property color m3inverseSurface: Theme.inverseSurface
+        property color m3inverseOnSurface: Theme.fgInverseSurface
+        property color m3outline: Theme.outline
+        property color m3outlineVariant: Theme.divider
         property color m3shadow: "#000000"
         property color m3scrim: "#000000"
-        property color m3surfaceTint: "#cbc4cb"
-        property color m3primary: "#cbc4cb"
-        property color m3onPrimary: "#322f34"
-        property color m3primaryContainer: "#2d2a2f"
-        property color m3onPrimaryContainer: "#bcb6bc"
-        property color m3inversePrimary: "#615d63"
-        property color m3secondary: "#cac5c8"
-        property color m3onSecondary: "#323032"
-        property color m3secondaryContainer: "#4d4b4d"
-        property color m3onSecondaryContainer: "#ece6e9"
-        property color m3tertiary: "#d1c3c6"
-        property color m3onTertiary: "#372e30"
-        property color m3tertiaryContainer: "#31292b"
-        property color m3onTertiaryContainer: "#c1b4b7"
-        property color m3error: "#ffb4ab"
-        property color m3onError: "#690005"
-        property color m3errorContainer: "#93000a"
-        property color m3onErrorContainer: "#ffdad6"
-        property color m3primaryFixed: "#e7e0e7"
-        property color m3primaryFixedDim: "#cbc4cb"
-        property color m3onPrimaryFixed: "#1d1b1f"
-        property color m3onPrimaryFixedVariant: "#49454b"
-        property color m3secondaryFixed: "#e6e1e4"
-        property color m3secondaryFixedDim: "#cac5c8"
-        property color m3onSecondaryFixed: "#1d1b1d"
-        property color m3onSecondaryFixedVariant: "#484648"
-        property color m3tertiaryFixed: "#eddfe1"
-        property color m3tertiaryFixedDim: "#d1c3c6"
-        property color m3onTertiaryFixed: "#211a1c"
-        property color m3onTertiaryFixedVariant: "#4e4447"
-        property color m3success: "#B5CCBA"
-        property color m3onSuccess: "#213528"
-        property color m3successContainer: "#374B3E"
-        property color m3onSuccessContainer: "#D1E9D6"
-        property color term0: "#EDE4E4"
-        property color term1: "#B52755"
-        property color term2: "#A97363"
-        property color term3: "#AF535D"
-        property color term4: "#A67F7C"
-        property color term5: "#B2416B"
-        property color term6: "#8D76AD"
-        property color term7: "#272022"
-        property color term8: "#0E0D0D"
-        property color term9: "#B52755"
-        property color term10: "#A97363"
-        property color term11: "#AF535D"
-        property color term12: "#A67F7C"
-        property color term13: "#B2416B"
-        property color term14: "#8D76AD"
-        property color term15: "#221A1A"
+        property color m3surfaceTint: Theme.primary
+        property color m3primary: Theme.primary
+        property color m3onPrimary: Theme.fgPrimary
+        property color m3primaryContainer: Theme.primaryContainer
+        property color m3onPrimaryContainer: Theme.fgPrimaryContainer
+        property color m3inversePrimary: Theme.primary
+        property color m3secondary: Theme.secondary
+        property color m3onSecondary: Theme.fgSecondary
+        property color m3secondaryContainer: Theme.secondaryContainer
+        property color m3onSecondaryContainer: Theme.fgSecondaryContainer
+        property color m3tertiary: Theme.tertiary
+        property color m3onTertiary: Theme.fgPrimary
+        property color m3tertiaryContainer: Theme.tertiaryContainer
+        property color m3onTertiaryContainer: Theme.fgTertiaryContainer
+        property color m3error: Theme.error
+        property color m3onError: Theme.fgInverseSurface
+        property color m3errorContainer: Theme.errorContainer
+        property color m3onErrorContainer: Theme.fgErrorContainer
+        property color m3primaryFixed: Theme.primary
+        property color m3primaryFixedDim: Theme.primary
+        property color m3onPrimaryFixed: Theme.fgPrimary
+        property color m3onPrimaryFixedVariant: Theme.fgPrimaryContainer
+        property color m3secondaryFixed: Theme.secondary
+        property color m3secondaryFixedDim: Theme.secondary
+        property color m3onSecondaryFixed: Theme.fgSecondary
+        property color m3onSecondaryFixedVariant: Theme.fgSecondaryContainer
+        property color m3tertiaryFixed: Theme.tertiary
+        property color m3tertiaryFixedDim: Theme.tertiary
+        property color m3onTertiaryFixed: Theme.fgPrimary
+        property color m3onTertiaryFixedVariant: Theme.fgTertiaryContainer
+        property color m3success: Theme.success
+        property color m3onSuccess: Theme.fgInverseSurface
+        property color m3successContainer: Theme.bgTile
+        property color m3onSuccessContainer: Theme.success
+        property color term0: Theme.text
+        property color term1: Theme.error
+        property color term2: Theme.success
+        property color term3: Theme.primary
+        property color term4: Theme.subtext
+        property color term5: Theme.tertiary
+        property color term6: Theme.secondary
+        property color term7: Theme.text
+        property color term8: Theme.bg
+        property color term9: Theme.error
+        property color term10: Theme.success
+        property color term11: Theme.primary
+        property color term12: Theme.subtext
+        property color term13: Theme.tertiary
+        property color term14: Theme.secondary
+        property color term15: Theme.bgTile
     }
 
     colors: QtObject {

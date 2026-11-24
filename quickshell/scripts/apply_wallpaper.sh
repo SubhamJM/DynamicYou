@@ -19,5 +19,3 @@ active_dir="${XDG_CONFIG_HOME:-$HOME/.config}/active-theme"
 mkdir -p "$active_dir"
 ln -sfn -- "$target" "$active_dir/current-wallpaper"
 printf '%s\n' "$target" > "$active_dir/current-wallpaper.txt"
-
-python3 "$(dirname "$(realpath -- "${BASH_SOURCE[0]}")")/matugen/update.py" "$target" || true

@@ -11,7 +11,7 @@ Row {
 
     signal openRequested(string tab)
 
-    visible: runningTimer !== null || Chrono.swRunning
+    visible: false
     spacing: 6
 
     Rectangle {

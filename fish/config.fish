@@ -1,5 +1,6 @@
 if status is-interactive
-    # Starship custom prompt
+    # Theme-owned Starship prompt
+    set -gx STARSHIP_CONFIG "$HOME/.config/active-theme/starship.toml"
     if command -v starship >/dev/null 2>&1
         starship init fish | source
         disable_transience 2>/dev/null
@@ -57,7 +58,6 @@ if status is-interactive
     abbr -a clean "sudo pacman -Sc"
 
     # Custom colours
-    cat ~/.local/state/caelestia/sequences.txt 2> /dev/null
 
     # For jumping between prompts in foot terminal
     function mark_prompt_start --on-event fish_prompt

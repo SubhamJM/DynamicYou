@@ -1288,29 +1288,16 @@ Item {
 
                         Text {
                             anchors.centerIn: parent
-                            anchors.verticalCenterOffset: (wsCell.hasWindows && !wsCell.isFocused) ? -2 : 0
                             text: String(wsCell.wsId)
                             color: wsCell.isFocused
                                 ? (Theme.colors.on_primary ?? "#000000")
-                                : (wsCellMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : (wsCell.hasWindows ? "#ffffff" : Qt.rgba(255, 255, 255, 0.40)))
+                                : (wsCellMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : (wsCell.hasWindows ? "#ffffff" : Qt.rgba(255, 255, 255, 0.35)))
                             font.family: "Inter, Noto Sans"
                             font.pixelSize: 12
                             font.weight: Font.Black
                             renderType: Text.NativeRendering
-                        }
 
-                        // Dot only for workspaces with active windows (no background aura)
-                        Rectangle {
-                            visible: wsCell.hasWindows && !wsCell.isFocused
-                            width: 3.5
-                            height: 3.5
-                            radius: 1.75
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 2.5
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            color: wsCellMouse.containsMouse ? Qt.lighter(Theme.accent, 1.2) : Theme.accent
-
-                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on color { ColorAnimation { duration: 160 } }
                         }
 
                         MouseArea {

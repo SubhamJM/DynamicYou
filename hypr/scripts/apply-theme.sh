@@ -27,6 +27,30 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
     ln -sf "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" "$ACTIVE_DIR/quickshell-colors.json" || exit 1
     ln -sf "$THEMES_DIR/$TARGET_THEME/theme-name.txt" "$ACTIVE_DIR/theme-name.txt" || exit 1
     ln -sf "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" "$ACTIVE_DIR/starship-colors.toml"
+    python3 "$CONFIG_DIR/quickshell/scripts/theme_palette.py" \
+        "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" "$ACTIVE_DIR/material.json" || exit 1
+
+    if [[ -f "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" ]]; then
+        mkdir -p "$CONFIG_DIR/gtk-3.0" "$CONFIG_DIR/gtk-4.0"
+        cp "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" "$CONFIG_DIR/gtk-3.0/gtk.css"
+        cp "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" "$CONFIG_DIR/gtk-4.0/gtk.css"
+        command -v gsettings >/dev/null && gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+        command -v xsettingsd >/dev/null && pkill -HUP xsettingsd 2>/dev/null || true
+    fi
+    if [[ -f "$CONFIG_DIR/fish/base.toml" ]]; then
+        starship_temp=$(mktemp "$ACTIVE_DIR/starship.toml.XXXXXX") || exit 1
+        cat "$CONFIG_DIR/fish/base.toml" "$ACTIVE_DIR/starship-colors.toml" > "$starship_temp" || exit 1
+        mv -f "$starship_temp" "$ACTIVE_DIR/starship.toml" || exit 1
+    fi
+    if command -v kitty >/dev/null && [[ -f "$CONFIG_DIR/kitty/kitty.conf" ]]; then
+        for kitty_socket in /tmp/mykitty-*; do
+            [[ -S "$kitty_socket" && -O "$kitty_socket" ]] || continue
+            kitty @ --to "unix:$kitty_socket" load-config "$CONFIG_DIR/kitty/kitty.conf" >/dev/null 2>&1 || true
+        done
+        if [[ -n "${KITTY_LISTEN_ON:-}" ]]; then
+            kitty @ --to "$KITTY_LISTEN_ON" load-config "$CONFIG_DIR/kitty/kitty.conf" >/dev/null 2>&1 || true
+        fi
+    fi
 
     # --- 5. Generate Hyprlock colors ---
     ACCENT_HEX="89b4fa"
@@ -44,6 +68,16 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
 EOF
 
     THEME_LOWER="${TARGET_THEME,,}"
+    case "$THEME_LOWER" in
+        afterglow) NVIM_THEME="rose-pine" ;;
+        crimson) NVIM_THEME="monokai-pro" ;;
+        frost) NVIM_THEME="e-ink" ;;
+        solstice) NVIM_THEME="gruvbox" ;;
+        verdant) NVIM_THEME="everforest" ;;
+        *) NVIM_THEME="tokyonight-night" ;;
+    esac
+    mkdir -p "$HOME/.local/state/nvim"
+    printf '%s\n' "$NVIM_THEME" > "$HOME/.local/state/nvim/active_colorscheme"
 
     # Read active transition (fallback to "simple" if file doesn't exist)
     TRANSITION="simple"
@@ -112,12 +146,7 @@ EOF
         fi
     fi
 
-    if [[ -n "$RANDOM_WALLPAPER" ]]; then
-        PALETTE="$CONFIG_DIR/quickshell/scripts/matugen/update.py"
-        if [[ -f "$PALETTE" ]]; then
-            python3 "$PALETTE" "$RANDOM_WALLPAPER" || hyprctl reload 2>/dev/null || true
-        fi
-    fi
+    command -v hyprctl >/dev/null && hyprctl reload >/dev/null 2>&1 || true
     qs ipc call notch reloadTheme >/dev/null 2>&1 &
 
     notify-send "Theme Applied" "Activated $TARGET_THEME" || true
