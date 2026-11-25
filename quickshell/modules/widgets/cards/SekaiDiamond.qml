@@ -1,5 +1,6 @@
 import QtQuick
 import "../../../"
+import "../"
 
 Rectangle {
     id: root
@@ -8,16 +9,16 @@ Rectangle {
     property color litColor: Theme.m3.secondary ?? "#67e8f9"
     property color offColor: Qt.alpha(Theme.m3.on_surface ?? "#e0f8ff", 0.25)
     property color lineColor: Qt.darker(Theme.m3.surface_container_lowest ?? "#030a16", 1.35)
-    property real size: 11
+    property real size: WidgetStore.s(11)
     property real pop: 1
 
     width: root.size
     height: root.size
-    radius: Math.max(2, root.size * 0.25)
+    radius: Math.max(WidgetStore.s(2), root.size * 0.25)
     rotation: 45
     scale: root.pop
     color: root.lit ? root.litColor : root.offColor
-    border.width: 2
+    border.width: Math.max(1, WidgetStore.s(2))
     border.color: root.lineColor
     antialiasing: true
 

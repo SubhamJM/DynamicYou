@@ -3,6 +3,7 @@ import QtQuick.Effects
 import "../../../"
 import "../../../lucidbar"
 import "../../"
+import "../"
 
 Item {
     id: root
@@ -32,19 +33,19 @@ Item {
     ExpressiveShape {
         id: backgroundShape
         anchors.centerIn: parent
-        width: Math.min(root.width - 28, root.height - 28, 224)
+        width: Math.min(root.width - WidgetStore.s(28), root.height - WidgetStore.s(28), WidgetStore.s(224))
         height: width
         shape: "pill"
         color: root.pillBg
 
         layer.enabled: root.visible && width > 1 && height > 1
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.45)
             shadowBlur: 0.75
-            shadowVerticalOffset: 5
+            shadowVerticalOffset: WidgetStore.s(5)
             autoPaddingEnabled: true
         }
     }
@@ -60,7 +61,7 @@ Item {
             text: root.tempText
             color: root.pillAccent
             font.family: "Google Sans Flex"
-            font.pixelSize: 74
+            font.pixelSize: WidgetStore.si(74)
             font.weight: Font.Medium
             font.variableAxes: ({ "ROND": 35, "wdth": 75 })
             font.hintingPreference: Font.PreferVerticalHinting
@@ -68,13 +69,13 @@ Item {
             anchors {
                 top: parent.top
                 right: parent.right
-                topMargin: 16
-                rightMargin: 14
+                topMargin: WidgetStore.s(16)
+                rightMargin: WidgetStore.s(14)
             }
         }
 
         WeatherIcon {
-            size: 76
+            size: WidgetStore.s(76)
             kind: root.kind
             tint: root.pillFg
             cloudColor: root.pillFg
@@ -82,8 +83,8 @@ Item {
             anchors {
                 left: parent.left
                 bottom: parent.bottom
-                leftMargin: 16
-                bottomMargin: 18
+                leftMargin: WidgetStore.s(16)
+                bottomMargin: WidgetStore.s(18)
             }
         }
     }

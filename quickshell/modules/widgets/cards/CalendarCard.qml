@@ -1,5 +1,6 @@
 import QtQuick
 import "../../../"
+import "../"
 
 Rectangle {
     id: root
@@ -9,7 +10,7 @@ Rectangle {
     readonly property var monthNames: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     readonly property var weekdayNames: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-    radius: 24
+    radius: WidgetStore.s(24)
     color: Theme.m3.surface_container_high ?? Theme.colors.hover_bg
     clip: true
 
@@ -24,7 +25,7 @@ Rectangle {
     Rectangle {
         id: headingBand
         anchors { top: parent.top; left: parent.left; right: parent.right }
-        height: Math.max(42, root.height * 0.34)
+        height: Math.max(WidgetStore.s(42), root.height * 0.34)
         color: Theme.m3.secondary_container ?? Theme.colors.card_bg
         topLeftRadius: root.radius
         topRightRadius: root.radius
@@ -36,7 +37,7 @@ Rectangle {
             text: root.monthNames[root.currentDate.getMonth()] + "  " + root.weekdayNames[root.currentDate.getDay()]
             color: Theme.m3.on_secondary_container ?? Theme.colors.text_primary
             font.family: "Google Sans Flex"
-            font.pixelSize: 13
+            font.pixelSize: WidgetStore.si(13)
             font.weight: Font.Bold
             font.letterSpacing: 0.6
             font.hintingPreference: Font.PreferVerticalHinting

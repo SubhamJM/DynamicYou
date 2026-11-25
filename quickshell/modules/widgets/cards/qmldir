@@ -11,5 +11,6 @@ SekaiBurst 1.0 SekaiBurst.qml
 SekaiDiamond 1.0 SekaiDiamond.qml
 SekaiLyricsLine 1.0 SekaiLyricsLine.qml
 SekaiLyricsWord 1.0 SekaiLyricsWord.qml
+SekaiPill 1.0 SekaiPill.qml
 SparklineCanvas 1.0 SparklineCanvas.qml
 WeatherPillCard 1.0 WeatherPillCard.qml

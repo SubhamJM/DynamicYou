@@ -72,12 +72,12 @@ Item {
 
                 layer.enabled: cookieClock.visible && width > 1 && height > 1
                 layer.smooth: true
-                layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+                layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
                 layer.effect: MultiEffect {
                     shadowEnabled: true
                     shadowColor: Qt.rgba(0, 0, 0, 0.45)
                     shadowBlur: 0.7
-                    shadowVerticalOffset: 4
+                    shadowVerticalOffset: WidgetStore.s(4)
                     autoPaddingEnabled: true
                 }
             }
@@ -123,7 +123,7 @@ Item {
                     height: Math.round(8 * cookieClock.k)
                     radius: height / 2
                     color: Qt.alpha(root.colTertiary, 0.45)
-                    border.width: 2
+                    border.width: Math.max(1, WidgetStore.s(2))
                     border.color: Qt.alpha(root.colTertiary, 0.85)
                 }
             }
@@ -143,7 +143,7 @@ Item {
                     height: Math.round(16 * cookieClock.k)
                     radius: height / 2
                     color: Qt.alpha(root.colPrimary, 0.38)
-                    border.width: 2.5
+                    border.width: Math.max(1, WidgetStore.s(2.5))
                     border.color: Qt.alpha(root.colPrimary, 0.92)
                 }
             }
@@ -195,9 +195,9 @@ Item {
             // Center Pin
             Rectangle {
                 anchors.centerIn: parent
-                width: 6
-                height: 6
-                radius: 3
+                width: WidgetStore.s(6)
+                height: WidgetStore.s(6)
+                radius: WidgetStore.s(3)
                 color: root.colTertiary
                 z: 4
             }
@@ -205,13 +205,13 @@ Item {
 
         // Expressive corner BubbleDate badges (Day top-left Pentagon, Month bottom-right Pill)
         Item {
-            width: 58
-            height: 58
+            width: WidgetStore.s(58)
+            height: WidgetStore.s(58)
             anchors {
                 top: parent.top
                 left: parent.left
-                topMargin: 8
-                leftMargin: 8
+                topMargin: WidgetStore.s(8)
+                leftMargin: WidgetStore.s(8)
             }
             z: 7
 
@@ -226,7 +226,7 @@ Item {
                 text: String(root.currentTime.getDate()).padStart(2, "0")
                 color: Theme.m3.on_tertiary_container ?? root.colOnSecondaryContainer
                 font.family: "Google Sans Flex"
-                font.pixelSize: 24
+                font.pixelSize: WidgetStore.si(24)
                 font.weight: Font.Black
                 font.variableAxes: ({ "ROND": 30, "wdth": 75 })
                 font.hintingPreference: Font.PreferVerticalHinting
@@ -235,13 +235,13 @@ Item {
         }
 
         Item {
-            width: 58
-            height: 58
+            width: WidgetStore.s(58)
+            height: WidgetStore.s(58)
             anchors {
                 bottom: parent.bottom
                 right: parent.right
-                bottomMargin: 8
-                rightMargin: 8
+                bottomMargin: WidgetStore.s(8)
+                rightMargin: WidgetStore.s(8)
             }
             z: 7
 
@@ -256,7 +256,7 @@ Item {
                 text: String(root.currentTime.getMonth() + 1).padStart(2, "0")
                 color: root.colOnSecondaryContainer
                 font.family: "Google Sans Flex"
-                font.pixelSize: 24
+                font.pixelSize: WidgetStore.si(24)
                 font.weight: Font.Black
                 font.variableAxes: ({ "ROND": 30, "wdth": 75 })
                 font.hintingPreference: Font.PreferVerticalHinting
@@ -272,47 +272,47 @@ Item {
         id: digitalClock
         visible: root.digitalMode
         anchors.fill: parent
-        radius: 24
+        radius: WidgetStore.s(24)
         color: root.colPrimaryContainer
 
         Column {
             anchors.centerIn: parent
-            spacing: 4
+            spacing: WidgetStore.s(4)
 
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 8
+                spacing: WidgetStore.s(8)
 
                 Text {
                     text: String(root.is12h ? root.hour12 : root.hour24).padStart(2, "0")
                     color: root.colPrimary
                     font.family: "Google Sans Flex"
-                    font.pixelSize: 104
+                    font.pixelSize: WidgetStore.si(104)
                     font.weight: Font.Medium
                     font.variableAxes: ({ "ROND": 25, "wdth": 32 })
                     font.hintingPreference: Font.PreferVerticalHinting
-                renderType: Text.NativeRendering
+                    renderType: Text.NativeRendering
                 }
 
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 4
+                    spacing: WidgetStore.s(4)
                     Text {
                         text: String(root.minute).padStart(2, "0")
                         color: root.colSecondary
                         font.family: "Google Sans Flex"
-                        font.pixelSize: 64
+                        font.pixelSize: WidgetStore.si(64)
                         font.weight: Font.Medium
                         font.variableAxes: ({ "ROND": 25, "wdth": 32 })
                         font.hintingPreference: Font.PreferVerticalHinting
-                renderType: Text.NativeRendering
+                        renderType: Text.NativeRendering
                     }
                     Rectangle {
                         visible: root.is12h
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: periodLbl.implicitWidth + 14
-                        height: 22
-                        radius: 8
+                        width: periodLbl.implicitWidth + WidgetStore.s(14)
+                        height: WidgetStore.s(22)
+                        radius: WidgetStore.s(8)
                         color: root.colSecondaryContainer
                         Text {
                             id: periodLbl
@@ -320,10 +320,10 @@ Item {
                             text: root.hour24 >= 12 ? "PM" : "AM"
                             color: root.colOnSecondaryContainer
                             font.family: "Google Sans Flex"
-                            font.pixelSize: 12
+                            font.pixelSize: WidgetStore.si(12)
                             font.weight: Font.Bold
                             font.hintingPreference: Font.PreferVerticalHinting
-                renderType: Text.NativeRendering
+                            renderType: Text.NativeRendering
                         }
                     }
                 }
@@ -334,7 +334,7 @@ Item {
                 text: root.dateText
                 color: root.colOnSurface
                 font.family: "Google Sans Flex"
-                font.pixelSize: 15
+                font.pixelSize: WidgetStore.si(15)
                 font.weight: Font.DemiBold
                 font.letterSpacing: 0.8
                 font.hintingPreference: Font.PreferVerticalHinting

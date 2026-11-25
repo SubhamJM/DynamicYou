@@ -1,5 +1,6 @@
 import QtQuick
 import "../../../"
+import "../"
 import "LyricsMath.js" as LM
 
 Item {
@@ -22,9 +23,9 @@ Item {
     property real rush: 0
     property real prevRush: 0
     property real prevEnd: 0
-    property real maxW: 430
+    property real maxW: WidgetStore.s(430)
     property real poseScaleY: 0.76
-    property int px: 28
+    property int px: WidgetStore.si(28)
     property real cx: 0
     property real cy: 0
 
@@ -73,7 +74,7 @@ Item {
     Behavior on dim { NumberAnimation { duration: 320 } }
 
     x: line.cx
-    y: line.cy + line.pose.y * line.poseScaleY
+    y: line.cy + line.pose.y * line.poseScaleY * WidgetStore.uiScale
     width: 0
     height: 0
 
@@ -147,7 +148,7 @@ Item {
                     SekaiLyricsWord {
                         id: wordItem
                         x: cell.gapW - (wordItem.implicitWidth - cell.fullW) / 2
-                        y: -line.px * 0.22 * cell.lift + 2.5 * cell.hitV - (cell.ad ? line.px * 0.1 : 0)
+                        y: -line.px * 0.22 * cell.lift + WidgetStore.s(2.5) * cell.hitV - (cell.ad ? line.px * 0.1 : 0)
                         text: cell.modelData.s
                         pixelSize: line.px
                         withFill: line.litOn
@@ -225,7 +226,7 @@ Item {
             opacity: line.bgIn
             spacing: Math.round(line.bgPx * 0.3)
             x: Math.round((row.implicitWidth - bgRow.width) / 2)
-            y: Math.round(line.pad - bgRow.height * 0.8 + line.px * 0.22 + (1 - line.bgIn) * 8)
+            y: Math.round(line.pad - bgRow.height * 0.8 + line.px * 0.22 + (1 - line.bgIn) * WidgetStore.s(8))
 
             Repeater {
                 model: line.bgToks

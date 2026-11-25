@@ -4,6 +4,7 @@ import QtQuick.Shapes
 import Qt5Compat.GraphicalEffects
 import "../../../"
 import "../../"
+import "../"
 
 Item {
     id: root
@@ -20,7 +21,7 @@ Item {
 
     readonly property real targetLevel: root.valueAvailable ? Math.max(0, Math.min(1, root.level)) : 0
     property real animatedLevel: targetLevel
-    readonly property real waveAmplitude: Math.min(9, height * 0.06)
+    readonly property real waveAmplitude: Math.min(WidgetStore.s(9), height * 0.06)
         * Math.max(0, Math.min(1, animatedLevel / 0.08, (1 - animatedLevel) / 0.08))
 
     Behavior on animatedLevel {
@@ -29,26 +30,26 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 24
+        radius: WidgetStore.s(24)
         color: root.shapeColor
     }
 
     Rectangle {
         id: vesselMask
         anchors.fill: parent
-        radius: 24
+        radius: WidgetStore.s(24)
         color: "white"
         visible: false
         layer.enabled: true
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
     }
 
     Item {
         anchors.fill: parent
         layer.enabled: root.visible && width > 1 && height > 1
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         layer.effect: OpacityMask { maskSource: vesselMask }
 
         OceanWave {
@@ -78,8 +79,8 @@ Item {
     }
 
     ColumnLayout {
-        anchors { fill: parent; margins: 10 }
-        spacing: -2
+        anchors { fill: parent; margins: WidgetStore.s(10) }
+        spacing: -WidgetStore.s(2)
 
         Item { Layout.fillHeight: true }
 
@@ -87,7 +88,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             text: root.iconName
             color: root.contentColor
-            iconSize: 28
+            iconSize: WidgetStore.si(28)
             fill: 1
         }
 
@@ -96,7 +97,7 @@ Item {
             text: root.valueText
             color: root.contentColor
             font.family: "Google Sans Flex"
-            font.pixelSize: 28
+            font.pixelSize: WidgetStore.si(28)
             font.weight: Font.DemiBold
             font.variableAxes: ({ "ROND": 25, "wdth": 65 })
             horizontalAlignment: Text.AlignHCenter
@@ -111,7 +112,7 @@ Item {
             color: root.contentColor
             opacity: 0.86
             font.family: "Noto Sans"
-            font.pixelSize: 11
+            font.pixelSize: WidgetStore.si(11)
             font.weight: Font.DemiBold
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideMiddle

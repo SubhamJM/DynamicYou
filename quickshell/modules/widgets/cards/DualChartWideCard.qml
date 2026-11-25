@@ -2,6 +2,7 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import "../../../"
 import "../../"
+import "../"
 
 Item {
     id: root
@@ -46,7 +47,7 @@ Item {
     // Left colored chart panel
     Rectangle {
         anchors.fill: parent
-        radius: 24
+        radius: WidgetStore.s(24)
         color: root.leftColor
     }
 
@@ -54,7 +55,7 @@ Item {
         text: root.title
         color: root.leftForeground
         font.family: "Google Sans Flex"
-        font.pixelSize: 28
+        font.pixelSize: WidgetStore.si(28)
         font.weight: Font.Black
         font.variableAxes: ({ "GRAD": 100, "ROND": 35, "wdth": 85 })
         font.hintingPreference: Font.PreferVerticalHinting
@@ -62,8 +63,8 @@ Item {
         anchors {
             left: parent.left
             top: parent.top
-            leftMargin: 16
-            topMargin: 14
+            leftMargin: WidgetStore.s(16)
+            topMargin: WidgetStore.s(14)
         }
     }
 
@@ -77,15 +78,15 @@ Item {
         fillOpacity: 0.22
         lineColor: root.leftForeground
         secondaryLineColor: Qt.alpha(root.leftForeground, 0.42)
-        lineWidth: 2.2
+        lineWidth: WidgetStore.s(2.2)
         anchors {
             left: parent.left
             right: rightPanel.left
             top: parent.top
             bottom: parent.bottom
-            topMargin: 50
-            bottomMargin: 8
-            rightMargin: 2
+            topMargin: WidgetStore.s(50)
+            bottomMargin: WidgetStore.s(8)
+            rightMargin: WidgetStore.s(2)
         }
     }
 
@@ -96,7 +97,7 @@ Item {
         y: 0
         width: root.width - x
         height: root.height
-        radius: 24
+        radius: WidgetStore.s(24)
         color: root.rightColor
         clip: true
         z: 2
@@ -104,30 +105,30 @@ Item {
         Column {
             anchors {
                 fill: parent
-                leftMargin: 14
-                rightMargin: 14
-                topMargin: 10
-                bottomMargin: 10
+                leftMargin: WidgetStore.s(14)
+                rightMargin: WidgetStore.s(14)
+                topMargin: WidgetStore.s(10)
+                bottomMargin: WidgetStore.s(10)
             }
-            spacing: 2
+            spacing: WidgetStore.s(2)
 
             // Interactive source selector pill button (cycles interface/disk cleanly)
             Rectangle {
                 id: selectorBtn
                 width: parent.width
-                height: 34
-                radius: 10
+                height: WidgetStore.s(34)
+                radius: WidgetStore.s(10)
                 color: selectorMouse.containsMouse ? Qt.lighter(root.leftColor, 1.12) : root.leftColor
 
                 Row {
                     anchors.centerIn: parent
-                    spacing: 6
-                    width: Math.min(implicitWidth, parent.width - 16)
+                    spacing: WidgetStore.s(6)
+                    width: Math.min(implicitWidth, parent.width - WidgetStore.s(16))
 
                     MaterialSymbol {
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.selectorIcon
-                        iconSize: 16
+                        iconSize: WidgetStore.si(16)
                         color: root.leftForeground
                     }
 
@@ -136,11 +137,11 @@ Item {
                         text: root.selectorLabel
                         color: root.leftForeground
                         font.family: "Noto Sans"
-                        font.pixelSize: 12
+                        font.pixelSize: WidgetStore.si(12)
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                         font.hintingPreference: Font.PreferVerticalHinting
-            renderType: Text.NativeRendering
+                        renderType: Text.NativeRendering
                     }
                 }
 
@@ -155,7 +156,7 @@ Item {
 
             RateRow {
                 width: parent.width
-                height: (parent.height - 34 - parent.spacing * 2) / 2
+                height: (parent.height - WidgetStore.s(34) - parent.spacing * 2) / 2
                 iconName: root.metric1Icon
                 value: root.metric1Value
                 accentColor: root.metric1Color
@@ -163,7 +164,7 @@ Item {
 
             RateRow {
                 width: parent.width
-                height: (parent.height - 34 - parent.spacing * 2) / 2
+                height: (parent.height - WidgetStore.s(34) - parent.spacing * 2) / 2
                 iconName: root.metric2Icon
                 value: root.metric2Value
                 accentColor: root.metric2Color
@@ -180,7 +181,7 @@ Item {
         MaterialSymbol {
             id: rowIcon
             text: rowItem.iconName
-            iconSize: 24
+            iconSize: WidgetStore.si(24)
             fill: 1
             color: rowItem.accentColor
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
@@ -190,7 +191,7 @@ Item {
             text: rowItem.value
             color: root.rightForeground
             font.family: "Google Sans Flex"
-            font.pixelSize: 22
+            font.pixelSize: WidgetStore.si(22)
             font.weight: Font.Black
             font.variableAxes: ({ "GRAD": 100, "ROND": 35, "wdth": 85 })
             elide: Text.ElideRight
@@ -200,7 +201,7 @@ Item {
                 left: rowIcon.right
                 right: parent.right
                 verticalCenter: parent.verticalCenter
-                leftMargin: 8
+                leftMargin: WidgetStore.s(8)
             }
         }
     }

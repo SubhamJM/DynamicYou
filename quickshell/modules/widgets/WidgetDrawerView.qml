@@ -2,10 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import "../../"
 import "../"
+import "./cards"
 import "WidgetCatalog.js" as Catalog
-import "WidgetGrid.js" as Grid
-import "WidgetState.js" as State
 import "WidgetDesktopLayout.js" as DesktopLayout
+import "WidgetState.js" as State
 
 Item {
     id: root
@@ -15,82 +15,17 @@ Item {
     property var notchRoot: null
     property var sidebarContainsFn: null
 
-    readonly property var activeSidebarIds: {
-        const ids = (WidgetStore.sidebarCardIds || []).slice();
-        if (WidgetDragSession.active && WidgetDragSession.tileId !== ""
-                && ids.indexOf(WidgetDragSession.tileId) === -1) {
-            ids.push(WidgetDragSession.tileId);
-        }
-        return ids;
-    }
-
-    readonly property int gridContentWidth: Catalog.canvasWidth
-    readonly property int gridContentHeight: {
-        const base = Grid.contentHeight(committedLayout, activeSidebarIds);
-        return (dragTargetValid && !desktopExtraction)
-            ? Math.max(base, Grid.contentHeight(previewLayout, activeSidebarIds))
-            : base;
-    }
-
-    readonly property var dropPlacement: dragTargetValid
-        ? Grid.placementFor(previewLayout, draggingTileId)
-        : null
-
-    property var committedLayout: hydrateLayout()
-    property var previewLayout: []
+    readonly property var catalogDefs: Catalog.all()
     property string draggingTileId: ""
-    property Item dragSourceItem: null
-    property real dragLiveX: 0
-    property real dragLiveY: 0
-    property real dragGrabOffsetX: 0
-    property real dragGrabOffsetY: 0
-    property int targetX: -1
-    property int targetY: -1
-    property bool dragTargetValid: false
-    property bool desktopExtraction: false
-    property bool motionEnabled: true
-
-    // Inline right-click context menu state
     property string menuTileId: ""
     property real menuX: 0
     property real menuY: 0
-
-    function hydrateLayout() {
-        const activeIds = activeSidebarIds;
-        const preferredAnchors = {};
-        const saved = [];
-        activeIds.forEach(id => {
-            const a = WidgetStore.sidebarAnchor(id);
-            if (a) {
-                preferredAnchors[id] = a;
-                saved.push({ id: id, x: a.x, y: a.y });
-            }
-        });
-        return Grid.hydrateSaved({ version: 1, tiles: saved }, activeIds, preferredAnchors);
-    }
-
-    function syncLayoutFromStore() {
-        if (draggingTileId !== "") return;
-        motionEnabled = false;
-        committedLayout = hydrateLayout();
-        Qt.callLater(() => { motionEnabled = true; });
-    }
-
-    onActiveSidebarIdsChanged: syncLayoutFromStore()
-
-    Connections {
-        target: WidgetStore
-        function onLayoutResetRequested() {
-            root.motionEnabled = true;
-            root.committedLayout = Grid.defaultLayout(root.activeSidebarIds, {});
-        }
-    }
 
     Connections {
         target: WidgetDragSession
         function onCanceled() {
             if (root.draggingTileId !== "") {
-                root.resetDragState(true);
+                root.draggingTileId = "";
             }
         }
     }
@@ -102,401 +37,357 @@ Item {
         return true;
     }
 
-    function resetDragState(preserveMotion) {
-        if (!preserveMotion) root.motionEnabled = false;
-        root.draggingTileId = "";
-        root.dragSourceItem = null;
-        root.previewLayout = [];
-        root.targetX = -1;
-        root.targetY = -1;
-        root.dragTargetValid = false;
-        root.desktopExtraction = false;
-        if (!preserveMotion) Qt.callLater(() => { root.motionEnabled = true; });
-    }
-
-    function displayPlacement(tileId) {
-        if (draggingTileId.length > 0 && dragTargetValid && !desktopExtraction) {
-            return Grid.placementFor(previewLayout, tileId) || Grid.placementFor(committedLayout, tileId);
-        }
-        return Grid.placementFor(committedLayout, tileId);
-    }
-
-    function startDrag(tileId, sourceItem, grabX, grabY, localX, localY) {
-        menuTileId = "";
-        if (WidgetDragSession.active) return;
-        const pl = Grid.placementFor(committedLayout, tileId);
-        if (!pl) return;
-        if (!WidgetDragSession.begin(tileId, sourceItem, grabX, grabY)) return;
-
-        draggingTileId = tileId;
-        dragSourceItem = sourceItem;
-        dragGrabOffsetX = grabX;
-        dragGrabOffsetY = grabY;
-        dragLiveX = pl.x;
-        dragLiveY = pl.y;
-        targetX = pl.x;
-        targetY = pl.y;
-        previewLayout = committedLayout.slice();
-        dragTargetValid = true;
-        desktopExtraction = false;
-    }
-
-    function updateDrag(tileId, pointerLocalX, pointerLocalY) {
-        if (tileId !== draggingTileId || !dragSourceItem) return;
-
-        const winPt = dragSourceItem.mapToItem(null, pointerLocalX, pointerLocalY);
-        const insideSidebar = sidebarContainsWindowPoint(winPt.x, winPt.y);
-
-        if (!insideSidebar) {
-            const hostPt = WidgetDragSession.mapItemPoint(root.screenName, dragSourceItem, pointerLocalX, pointerLocalY);
-            const host = WidgetDragSession.hostFor(root.screenName);
-            if (hostPt && host) {
-                if (!desktopExtraction) {
-                    const srcRect = WidgetDragSession.mapItemRect(root.screenName, dragSourceItem);
-                    const grabOffX = srcRect ? (hostPt.x - srcRect.x) : dragGrabOffsetX;
-                    const grabOffY = srcRect ? (hostPt.y - srcRect.y) : dragGrabOffsetY;
-                    if (WidgetDragSession.promoteToDesktop(
-                            root.screenName, hostPt.x, hostPt.y,
-                            grabOffX, grabOffY,
-                            dragSourceItem.width, dragSourceItem.height,
-                            host.width, host.height)) {
-                        desktopExtraction = true;
-                        previewLayout = [];
-                        dragTargetValid = false;
-                        targetX = -1;
-                        targetY = -1;
-                    }
-                } else {
-                    WidgetDragSession.update(hostPt.x, hostPt.y);
-                }
-            }
-            return;
-        }
-
-        // Returned back inside the sidebar during an active extraction drag!
-        if (desktopExtraction) {
-            WidgetDragSession.clear();
-            WidgetDragSession.begin(tileId, dragSourceItem, dragGrabOffsetX, dragGrabOffsetY);
-            desktopExtraction = false;
-            targetX = -1;
-            targetY = -1;
-        }
-
-        const inGrid = gridCanvas.mapFromItem(dragSourceItem, pointerLocalX, pointerLocalY);
-        dragLiveX = Math.max(-24, Math.min(gridContentWidth - dragSourceItem.width + 24, inGrid.x - dragGrabOffsetX));
-        dragLiveY = Math.max(-16, inGrid.y - dragGrabOffsetY);
-
-        const def = Grid.tileDefinitionFor(tileId);
-        if (!def) return;
-        const anchor = Grid.clampAnchor(def, inGrid.x - dragGrabOffsetX, inGrid.y - dragGrabOffsetY);
-        if (anchor.x === targetX && anchor.y === targetY) return;
-        targetX = anchor.x;
-        targetY = anchor.y;
-        const solved = Grid.moveLayout(committedLayout, tileId, anchor.x, anchor.y, activeSidebarIds);
-        previewLayout = solved || [];
-        dragTargetValid = solved !== null;
-    }
-
-    function finishDrag(tileId) {
-        if (tileId !== draggingTileId) return;
-
-        if (desktopExtraction) {
-            const hostW = WidgetDragSession.hostWidth;
-            const hostH = WidgetDragSession.hostHeight;
-            const size = WidgetStore.cardSize(tileId);
-            const topInset = 46;
-            let gx = Math.max(0, Math.min(Math.max(0, hostW - size.width), WidgetDragSession.ghostX));
-            let gy = Math.max(topInset, Math.min(Math.max(topInset, hostH - size.height), WidgetDragSession.ghostY));
-            if (WidgetStore.gridSnapEnabled) {
-                const sp = DesktopLayout.snapPoint(gx, gy, size.width, size.height, hostW, hostH, topInset);
-                gx = sp.x;
-                gy = sp.y;
-            }
-            const norm = State.normalizedPosition(gx, gy, hostW, hostH);
-            const resolvedRects = WidgetDragSession.resolveDesktopDrop(root.screenName, tileId, gx, gy, size.width, size.height);
-            const positions = [];
-            if (Array.isArray(resolvedRects)) {
-                resolvedRects.forEach(r => {
-                    if (!r || !r.id) return;
-                    const p = State.normalizedPosition(r.x, r.y, hostW, hostH);
-                    positions.push({ id: String(r.id), xNorm: p.xNorm, yNorm: p.yNorm });
-                });
-            }
-            WidgetDragSession.commitDrop(gx, gy);
-            WidgetStore.setContainer(tileId, "desktop", root.screenName, norm.xNorm, norm.yNorm);
-            if (positions.length > 0) {
-                WidgetStore.setDesktopPositions(positions);
-            }
-            WidgetDragSession.requestHandoffCheck(tileId);
-            resetDragState(false);
-            return;
-        }
-
-        if (dragTargetValid && previewLayout.length > 0) {
-            committedLayout = previewLayout.slice();
-            WidgetStore.setSidebarLayout(committedLayout);
-        }
-        WidgetDragSession.clear();
-        resetDragState(true);
-    }
-
-    function scrollBy(dy) {
-        const maxY = Math.max(0, scrollView.contentHeight - scrollView.height);
-        scrollView.contentY = Math.max(0, Math.min(maxY, scrollView.contentY + Number(dy || 0)));
+    function scrollBy(dx) {
+        const maxX = Math.max(0, scrollView.contentWidth - scrollView.width);
+        scrollView.contentX = Math.max(0, Math.min(maxX, scrollView.contentX + Number(dx || 0)));
     }
 
     function scrollToFraction(frac) {
-        const maxY = Math.max(0, scrollView.contentHeight - scrollView.height);
-        scrollView.contentY = Math.round(maxY * Math.max(0, Math.min(1, Number(frac || 0))));
+        const maxX = Math.max(0, scrollView.contentWidth - scrollView.width);
+        scrollView.contentX = Math.round(maxX * Math.max(0, Math.min(1, Number(frac || 0))));
     }
 
     function openContextMenu(tileId, winPtX, winPtY) {
         const localPt = root.mapFromItem(null, winPtX, winPtY);
-        menuX = Math.max(8, Math.min(Math.max(8, root.width - 196), localPt.x));
-        menuY = Math.max(8, Math.min(Math.max(8, root.height - 150), localPt.y));
+        const pad = WidgetStore.s(8);
+        const menuW = WidgetStore.s(198);
+        const menuH = contextMenu.height > 0 ? contextMenu.height : WidgetStore.s(110);
+        menuX = Math.max(pad, Math.min(Math.max(pad, root.width - menuW - pad), localPt.x - menuW / 2));
+        menuY = Math.max(pad, Math.min(Math.max(pad, root.height - menuH - pad), localPt.y - menuH - WidgetStore.s(8)));
         menuTileId = tileId;
+    }
+
+    // Horizontal wheel-to-scroll over the shelf
+    WheelHandler {
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: (event) => {
+            const delta = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
+                ? event.angleDelta.x
+                : event.angleDelta.y;
+            if (delta !== 0) {
+                root.scrollBy(-delta * 0.9);
+                event.accepted = true;
+            }
+        }
     }
 
     Flickable {
         id: scrollView
         anchors.fill: parent
         clip: true
-        contentWidth: width
-        contentHeight: Math.max(height, gridContainer.height + (pinnedBar.visible ? pinnedBar.height + 20 : 12))
+        flickableDirection: Flickable.HorizontalFlick
+        contentWidth: slotRow.implicitWidth + WidgetStore.s(28)
+        contentHeight: height
         interactive: root.draggingTileId === ""
         boundsBehavior: Flickable.StopAtBounds
         flickDeceleration: 3000
 
-        Item {
-            id: gridContainer
-            width: root.gridContentWidth
-            height: root.gridContentHeight
-            anchors.horizontalCenter: parent.horizontalCenter
+        Row {
+            id: slotRow
+            anchors.verticalCenter: parent.verticalCenter
+            x: WidgetStore.s(12)
+            spacing: WidgetStore.s(16)
 
-            Item {
-                id: gridCanvas
-                anchors.fill: parent
+            Repeater {
+                model: root.catalogDefs
 
-                // Subtle 24px alignment guide grid while reordering inside sidebar
-                Canvas {
-                    id: guideCanvas
-                    anchors.fill: parent
-                    visible: root.draggingTileId !== "" && !root.desktopExtraction
-                    opacity: visible ? 1 : 0
-                    z: 0
+                delegate: Item {
+                    id: slot
 
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                    required property var modelData
+                    required property int index
 
-                    onVisibleChanged: if (visible) requestPaint()
-                    onHeightChanged: if (visible) requestPaint()
+                    readonly property string tileId: modelData.id
+                    readonly property string title: modelData.name
+                    readonly property string icon: modelData.icon
+                    readonly property var cardDim: WidgetStore.cardSize(tileId)
+                    readonly property bool placed: WidgetStore.isPinned(tileId)
+                    readonly property bool isDragged: root.draggingTileId === tileId
 
-                    onPaint: {
-                        const ctx = getContext("2d");
-                        ctx.clearRect(0, 0, width, height);
-                        const step = Catalog.cardGridGuideStep;
-                        ctx.strokeStyle = Qt.alpha(Theme.m3.outline_variant ?? "#163a70", 0.35);
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        for (let x = step; x < width; x += step) {
-                            ctx.moveTo(x + 0.5, 0);
-                            ctx.lineTo(x + 0.5, height);
-                        }
-                        for (let y = step; y < height; y += step) {
-                            ctx.moveTo(0, y + 0.5);
-                            ctx.lineTo(width, y + 0.5);
-                        }
-                        ctx.stroke();
+                    readonly property real boxW: WidgetStore.s(166)
+                    readonly property real boxH: WidgetStore.s(96)
+                    readonly property real fit: Math.min(boxW / Math.max(1, cardDim.width), boxH / Math.max(1, cardDim.height), 0.65)
+                    readonly property real shownW: cardDim.width * fit
+                    readonly property real shownH: cardDim.height * fit
+                    readonly property real mountH: WidgetStore.s(132)
+
+                    width: Math.max(WidgetStore.s(138), Math.round(shownW) + WidgetStore.s(28))
+                    height: mountH + WidgetStore.s(22)
+                    opacity: isDragged ? 0.35 : 1.0
+
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                    property real lift: slotMouse.containsMouse ? 1 : 0
+                    Behavior on lift {
+                        NumberAnimation { duration: 240; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
                     }
-                }
 
-                // Target slot preview indicator
-                Rectangle {
-                    id: slotIndicator
-                    z: 1
-                    visible: root.draggingTileId !== "" && !root.desktopExtraction && root.dropPlacement !== null
-                    x: root.dropPlacement ? root.dropPlacement.x : 0
-                    y: root.dropPlacement ? root.dropPlacement.y : 0
-                    width: root.dropPlacement ? root.dropPlacement.width : 0
-                    height: root.dropPlacement ? root.dropPlacement.height : 0
-                    radius: 24
-                    color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.14)
-                    border.width: 2
-                    border.color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.85)
+                    property real hop: 1
+                    SequentialAnimation {
+                        id: hopAnim
+                        NumberAnimation { target: slot; property: "hop"; to: 0.90; duration: 75; easing.type: Easing.OutQuad }
+                        NumberAnimation { target: slot; property: "hop"; to: 1.0; duration: 360; easing.type: Easing.OutBack; easing.overshoot: 2.8 }
+                    }
 
-                    Behavior on x { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-                    Behavior on y { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-                }
+                    Item {
+                        id: holder
+                        width: slot.width
+                        height: slot.height
+                        y: WidgetStore.s(6) - WidgetStore.s(6) * slot.lift
+                        rotation: (slot.index % 2 === 0 ? -1.9 : 1.9) * (1.0 - Math.min(1.0, slot.lift))
+                        scale: slot.hop * (slotMouse.pressed ? 0.97 : (1.0 + 0.03 * slot.lift))
+                        transformOrigin: Item.Center
 
-                // Draggable cards
-                Repeater {
-                    model: root.activeSidebarIds
+                        // Main framed miniature widget screen
+                        SekaiPill {
+                            id: mount
+                            width: holder.width
+                            height: slot.mountH
+                            cornerRadius: WidgetStore.s(16)
+                            borderWidth: WidgetStore.s(2.5)
+                            ringWidth: WidgetStore.s(3.5)
+                            shadowDy: WidgetStore.s(4)
+                            pressed: slotMouse.pressed
+                            fillColor: Theme.m3.surface_container_high ?? Theme.colors.card_bg
+                            ringColor: slot.lift > 0.4
+                                ? (Theme.m3.primary ?? Theme.accent)
+                                : Qt.alpha(Theme.m3.on_surface ?? "#e0f8ff", 0.16)
 
-                    delegate: Item {
-                        id: tile
-
-                        required property string modelData
-                        readonly property string tileId: modelData
-                        readonly property var placement: root.displayPlacement(tileId)
-                        readonly property var cardDim: Catalog.sizeFor(tileId)
-                        readonly property bool isDraggedHere: root.draggingTileId === tileId
-                        readonly property bool hiddenByExtraction: root.desktopExtraction && isDraggedHere
-                            || (WidgetDragSession.presentationActive && WidgetDragSession.tileId === tileId)
-
-                        x: (isDraggedHere && !root.desktopExtraction)
-                            ? root.dragLiveX
-                            : (placement ? placement.x : 0)
-                        y: (isDraggedHere && !root.desktopExtraction)
-                            ? root.dragLiveY
-                            : (placement ? placement.y : 0)
-                        width: cardDim.width
-                        height: cardDim.height
-                        z: isDraggedHere ? 30 : 5
-                        visible: !hiddenByExtraction && placement !== null
-                        scale: (isDraggedHere && !root.desktopExtraction) ? 1.025 : 1.0
-
-                        Behavior on x {
-                            enabled: root.motionEnabled && !tile.isDraggedHere
-                            NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.39, 1.29, 0.35, 0.98, 1, 1] }
-                        }
-                        Behavior on y {
-                            enabled: root.motionEnabled && !tile.isDraggedHere
-                            NumberAnimation { duration: 240; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.39, 1.29, 0.35, 0.98, 1, 1] }
-                        }
-                        Behavior on scale {
-                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                        }
-
-                        WidgetCardContent {
-                            anchors.fill: parent
-                            tileId: tile.tileId
-                            active: root.active && !tile.hiddenByExtraction
-                            interactive: !tile.isDraggedHere
-                            notchRoot: root.notchRoot
-                        }
-
-                        HoverHandler {
-                            cursorShape: tileDrag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                        }
-
-                        DragHandler {
-                            id: tileDrag
-                            target: null
-                            enabled: root.active
-                            acceptedButtons: Qt.LeftButton
-                            grabPermissions: PointerHandler.CanTakeOverFromAnything | PointerHandler.ApprovesTakeOverByAnything
-
-                            property bool started: false
-
-                            onActiveChanged: {
-                                if (active) {
-                                    started = true;
-                                    root.startDrag(
-                                        tile.tileId, tile,
-                                        centroid.pressPosition.x, centroid.pressPosition.y,
-                                        centroid.position.x, centroid.position.y
-                                    );
-                                } else if (started) {
-                                    started = false;
-                                    root.finishDrag(tile.tileId);
+                            // Recessed dark screen behind live widget thumbnail
+                            Rectangle {
+                                id: previewScreen
+                                anchors {
+                                    fill: parent
+                                    margins: WidgetStore.s(4)
                                 }
-                            }
+                                radius: WidgetStore.s(10)
+                                color: Qt.darker(Theme.m3.surface_container_lowest ?? "#030a16", 1.15)
+                                antialiasing: true
+                                clip: true
 
-                            onCentroidChanged: {
-                                if (active && started) {
-                                    root.updateDrag(tile.tileId, centroid.position.x, centroid.position.y);
+                                Item {
+                                    id: previewBox
+                                    width: slot.shownW
+                                    height: slot.shownH
+                                    x: (previewScreen.width - width) / 2
+                                    y: Math.max(WidgetStore.s(4), (previewScreen.height - WidgetStore.s(10) - height) / 2)
+                                    opacity: slot.placed ? 0.46 : 1.0
+                                    enabled: false
+
+                                    Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                                    WidgetCardContent {
+                                        width: slot.cardDim.width
+                                        height: slot.cardDim.height
+                                        scale: slot.fit
+                                        transformOrigin: Item.TopLeft
+                                        tileId: slot.tileId
+                                        active: root.active && !slot.isDragged
+                                        interactive: false
+                                        notchRoot: root.notchRoot
+                                    }
                                 }
                             }
                         }
 
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            onTapped: (eventPoint) => {
-                                const wp = tile.mapToItem(null, eventPoint.position.x, eventPoint.position.y);
-                                root.openContextMenu(tile.tileId, wp.x, wp.y);
+                        // Tilted bottom name tag pill (flips to PIN / UNPIN on hover)
+                        SekaiPill {
+                            id: tagPill
+                            readonly property string hoverLabel: slot.placed ? "UNPIN" : "PIN"
+
+                            width: Math.min(holder.width + WidgetStore.s(10), tagTxt.implicitWidth + WidgetStore.s(22))
+                            height: WidgetStore.s(25)
+                            x: (holder.width - width) / 2
+                            y: slot.mountH - WidgetStore.s(9)
+                            cornerRadius: WidgetStore.s(9)
+                            borderWidth: WidgetStore.s(2)
+                            ringWidth: WidgetStore.s(2)
+                            shadowDy: WidgetStore.s(2)
+                            rotation: slot.index % 2 === 0 ? 1.8 : -1.8
+                            fillColor: slot.lift > 0.5
+                                ? (slot.placed ? (Theme.m3.secondary ?? Theme.accent) : (Theme.m3.primary ?? Theme.accent))
+                                : (Theme.m3.surface_container_highest ?? Theme.colors.hover_bg)
+
+                            Behavior on width {
+                                NumberAnimation { duration: 160; easing.type: Easing.OutBack; easing.overshoot: 1.6 }
                             }
-                        }
-                    }
-                }
-            }
-        }
 
-        // Compact recall bar when widgets are pinned to the desktop
-        Rectangle {
-            id: pinnedBar
-            visible: WidgetStore.desktopCardIds.length > 0
-            width: root.gridContentWidth
-            height: visible ? pinnedFlow.implicitHeight + 24 : 0
-            x: (parent.width - width) / 2
-            y: gridContainer.height + 12
-            radius: 16
-            color: Theme.m3.surface_container ?? Theme.colors.card_bg
-            border.width: 1
-            border.color: Qt.alpha(Theme.m3.outline_variant ?? "#163a70", 0.5)
-
-            ColumnLayout {
-                id: pinnedFlow
-                anchors { fill: parent; margins: 12 }
-                spacing: 8
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        text: "On desktop (" + WidgetStore.desktopCardIds.length + ") · Click to recall"
-                        color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                        font.family: "Noto Sans"
-                        font.pixelSize: 11
-                        font.weight: Font.Medium
-                        Layout.fillWidth: true
-                        font.hintingPreference: Font.PreferVerticalHinting
-                        renderType: Text.NativeRendering
-                    }
-                }
-
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    Repeater {
-                        model: WidgetStore.desktopCardIds
-                        delegate: Rectangle {
-                            required property string modelData
-                            readonly property var def: Catalog.definitionFor(modelData)
-                            height: 28
-                            width: chipRow.implicitWidth + 16
-                            radius: 9
-                            color: chipMouse.containsMouse
-                                ? (Theme.m3.primary_container ?? Theme.colors.hover_bg)
-                                : (Theme.m3.surface_container_high ?? Theme.colors.hover_bg)
-
-                            Row {
-                                id: chipRow
+                            Text {
+                                id: tagTxt
                                 anchors.centerIn: parent
-                                spacing: 5
-                                MaterialSymbol {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: def ? def.icon : "widgets"
-                                    iconSize: 14
-                                    color: Theme.m3.primary ?? Theme.accent
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: def ? def.name : modelData
-                                    color: Theme.m3.on_surface ?? Theme.colors.text_primary
-                                    font.family: "Noto Sans"
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
-                                    font.hintingPreference: Font.PreferVerticalHinting
-                        renderType: Text.NativeRendering
+                                horizontalAlignment: Text.AlignHCenter
+                                text: slot.lift > 0.5 ? tagPill.hoverLabel : slot.title.toUpperCase()
+                                color: slot.lift > 0.5
+                                    ? (Theme.m3.on_primary ?? "#101014")
+                                    : (Theme.m3.on_surface ?? Theme.colors.text_primary)
+                                font.family: "Google Sans Flex"
+                                font.pixelSize: WidgetStore.si(10)
+                                font.weight: Font.ExtraBold
+                                font.letterSpacing: 0.5
+                                font.hintingPreference: Font.PreferVerticalHinting
+                                renderType: Text.NativeRendering
+                            }
+                        }
+
+                        // Top-right corner status badge (check = pinned, + = ready)
+                        SekaiPill {
+                            id: badge
+                            width: WidgetStore.s(27)
+                            height: WidgetStore.s(29)
+                            x: holder.width - WidgetStore.s(21)
+                            y: -WidgetStore.s(6)
+                            cornerRadius: WidgetStore.s(14)
+                            borderWidth: WidgetStore.s(2)
+                            ringWidth: WidgetStore.s(1.5)
+                            shadowDx: WidgetStore.s(1.5)
+                            shadowDy: WidgetStore.s(2.5)
+                            fillColor: slot.placed
+                                ? (Theme.m3.secondary ?? "#67e8f9")
+                                : (Theme.m3.primary ?? Theme.accent)
+                            scale: slot.placed ? 1.0 : (0.90 + 0.16 * Math.min(1.0, slot.lift))
+
+                            Behavior on scale {
+                                NumberAnimation { duration: 240; easing.type: Easing.OutBack; easing.overshoot: 2.5 }
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: slot.placed ? "check" : "add"
+                                iconSize: WidgetStore.si(15)
+                                fill: 1
+                                color: Theme.m3.on_primary ?? "#101014"
+                            }
+                        }
+                    }
+
+                    SekaiBurst {
+                        id: pinBurst
+                        x: slot.width / 2
+                        y: slot.mountH / 2
+                        count: 8
+                        radius: WidgetStore.s(54)
+                        size: WidgetStore.s(9)
+                        z: 30
+                    }
+
+                    MouseArea {
+                        id: slotMouse
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        hoverEnabled: true
+                        cursorShape: slot.isDragged ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+
+                        property point pressAt: Qt.point(0, 0)
+                        property string gesture: "" // "" | "pull" | "scroll"
+                        preventStealing: gesture === "pull"
+
+                        onPressed: (mouse) => {
+                            root.menuTileId = "";
+                            pressAt = Qt.point(mouse.x, mouse.y);
+                            gesture = "";
+                        }
+
+                        onPositionChanged: (mouse) => {
+                            if (!pressed || !(pressedButtons & Qt.LeftButton)) return;
+                            const dx = mouse.x - pressAt.x;
+                            const dy = mouse.y - pressAt.y;
+
+                            if (gesture === "") {
+                                if (Math.abs(dy) > WidgetStore.s(10) && Math.abs(dy) >= Math.abs(dx) * 0.9 && dy < 0) {
+                                    if (!WidgetDragSession.active && WidgetDragSession.begin(slot.tileId, slot, slot.width / 2, slot.height / 2)) {
+                                        gesture = "pull";
+                                        root.draggingTileId = slot.tileId;
+                                    } else {
+                                        gesture = "scroll";
+                                    }
+                                } else if (Math.abs(dx) > WidgetStore.s(12)) {
+                                    gesture = "scroll";
                                 }
                             }
 
-                            MouseArea {
-                                id: chipMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: WidgetStore.setContainer(modelData, "sidebar")
+                            if (gesture === "pull" && slot.isDragged) {
+                                const winPt = slot.mapToItem(null, mouse.x, mouse.y);
+                                const insideTray = root.sidebarContainsWindowPoint(winPt.x, winPt.y);
+                                const hostPt = WidgetDragSession.mapItemPoint(root.screenName, slot, mouse.x, mouse.y);
+                                const host = WidgetDragSession.hostFor(root.screenName);
+                                if (!insideTray && hostPt && host) {
+                                    if (!WidgetDragSession.presentationActive) {
+                                        const realSz = WidgetStore.cardSize(slot.tileId);
+                                        WidgetDragSession.promoteToDesktop(
+                                            root.screenName, hostPt.x, hostPt.y,
+                                            realSz.width / 2, realSz.height / 2,
+                                            realSz.width, realSz.height,
+                                            host.width, host.height
+                                        );
+                                    } else {
+                                        WidgetDragSession.update(hostPt.x, hostPt.y);
+                                    }
+                                }
                             }
+                        }
+
+                        onReleased: (mouse) => {
+                            if (gesture === "pull" && slot.isDragged) {
+                                const winPt = slot.mapToItem(null, mouse.x, mouse.y);
+                                const insideTray = root.sidebarContainsWindowPoint(winPt.x, winPt.y);
+                                if (!insideTray && WidgetDragSession.presentationActive) {
+                                    const hostW = WidgetDragSession.hostWidth;
+                                    const hostH = WidgetDragSession.hostHeight;
+                                    const size = WidgetStore.cardSize(slot.tileId);
+                                    const topInset = 46;
+                                    let gx = Math.max(0, Math.min(Math.max(0, hostW - size.width), WidgetDragSession.ghostX));
+                                    let gy = Math.max(topInset, Math.min(Math.max(topInset, hostH - size.height), WidgetDragSession.ghostY));
+                                    if (WidgetStore.gridSnapEnabled) {
+                                        const sp = DesktopLayout.snapPoint(gx, gy, size.width, size.height, hostW, hostH, topInset, WidgetStore.s(Catalog.cardGridStep));
+                                        gx = sp.x;
+                                        gy = sp.y;
+                                    }
+                                    const norm = State.normalizedPosition(gx, gy, hostW, hostH);
+                                    const resolvedRects = WidgetDragSession.resolveDesktopDrop(root.screenName, slot.tileId, gx, gy, size.width, size.height);
+                                    const positions = [];
+                                    if (Array.isArray(resolvedRects)) {
+                                        resolvedRects.forEach(r => {
+                                            if (!r || !r.id) return;
+                                            const p = State.normalizedPosition(r.x, r.y, hostW, hostH);
+                                            positions.push({ id: String(r.id), xNorm: p.xNorm, yNorm: p.yNorm });
+                                        });
+                                    }
+                                    WidgetDragSession.commitDrop(gx, gy);
+                                    WidgetStore.setContainer(slot.tileId, "desktop", root.screenName, norm.xNorm, norm.yNorm);
+                                    if (positions.length > 0) {
+                                        WidgetStore.setDesktopPositions(positions);
+                                    }
+                                    WidgetDragSession.requestHandoffCheck(slot.tileId);
+                                } else {
+                                    WidgetDragSession.cancel();
+                                }
+                                root.draggingTileId = "";
+                                hopAnim.restart();
+                            }
+                        }
+
+                        onCanceled: {
+                            if (slot.isDragged) {
+                                WidgetDragSession.cancel();
+                                root.draggingTileId = "";
+                            }
+                            gesture = "";
+                        }
+
+                        onClicked: (mouse) => {
+                            if (gesture !== "") {
+                                gesture = "";
+                                return;
+                            }
+                            if (mouse.button === Qt.RightButton) {
+                                const wp = slot.mapToItem(null, mouse.x, mouse.y);
+                                root.openContextMenu(slot.tileId, wp.x, wp.y);
+                                return;
+                            }
+                            const wasPinned = slot.placed;
+                            hopAnim.restart();
+                            if (!wasPinned) pinBurst.fire();
+                            WidgetStore.togglePin(slot.tileId, root.screenName);
                         }
                     }
                 }
@@ -504,18 +395,18 @@ Item {
         }
     }
 
-    // Slim scrollbar
+    // Horizontal slim scrollbar under shelf
     Rectangle {
-        visible: scrollView.contentHeight > scrollView.height + 4
-        anchors { right: parent.right; rightMargin: -11 }
-        y: (scrollView.contentY / Math.max(1, scrollView.contentHeight)) * parent.height
-        width: 3
-        height: Math.max(32, (scrollView.height / Math.max(1, scrollView.contentHeight)) * parent.height)
-        radius: 2
-        color: Qt.alpha(Theme.m3.on_surface_variant ?? "#67e8f9", 0.35)
+        visible: scrollView.contentWidth > scrollView.width + 4
+        anchors { bottom: parent.bottom; bottomMargin: WidgetStore.s(1) }
+        x: (scrollView.contentX / Math.max(1, scrollView.contentWidth)) * parent.width
+        width: Math.max(WidgetStore.s(36), (scrollView.width / Math.max(1, scrollView.contentWidth)) * parent.width)
+        height: WidgetStore.s(3)
+        radius: WidgetStore.s(2)
+        color: Qt.alpha(Theme.m3.primary ?? "#67e8f9", 0.55)
     }
 
-    // Dismiss context menu when clicking anywhere outside it
+    // Dismiss context menu when clicking outside
     MouseArea {
         visible: root.menuTileId !== ""
         anchors.fill: parent
@@ -523,32 +414,34 @@ Item {
         onClicked: root.menuTileId = ""
     }
 
-    // Inline themed right-click context menu
-    Rectangle {
+    // Sekai Pop inline right-click context menu
+    SekaiPill {
         id: contextMenu
         visible: root.menuTileId !== ""
         x: root.menuX
         y: root.menuY
-        width: 192
-        height: menuCol.implicitHeight + 12
+        width: WidgetStore.s(198)
+        height: menuCol.implicitHeight + WidgetStore.s(18)
         z: 200
-        radius: 14
-        color: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
-        border.width: 1
-        border.color: Qt.alpha(Theme.m3.outline ?? "#163a70", 0.7)
+        cornerRadius: WidgetStore.s(14)
+        borderWidth: WidgetStore.s(2)
+        ringWidth: WidgetStore.s(2.5)
+        shadowDx: WidgetStore.s(2)
+        shadowDy: WidgetStore.s(3)
+        fillColor: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
 
         Column {
             id: menuCol
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
-            spacing: 2
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: WidgetStore.s(6) }
+            spacing: WidgetStore.s(2)
 
             MenuRow {
-                icon: "pin_drop"
-                label: "Pin to desktop"
+                icon: WidgetStore.isPinned(root.menuTileId) ? "dock_to_left" : "pin_drop"
+                label: WidgetStore.isPinned(root.menuTileId) ? "Unpin from desktop" : "Pin to desktop"
                 onTriggered: {
                     const id = root.menuTileId;
                     root.menuTileId = "";
-                    WidgetStore.pinToDesktop(id, root.screenName);
+                    WidgetStore.togglePin(id, root.screenName);
                 }
             }
 
@@ -607,19 +500,22 @@ Item {
         signal triggered()
 
         width: parent.width
-        height: visible ? 34 : 0
-        radius: 9
+        height: visible ? WidgetStore.s(32) : 0
+        radius: WidgetStore.s(8)
         color: rowMouse.containsMouse
-            ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.16)
+            ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.18)
             : "transparent"
 
         Row {
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
-            spacing: 8
+            anchors {
+                left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                leftMargin: WidgetStore.s(8); rightMargin: WidgetStore.s(8)
+            }
+            spacing: WidgetStore.s(8)
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
                 text: icon
-                iconSize: 16
+                iconSize: WidgetStore.si(15)
                 color: rowMouse.containsMouse
                     ? (Theme.m3.primary ?? Theme.accent)
                     : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary)
@@ -629,7 +525,7 @@ Item {
                 text: label
                 color: Theme.m3.on_surface ?? Theme.colors.text_primary
                 font.family: "Noto Sans"
-                font.pixelSize: 12
+                font.pixelSize: WidgetStore.si(11)
                 font.weight: Font.Medium
                 renderType: Text.NativeRendering
             }

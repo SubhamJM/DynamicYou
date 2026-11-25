@@ -217,10 +217,10 @@ Item {
     Rectangle {
         id: cardBg
         anchors.fill: parent
-        radius: 24
+        radius: WidgetStore.s(24)
         visible: !root.isStickerMode
         color: root.colBg
-        border.width: 1
+        border.width: Math.max(1, WidgetStore.s(1))
         border.color: root.colBorder
         clip: true
 
@@ -253,11 +253,11 @@ Item {
             top: parent.top
             left: parent.left
             right: parent.right
-            topMargin: 12
-            leftMargin: 14
-            rightMargin: 14
+            topMargin: WidgetStore.s(12)
+            leftMargin: WidgetStore.s(14)
+            rightMargin: WidgetStore.s(14)
         }
-        height: 48
+        height: WidgetStore.s(48)
         z: 5
         opacity: root.isStickerMode ? (cardHover.hovered ? 1.0 : 0.0) : 1.0
         visible: opacity > 0.01
@@ -267,20 +267,20 @@ Item {
         // Frosted pill backing only when hovering in desktop Sticker mode
         Rectangle {
             anchors.fill: parent
-            anchors.margins: -4
+            anchors.margins: -WidgetStore.s(4)
             visible: root.isStickerMode
-            radius: 16
+            radius: WidgetStore.s(16)
             color: Qt.alpha(Theme.m3.surface_container_high ?? "#0e2246", 0.88)
-            border.width: 1
+            border.width: Math.max(1, WidgetStore.s(1))
             border.color: root.colBorder
         }
 
         // Album Cover Art
         Rectangle {
             id: coverBox
-            width: 44
-            height: 44
-            radius: 12
+            width: WidgetStore.s(44)
+            height: WidgetStore.s(44)
+            radius: WidgetStore.s(12)
             anchors { left: parent.left; verticalCenter: parent.verticalCenter }
             color: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
             clip: true
@@ -297,7 +297,7 @@ Item {
                 anchors.centerIn: parent
                 visible: root.artUrl === ""
                 text: "music_note"
-                iconSize: 22
+                iconSize: WidgetStore.si(22)
                 fill: 1
                 color: root.colPrimary
             }
@@ -318,8 +318,8 @@ Item {
                 left: coverBox.right
                 right: transportRow.left
                 verticalCenter: parent.verticalCenter
-                leftMargin: 10
-                rightMargin: 8
+                leftMargin: WidgetStore.s(10)
+                rightMargin: WidgetStore.s(8)
             }
             spacing: 1
 
@@ -328,7 +328,7 @@ Item {
                 text: root.trackTitle !== "" ? root.trackTitle : "Nothing Playing"
                 color: root.colOnSurface
                 font.family: "Google Sans Flex"
-                font.pixelSize: 15
+                font.pixelSize: WidgetStore.si(15)
                 font.weight: Font.Bold
                 elide: Text.ElideRight
                 renderType: Text.NativeRendering
@@ -339,7 +339,7 @@ Item {
                 text: root.trackArtist !== "" ? root.trackArtist : (LyricsService.syncedSourceName || "Sekai Lyrics")
                 color: root.colMuted
                 font.family: "Noto Sans"
-                font.pixelSize: 12
+                font.pixelSize: WidgetStore.si(12)
                 elide: Text.ElideRight
                 renderType: Text.NativeRendering
             }
@@ -349,7 +349,7 @@ Item {
         Row {
             id: transportRow
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-            spacing: 4
+            spacing: WidgetStore.s(4)
 
             TransportBtn {
                 icon: "skip_previous"
@@ -358,9 +358,9 @@ Item {
             }
 
             Rectangle {
-                width: 34
-                height: 34
-                radius: 17
+                width: WidgetStore.s(34)
+                height: WidgetStore.s(34)
+                radius: WidgetStore.s(17)
                 anchors.verticalCenter: parent.verticalCenter
                 color: playMouse.pressed ? Qt.darker(root.colPrimary, 1.1) : root.colPrimary
                 opacity: (root.hasPlayer && (root.player.canTogglePlaying || root.player.canPlay || root.player.canPause)) ? 1.0 : 0.45
@@ -368,7 +368,7 @@ Item {
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: root.playing ? "pause" : "play_arrow"
-                    iconSize: 19
+                    iconSize: WidgetStore.si(19)
                     fill: 1
                     color: root.colOnPrimary
                 }
@@ -400,15 +400,15 @@ Item {
             bottom: footerRow.top
             left: parent.left
             right: parent.right
-            topMargin: root.isStickerMode ? 4 : 2
-            bottomMargin: 2
+            topMargin: root.isStickerMode ? WidgetStore.s(4) : WidgetStore.s(2)
+            bottomMargin: WidgetStore.s(2)
         }
         clip: !root.isStickerMode
 
         readonly property real midY: height / 2
-        readonly property int wordPx: root.isStickerMode ? 38 : 30
+        readonly property int wordPx: WidgetStore.si(root.isStickerMode ? 38 : 30)
         readonly property real poseScale: root.isStickerMode ? 0.94 : 0.78
-        readonly property real maxLineW: root.isStickerMode ? 680 : (lyricsStage.width - 20)
+        readonly property real maxLineW: root.isStickerMode ? WidgetStore.s(680) : (lyricsStage.width - WidgetStore.s(20))
 
         // Live 3-line expressive word-sync stack
         Repeater {
@@ -452,26 +452,26 @@ Item {
             visible: root.stageStatusMessage !== "" && root.adaptedLines.length === 0
             still: true
             text: root.stageStatusMessage
-            px: root.isStickerMode ? 28 : 22
+            px: WidgetStore.si(root.isStickerMode ? 28 : 22)
             d: 0
             playing: true
             poseScaleY: lyricsStage.poseScale
             maxW: lyricsStage.maxLineW
             cx: lyricsStage.width / 2
-            cy: root.plainPreviewSecondLine !== "" ? (lyricsStage.midY - 22) : lyricsStage.midY
+            cy: root.plainPreviewSecondLine !== "" ? (lyricsStage.midY - WidgetStore.s(22)) : lyricsStage.midY
         }
 
         SekaiLyricsLine {
             visible: root.plainPreviewSecondLine !== "" && root.adaptedLines.length === 0
             still: true
             text: root.plainPreviewSecondLine
-            px: root.isStickerMode ? 20 : 17
+            px: WidgetStore.si(root.isStickerMode ? 20 : 17)
             d: 1
             playing: true
             poseScaleY: lyricsStage.poseScale
             maxW: lyricsStage.maxLineW
             cx: lyricsStage.width / 2
-            cy: lyricsStage.midY + 6
+            cy: lyricsStage.midY + WidgetStore.s(6)
         }
     }
 
@@ -484,28 +484,28 @@ Item {
             bottom: parent.bottom
             left: parent.left
             right: parent.right
-            bottomMargin: 10
-            leftMargin: 16
-            rightMargin: 16
+            bottomMargin: WidgetStore.s(10)
+            leftMargin: WidgetStore.s(16)
+            rightMargin: WidgetStore.s(16)
         }
-        height: 40
+        height: WidgetStore.s(40)
         z: 5
 
         // Track tag sticker shown at rest in Desktop Sticker mode
         Item {
             anchors.centerIn: parent
-            width: Math.min(lyricsStage.maxLineW, stickerTagWord.implicitWidth + 36)
-            height: 28
+            width: Math.min(lyricsStage.maxLineW, stickerTagWord.implicitWidth + WidgetStore.s(36))
+            height: WidgetStore.s(28)
             visible: root.isStickerMode && !cardHover.hovered && root.trackTitle !== ""
 
             Row {
                 anchors.centerIn: parent
-                spacing: 7
+                spacing: WidgetStore.s(7)
 
                 Rectangle {
-                    width: 20
-                    height: 20
-                    radius: 6
+                    width: WidgetStore.s(20)
+                    height: WidgetStore.s(20)
+                    radius: WidgetStore.s(6)
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.artUrl !== ""
                     clip: true
@@ -520,7 +520,7 @@ Item {
                 SekaiLyricsWord {
                     id: stickerTagWord
                     anchors.verticalCenter: parent.verticalCenter
-                    pixelSize: 16
+                    pixelSize: WidgetStore.si(16)
                     fillColor: "#FFFFFF"
                     text: {
                         const raw = root.trackArtist ? (root.trackTitle + " · " + root.trackArtist) : root.trackTitle;
@@ -540,42 +540,42 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: -6
+                anchors.margins: -WidgetStore.s(6)
                 visible: root.isStickerMode
-                radius: 14
+                radius: WidgetStore.s(14)
                 color: Qt.alpha(Theme.m3.surface_container_high ?? "#0e2246", 0.88)
-                border.width: 1
+                border.width: Math.max(1, WidgetStore.s(1))
                 border.color: root.colBorder
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                spacing: 4
+                spacing: WidgetStore.s(4)
 
             // Frosted capsule backing in Sticker hover mode
             // Progress bar + times
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: WidgetStore.s(8)
                 visible: root.trackLength > 0
 
                 Text {
                     text: root.fmtTime(LM.estimate(root.clk, root.nowMs, root.playing))
                     color: root.colMuted
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 10
+                    font.pixelSize: WidgetStore.si(10)
                     renderType: Text.NativeRendering
                 }
 
                 Item {
                     Layout.fillWidth: true
-                    height: 14
+                    height: WidgetStore.s(14)
 
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width
-                        height: 4
-                        radius: 2
+                        height: WidgetStore.s(4)
+                        radius: WidgetStore.s(2)
                         color: Qt.alpha(root.colOnSurface, 0.14)
 
                         Rectangle {
@@ -584,7 +584,7 @@ Item {
                                 : 0
                             width: parent.width * frac
                             height: parent.height
-                            radius: 2
+                            radius: WidgetStore.s(2)
                             color: root.colPrimary
                         }
                     }
@@ -609,7 +609,7 @@ Item {
                     text: root.fmtTime(root.trackLength)
                     color: root.colMuted
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 10
+                    font.pixelSize: WidgetStore.si(10)
                     renderType: Text.NativeRendering
                 }
             }
@@ -617,13 +617,13 @@ Item {
             // Sync nudge pills & provider badge
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: WidgetStore.s(6)
 
                 Rectangle {
                     visible: LyricsService.syncedSourceName !== ""
-                    height: 18
-                    width: srcTxt.implicitWidth + 12
-                    radius: 6
+                    height: WidgetStore.s(18)
+                    width: srcTxt.implicitWidth + WidgetStore.s(12)
+                    radius: WidgetStore.s(6)
                     color: Qt.alpha(root.colPrimary, 0.14)
 
                     Text {
@@ -632,7 +632,7 @@ Item {
                         text: LyricsService.syncedSourceName
                         color: root.colPrimary
                         font.family: "Noto Sans"
-                        font.pixelSize: 10
+                        font.pixelSize: WidgetStore.si(10)
                         font.weight: Font.Bold
                         renderType: Text.NativeRendering
                     }
@@ -642,7 +642,7 @@ Item {
 
                 Row {
                     visible: root.adaptedLines.length > 0
-                    spacing: 4
+                    spacing: WidgetStore.s(4)
 
                     NudgeBtn {
                         label: "-0.1s"
@@ -668,9 +668,9 @@ Item {
         property string icon: ""
         signal clicked()
 
-        width: 28
-        height: 28
-        radius: 14
+        width: WidgetStore.s(28)
+        height: WidgetStore.s(28)
+        radius: WidgetStore.s(14)
         anchors.verticalCenter: parent.verticalCenter
         color: tMouse.containsMouse ? Qt.alpha(root.colOnSurface, 0.12) : "transparent"
         opacity: enabled ? 1.0 : 0.35
@@ -678,7 +678,7 @@ Item {
         MaterialSymbol {
             anchors.centerIn: parent
             text: parent.icon
-            iconSize: 18
+            iconSize: WidgetStore.si(18)
             color: root.colOnSurface
         }
 
@@ -697,9 +697,9 @@ Item {
         property bool highlighted: false
         signal clicked()
 
-        height: 18
-        width: nLbl.implicitWidth + 10
-        radius: 6
+        height: WidgetStore.s(18)
+        width: nLbl.implicitWidth + WidgetStore.s(10)
+        radius: WidgetStore.s(6)
         color: nMouse.containsMouse || highlighted
             ? Qt.alpha(root.colPrimary, 0.20)
             : Qt.alpha(root.colOnSurface, 0.08)
@@ -710,7 +710,7 @@ Item {
             text: parent.label
             color: parent.highlighted ? root.colPrimary : root.colMuted
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 9
+            font.pixelSize: WidgetStore.si(9)
             font.weight: Font.DemiBold
             renderType: Text.NativeRendering
         }

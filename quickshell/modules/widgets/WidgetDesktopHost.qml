@@ -115,7 +115,9 @@ Variants {
                     existing, tileId,
                     { id: tileId, x: x, y: y, width: w, height: h },
                     desktopCanvas.width, desktopCanvas.height,
-                    WidgetStore.gridSnapEnabled, win.topInset
+                    WidgetStore.gridSnapEnabled, win.topInset,
+                    WidgetStore.s(Catalog.cellGap),
+                    WidgetStore.s(Catalog.cardGridStep)
                 );
                 return resolved;
             }
@@ -136,9 +138,9 @@ Variants {
                 onPaint: {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
-                    const step = Catalog.cardGridGuideStep;
+                    const step = WidgetStore.s(Catalog.cardGridGuideStep);
                     ctx.strokeStyle = Qt.alpha(Theme.m3.outline_variant ?? "#163a70", 0.30);
-                    ctx.lineWidth = 1;
+                    ctx.lineWidth = Math.max(0.75, WidgetStore.uiScale);
                     ctx.beginPath();
                     for (let x = step; x < width; x += step) {
                         ctx.moveTo(x + 0.5, win.topInset);
@@ -166,10 +168,10 @@ Variants {
                 y: targetRect ? targetRect.y : 0
                 width: targetRect ? targetRect.width : 0
                 height: targetRect ? targetRect.height : 0
-                radius: 24
+                radius: WidgetStore.s(24)
                 z: 1
                 color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.14)
-                border.width: 2
+                border.width: Math.max(1, WidgetStore.s(2))
                 border.color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.85)
             }
 
@@ -184,7 +186,7 @@ Variants {
                     required property string modelData
                     readonly property string tileId: modelData
                     readonly property var cardState: WidgetStore.card(tileId)
-                    readonly property var cardSize: Catalog.sizeFor(tileId)
+                    readonly property var cardSize: WidgetStore.cardSize(tileId)
                     readonly property bool isDragged: win.draggingTileId === tileId
                     readonly property bool waitingGhostHandoff: WidgetDragSession.waitingHandoff
                         && WidgetDragSession.tileId === tileId
@@ -310,8 +312,9 @@ Variants {
                         acceptedButtons: Qt.RightButton
                         onTapped: (eventPoint) => {
                             const pt = cardSlot.mapToItem(desktopCanvas, eventPoint.position.x, eventPoint.position.y);
-                            win.menuX = Math.max(12, Math.min(Math.max(12, desktopCanvas.width - 204), pt.x));
-                            win.menuY = Math.max(win.topInset + 8, Math.min(Math.max(win.topInset + 8, desktopCanvas.height - 150), pt.y));
+                            const pad = WidgetStore.s(12);
+                            win.menuX = Math.max(pad, Math.min(Math.max(pad, desktopCanvas.width - WidgetStore.s(204)), pt.x));
+                            win.menuY = Math.max(win.topInset + WidgetStore.s(8), Math.min(Math.max(win.topInset + WidgetStore.s(8), desktopCanvas.height - WidgetStore.s(150)), pt.y));
                             win.menuTileId = cardSlot.tileId;
                         }
                     }
@@ -353,18 +356,18 @@ Variants {
                 visible: win.menuTileId !== ""
                 x: win.menuX
                 y: win.menuY
-                width: 196
-                height: dMenuCol.implicitHeight + 12
+                width: WidgetStore.s(196)
+                height: dMenuCol.implicitHeight + WidgetStore.s(12)
                 z: 100
-                radius: 14
+                radius: WidgetStore.s(14)
                 color: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
-                border.width: 1
+                border.width: Math.max(1, WidgetStore.s(1))
                 border.color: Qt.alpha(Theme.m3.outline ?? "#163a70", 0.7)
 
                 Column {
                     id: dMenuCol
-                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 6 }
-                    spacing: 2
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: WidgetStore.s(6) }
+                    spacing: WidgetStore.s(2)
 
                     DMenuRow {
                         icon: "dock_to_left"
@@ -416,19 +419,22 @@ Variants {
         signal triggered()
 
         width: parent.width
-        height: visible ? 34 : 0
-        radius: 9
+        height: visible ? WidgetStore.s(34) : 0
+        radius: WidgetStore.s(9)
         color: dRowMouse.containsMouse
             ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.16)
             : "transparent"
 
         Row {
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
-            spacing: 8
+            anchors {
+                left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
+                leftMargin: WidgetStore.s(10); rightMargin: WidgetStore.s(10)
+            }
+            spacing: WidgetStore.s(8)
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
                 text: icon
-                iconSize: 16
+                iconSize: WidgetStore.si(16)
                 color: dRowMouse.containsMouse
                     ? (Theme.m3.primary ?? Theme.accent)
                     : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary)
@@ -438,7 +444,7 @@ Variants {
                 text: label
                 color: Theme.m3.on_surface ?? Theme.colors.text_primary
                 font.family: "Noto Sans"
-                font.pixelSize: 12
+                font.pixelSize: WidgetStore.si(12)
                 font.weight: Font.Medium
                 renderType: Text.NativeRendering
             }

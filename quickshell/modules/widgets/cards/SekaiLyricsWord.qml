@@ -1,20 +1,21 @@
 import QtQuick
 import "../../../"
+import "../"
 
 Item {
     id: root
 
     property string text: ""
-    property int pixelSize: 28
+    property int pixelSize: WidgetStore.si(28)
     property color fillColor: "#FFFFFF"
     property color litColor: Theme.m3.primary ?? Theme.accent
     property color outlineColor: Qt.darker(Theme.m3.surface_container_lowest ?? "#030a16", 1.35)
     property real sung: 0
     property bool withFill: false
 
-    readonly property real outline: Math.max(2.0, root.pixelSize * 0.085)
-    readonly property real shadowDx: Math.max(1.5, root.pixelSize * 0.06)
-    readonly property real shadowDy: Math.max(2.0, root.pixelSize * 0.085)
+    readonly property real outline: Math.max(WidgetStore.s(2.0), root.pixelSize * 0.085)
+    readonly property real shadowDx: Math.max(WidgetStore.s(1.5), root.pixelSize * 0.06)
+    readonly property real shadowDy: Math.max(WidgetStore.s(2.0), root.pixelSize * 0.085)
     readonly property real edge: Math.ceil(root.outline) + 1
 
     implicitWidth: Math.ceil(ink.implicitWidth + 2 * root.edge + root.shadowDx)

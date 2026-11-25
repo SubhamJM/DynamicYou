@@ -11,6 +11,20 @@ Singleton {
     id: root
 
     readonly property string statePath: (Quickshell.env("HOME") || "") + "/.config/quickshell/lucidprefs/widgets.json"
+    readonly property real qtScale: {
+        const raw = Number(Quickshell.env("QT_SCALE_FACTOR"));
+        return (isFinite(raw) && raw > 0.1) ? raw : 1.0;
+    }
+    // Inverse Qt scale so desktop cards and Widget Deck stay 1.0x physically when shell runs at 1.2x.
+    readonly property real uiScale: 1.0 / qtScale
+
+    function s(v) {
+        return Number(v) * uiScale;
+    }
+
+    function si(v) {
+        return Math.max(1, Math.round(Number(v) * uiScale));
+    }
 
     property bool sidebarOpen: false
     property bool loaded: false
@@ -111,8 +125,21 @@ Singleton {
         return root.cards[String(cardId)] || null;
     }
 
+    function isPinned(cardId) {
+        return root.desktopCardIds.indexOf(String(cardId)) !== -1;
+    }
+
+    function togglePin(cardId, screenName) {
+        const id = String(cardId);
+        if (isPinned(id)) {
+            return root.setContainer(id, "sidebar");
+        }
+        return root.pinToDesktop(id, screenName);
+    }
+
     function cardSize(cardId) {
-        return Catalog.sizeFor(String(cardId));
+        const base = Catalog.sizeFor(String(cardId));
+        return { width: base.width * uiScale, height: base.height * uiScale };
     }
 
     function sidebarAnchor(cardId) {
@@ -143,11 +170,12 @@ Singleton {
         const id = String(cardId);
         const targetScreen = String(screenName || "");
         const host = WidgetDragSession.hostFor(targetScreen);
-        const hostW = host && host.width > 100 ? Number(host.width) : 1600;
-        const hostH = host && host.height > 100 ? Number(host.height) : 1000;
+        const hostW = host && host.width > 100 ? Number(host.width) : root.s(1920);
+        const hostH = host && host.height > 100 ? Number(host.height) : root.s(1200);
         const topInset = 46;
-        const availH = Math.max(1, hostH - topInset);
-        const sz = Catalog.sizeFor(id);
+        const sz = root.cardSize(id);
+        const bottomReserve = root.sidebarOpen ? root.s(226) : root.s(24);
+        const availH = Math.max(sz ? sz.height : 120, hostH - topInset - bottomReserve);
 
         const occupied = [];
         root.desktopCardIds.forEach(existingId => {
@@ -155,7 +183,7 @@ Singleton {
             const c = root.card(existingId);
             if (!c) return;
             if (targetScreen && c.screenName && c.screenName !== targetScreen) return;
-            const esz = Catalog.sizeFor(existingId);
+            const esz = root.cardSize(existingId);
             const pt = State.screenPoint(c.desktop.xNorm, c.desktop.yNorm, hostW, hostH, esz.width, esz.height);
             const yRel = Math.max(0, pt.y - topInset);
             occupied.push({
@@ -167,19 +195,22 @@ Singleton {
             });
         });
 
+        const marginX = root.s(24);
+        const marginY = root.s(16);
         const desired = {
             id: id,
-            x: 24,
-            y: 16,
+            x: marginX,
+            y: marginY,
             width: sz.width,
             height: sz.height
         };
         const found = DesktopLayout.gridNearestFree(
             desired, occupied, hostW, availH,
-            Math.max(DesktopLayout.desktopCardGap, 16), Catalog.cardGridStep
+            Math.max(root.s(DesktopLayout.desktopCardGap), root.s(16)),
+            root.s(Catalog.cardGridStep)
         );
-        const placedX = found ? found.x : 24;
-        const placedY = topInset + (found ? found.y : 16);
+        const placedX = found ? found.x : marginX;
+        const placedY = topInset + (found ? found.y : marginY);
         const norm = State.normalizedPosition(placedX, placedY, hostW, hostH);
         return root.setContainer(id, "desktop", targetScreen, norm.xNorm, norm.yNorm);
     }

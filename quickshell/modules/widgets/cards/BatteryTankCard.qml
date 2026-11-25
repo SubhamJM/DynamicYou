@@ -27,8 +27,8 @@ Item {
         : (Theme.m3.secondary ?? Theme.accent)
     readonly property color fgContainer: Theme.m3.on_secondary_container ?? Theme.colors.text_primary
     readonly property color fgLevel: Theme.m3.on_secondary ?? "#030a16"
-    readonly property real bodyRadius: Math.min(24, batteryBody.width * 0.16)
-    readonly property real iconCenterY: 16 + 18
+    readonly property real bodyRadius: Math.min(WidgetStore.s(24), batteryBody.width * 0.16)
+    readonly property real iconCenterY: WidgetStore.s(16 + 18)
     readonly property bool iconCovered: animatedLevel >= 1 - iconCenterY / Math.max(1, batteryBody.height)
 
     Behavior on animatedLevel {
@@ -89,21 +89,21 @@ Item {
         color: root.containerColor
         layer.enabled: root.visible && width > 1 && height > 1
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.42)
             shadowBlur: 0.7
-            shadowVerticalOffset: 4
+            shadowVerticalOffset: WidgetStore.s(4)
             autoPaddingEnabled: true
         }
     }
 
     // Battery top terminal cap
     Rectangle {
-        width: Math.max(34, Math.min(54, parent.width * 0.30))
-        height: 12
-        radius: 6
+        width: Math.max(WidgetStore.s(34), Math.min(WidgetStore.s(54), parent.width * 0.30))
+        height: WidgetStore.s(12)
+        radius: WidgetStore.s(6)
         color: root.animatedLevel >= 1 ? root.levelColor : root.containerColor
         anchors {
             top: parent.top
@@ -118,8 +118,8 @@ Item {
         anchors {
             left: parent.left; right: parent.right
             top: parent.top; bottom: parent.bottom
-            leftMargin: 3; rightMargin: 3
-            topMargin: 8; bottomMargin: 2
+            leftMargin: WidgetStore.s(3); rightMargin: WidgetStore.s(3)
+            topMargin: WidgetStore.s(8); bottomMargin: WidgetStore.s(2)
         }
     }
 
@@ -133,7 +133,7 @@ Item {
         visible: false
         layer.enabled: true
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
     }
 
     // Clipped liquid color background ONLY (text stays outside any offscreen FBO layer!)
@@ -143,7 +143,7 @@ Item {
         anchors.fill: parent
         layer.enabled: root.visible && width > 1 && height > 1
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         layer.effect: OpacityMask {
             maskSource: roundedMask
         }
@@ -166,10 +166,10 @@ Item {
         visible: height > 0.5
 
         BatteryContents {
-            x: 14
-            y: 14
-            width: Math.max(1, batteryBody.width - 28)
-            height: Math.max(1, batteryBody.height - 28)
+            x: WidgetStore.s(14)
+            y: WidgetStore.s(14)
+            width: Math.max(1, batteryBody.width - WidgetStore.s(28))
+            height: Math.max(1, batteryBody.height - WidgetStore.s(28))
             fgColor: root.fgContainer
         }
     }
@@ -185,10 +185,10 @@ Item {
         visible: height > 0.5
 
         BatteryContents {
-            x: 14
-            y: levelClip.height - batteryBody.height + 14
-            width: Math.max(1, batteryBody.width - 28)
-            height: Math.max(1, batteryBody.height - 28)
+            x: WidgetStore.s(14)
+            y: levelClip.height - batteryBody.height + WidgetStore.s(14)
+            width: Math.max(1, batteryBody.width - WidgetStore.s(28))
+            height: Math.max(1, batteryBody.height - WidgetStore.s(28))
             fgColor: root.fgLevel
         }
     }
@@ -197,13 +197,13 @@ Item {
         parent: batteryBody
         z: 4
         text: root.batteryIconName()
-        iconSize: 32
+        iconSize: WidgetStore.si(32)
         fill: 1
         color: root.iconCovered ? root.fgLevel : (root.lowBattery ? (Theme.m3.error ?? "#ffb4ab") : (root.powerConnected ? (Theme.m3.primary ?? Theme.accent) : root.levelColor))
         anchors {
             top: parent.top
             right: parent.right
-            margins: 12
+            margins: WidgetStore.s(12)
         }
     }
 
@@ -215,7 +215,7 @@ Item {
             text: "Battery"
             color: contents.fgColor
             font.family: "Noto Sans"
-            font.pixelSize: 13
+            font.pixelSize: WidgetStore.si(13)
             font.weight: Font.DemiBold
             font.hintingPreference: Font.PreferVerticalHinting
             renderType: Text.NativeRendering
@@ -224,59 +224,59 @@ Item {
 
         ColumnLayout {
             visible: root.present
-            spacing: 4
+            spacing: WidgetStore.s(4)
             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 4
-                MaterialSymbol { text: "schedule"; iconSize: 14; color: contents.fgColor }
+                spacing: WidgetStore.s(4)
+                MaterialSymbol { text: "schedule"; iconSize: WidgetStore.si(14); color: contents.fgColor }
                 Text {
                     Layout.fillWidth: true
                     text: root.timingText()
                     color: contents.fgColor
                     opacity: 0.85
                     font.family: "Noto Sans"
-                    font.pixelSize: 11
+                    font.pixelSize: WidgetStore.si(11)
                     elide: Text.ElideRight
                     font.hintingPreference: Font.PreferVerticalHinting
-            renderType: Text.NativeRendering
+                    renderType: Text.NativeRendering
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: WidgetStore.s(4)
                 visible: !isNaN(WidgetTelemetry.batteryRateW) && WidgetTelemetry.batteryRateW > 0.1
-                MaterialSymbol { text: "electric_bolt"; iconSize: 14; color: contents.fgColor }
+                MaterialSymbol { text: "electric_bolt"; iconSize: WidgetStore.si(14); color: contents.fgColor }
                 Text {
                     Layout.fillWidth: true
                     text: WidgetTelemetry.batteryRateW.toFixed(1) + " W"
                     color: contents.fgColor
                     opacity: 0.85
                     font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 11
+                    font.pixelSize: WidgetStore.si(11)
                     elide: Text.ElideRight
                     font.hintingPreference: Font.PreferVerticalHinting
-            renderType: Text.NativeRendering
+                    renderType: Text.NativeRendering
                 }
             }
 
             RowLayout {
                 Layout.fillWidth: true
                 visible: WidgetTelemetry.batteryHealth > 0
-                spacing: 4
-                MaterialSymbol { text: "health_and_safety"; iconSize: 14; color: contents.fgColor }
+                spacing: WidgetStore.s(4)
+                MaterialSymbol { text: "health_and_safety"; iconSize: WidgetStore.si(14); color: contents.fgColor }
                 Text {
                     Layout.fillWidth: true
                     text: "Health " + WidgetTelemetry.batteryHealth + "%"
                     color: contents.fgColor
                     opacity: 0.85
                     font.family: "Noto Sans"
-                    font.pixelSize: 11
+                    font.pixelSize: WidgetStore.si(11)
                     elide: Text.ElideRight
                     font.hintingPreference: Font.PreferVerticalHinting
-            renderType: Text.NativeRendering
+                    renderType: Text.NativeRendering
                 }
             }
         }
@@ -291,18 +291,18 @@ Item {
                 color: contents.fgColor
                 opacity: 0.78
                 font.family: "Noto Sans"
-                font.pixelSize: 11
+                font.pixelSize: WidgetStore.si(11)
                 font.hintingPreference: Font.PreferVerticalHinting
-            renderType: Text.NativeRendering
+                renderType: Text.NativeRendering
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 3
+                spacing: WidgetStore.s(3)
                 Item { Layout.fillWidth: true }
                 MaterialSymbol {
                     text: root.powerConnected ? "power" : "power_off"
-                    iconSize: 20
+                    iconSize: WidgetStore.si(20)
                     fill: 1
                     color: contents.fgColor
                 }
@@ -310,7 +310,7 @@ Item {
                     text: root.present ? (root.chargePercent + "%") : "—"
                     color: contents.fgColor
                     font.family: "Google Sans Flex"
-                    font.pixelSize: 24
+                    font.pixelSize: WidgetStore.si(24)
                     font.weight: Font.Bold
                     font.hintingPreference: Font.PreferVerticalHinting
             renderType: Text.NativeRendering

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import "../../../"
 import "../../"
+import "../"
 
 Rectangle {
     id: root
@@ -18,7 +19,7 @@ Rectangle {
     property var trendValues: []
     property bool chartActive: visible
     property int updateInterval: 1500
-    property real decorationSize: 56
+    property real decorationSize: WidgetStore.s(56)
     property color containerColor: Theme.m3.primary_container ?? Theme.colors.card_bg
     property color foregroundColor: Theme.m3.on_primary_container ?? Theme.colors.text_primary
     property color accentColor: Theme.m3.primary ?? Theme.accent
@@ -32,7 +33,7 @@ Rectangle {
         return "cookie4";
     }
 
-    radius: 24
+    radius: WidgetStore.s(24)
     color: root.containerColor
 
     Behavior on color { ColorAnimation { duration: 180 } }
@@ -44,7 +45,7 @@ Rectangle {
         visible: false
         layer.enabled: true
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         Rectangle {
             anchors.fill: parent
             radius: root.radius
@@ -57,7 +58,7 @@ Rectangle {
         z: 1
         layer.enabled: root.visible && width > 1 && height > 1
         layer.smooth: true
-        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+        layer.textureSize: Qt.size(Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)), Math.max(1, Math.round(height * 2 * WidgetStore.qtScale)))
         layer.effect: OpacityMask { maskSource: shapeMaskSource }
 
         ExpressiveShape {
@@ -86,7 +87,7 @@ Rectangle {
         rotation: 0
         text: root.iconName
         color: root.accentForegroundColor
-        iconSize: 22
+        iconSize: WidgetStore.si(22)
         fill: 1
     }
 
@@ -107,20 +108,20 @@ Rectangle {
     Row {
         id: tempBadge
         visible: root.temperatureText.length > 0
-        spacing: 2
+        spacing: WidgetStore.s(2)
         z: 5
         anchors {
             top: parent.top
             right: parent.right
-            topMargin: 12
-            rightMargin: 14
+            topMargin: WidgetStore.s(12)
+            rightMargin: WidgetStore.s(14)
         }
 
         MaterialSymbol {
             anchors.verticalCenter: parent.verticalCenter
             text: "thermostat"
             color: root.foregroundColor
-            iconSize: 15
+            iconSize: WidgetStore.si(15)
             fill: 1
             opacity: 0.80
         }
@@ -129,7 +130,7 @@ Rectangle {
             text: root.temperatureText
             color: root.foregroundColor
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 13
+            font.pixelSize: WidgetStore.si(13)
             font.weight: Font.DemiBold
             opacity: 0.88
             font.hintingPreference: Font.PreferVerticalHinting
@@ -140,19 +141,19 @@ Rectangle {
     ColumnLayout {
         anchors {
             fill: parent
-            leftMargin: 16
-            rightMargin: 14
-            topMargin: 12
-            bottomMargin: 12
+            leftMargin: WidgetStore.s(16)
+            rightMargin: WidgetStore.s(14)
+            topMargin: WidgetStore.s(12)
+            bottomMargin: WidgetStore.s(12)
         }
-        spacing: 2
+        spacing: WidgetStore.s(2)
 
         Text {
-            Layout.maximumWidth: Math.max(48, root.width - tempBadge.width - 36)
+            Layout.maximumWidth: Math.max(WidgetStore.s(48), root.width - tempBadge.width - WidgetStore.s(36))
             text: root.label
             color: root.foregroundColor
             font.family: "Google Sans Flex"
-            font.pixelSize: 19
+            font.pixelSize: WidgetStore.si(19)
             font.weight: Font.Bold
             elide: Text.ElideRight
             font.hintingPreference: Font.PreferVerticalHinting
@@ -160,13 +161,13 @@ Rectangle {
         }
 
         Text {
-            Layout.maximumWidth: Math.max(48, root.width - root.decorationSize - 24)
+            Layout.maximumWidth: Math.max(WidgetStore.s(48), root.width - root.decorationSize - WidgetStore.s(24))
             visible: text.length > 0
             text: root.detailText
             color: root.foregroundColor
             opacity: 0.72
             font.family: "Noto Sans"
-            font.pixelSize: 11
+            font.pixelSize: WidgetStore.si(11)
             elide: Text.ElideRight
             font.hintingPreference: Font.PreferVerticalHinting
             renderType: Text.NativeRendering
@@ -175,7 +176,7 @@ Rectangle {
         SparklineCanvas {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: visible ? 38 : 0
+            Layout.minimumHeight: visible ? WidgetStore.s(38) : 0
             visible: root.trendValues.length > 1
             values: root.trendValues
             historyLength: 60
@@ -184,7 +185,7 @@ Rectangle {
             active: root.chartActive
             lineColor: root.accentColor
             baselineColor: Qt.rgba(root.foregroundColor.r, root.foregroundColor.g, root.foregroundColor.b, 0.18)
-            lineWidth: 2.2
+            lineWidth: WidgetStore.s(2.2)
             fillOpacity: 0.15
         }
 
@@ -199,7 +200,7 @@ Rectangle {
             text: root.valueText
             color: root.foregroundColor
             font.family: "Google Sans Flex"
-            font.pixelSize: 28
+            font.pixelSize: WidgetStore.si(28)
             font.weight: Font.Bold
             elide: Text.ElideRight
             font.hintingPreference: Font.PreferVerticalHinting
@@ -214,7 +215,7 @@ Rectangle {
             color: root.foregroundColor
             opacity: 0.74
             font.family: "Noto Sans"
-            font.pixelSize: 11
+            font.pixelSize: WidgetStore.si(11)
             elide: Text.ElideRight
             font.hintingPreference: Font.PreferVerticalHinting
             renderType: Text.NativeRendering
