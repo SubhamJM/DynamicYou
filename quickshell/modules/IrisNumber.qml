@@ -8,17 +8,18 @@ Item {
     id: root
 
     property string text: ""
-    property string family: "Readex Pro"
-    property int pixelSize: 16
-    property int weight: Font.Bold
+    property string family: "Google Sans Flex"
+    property int pixelSize: 14
+    property int weight: Font.DemiBold
+    property int axisWeight: 560
     property real letterSpacing: 0
     property color color: "#f5f5f7"
-    property int renderType: Text.NativeRendering
+    property int renderType: Text.QtRendering
     property bool countDown: false
 
-    implicitWidth: row.implicitWidth
-    implicitHeight: probe.implicitHeight
-    baselineOffset: probe.baselineOffset
+    implicitWidth: Math.ceil(row.implicitWidth)
+    implicitHeight: Math.ceil(probe.implicitHeight)
+    baselineOffset: Math.round(probe.baselineOffset)
 
     Text {
         id: probe
@@ -27,15 +28,22 @@ Item {
         font.family: root.family
         font.pixelSize: root.pixelSize
         font.weight: root.weight
+        font.variableAxes: root.family === "Google Sans Flex" ? ({ "wght": root.axisWeight, "wdth": 100 }) : ({})
         font.features: ({ "tnum": 1 })
+        font.hintingPreference: Font.PreferNoHinting
+        renderType: root.renderType
     }
 
     component Glyph: Text {
         font.family: root.family
         font.pixelSize: root.pixelSize
         font.weight: root.weight
+        font.variableAxes: root.family === "Google Sans Flex" ? ({ "wght": root.axisWeight, "wdth": 100 }) : ({})
         font.letterSpacing: root.letterSpacing
         font.features: ({ "tnum": 1 })
+        font.hintingPreference: Font.PreferNoHinting
+        antialiasing: true
+        smooth: true
         color: root.color
         renderType: root.renderType
     }

@@ -41,20 +41,24 @@ Row {
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
                 text: button.glyph
-                iconSize: 14
+                iconSize: 15
                 color: Theme.accent
+                renderType: Text.CurveRendering
             }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: button.text
-                color: button.hovered || button.visualFocus ? Theme.accent : Theme.text
-                font.family: "Readex Pro"
+                color: button.hovered || button.visualFocus ? Theme.accent : (Theme.colors.text_primary ?? "#f5f5f7")
+                font.family: "Google Sans Flex"
                 font.pixelSize: 13
-                font.weight: Font.DemiBold
+                font.weight: Font.Medium
+                font.variableAxes: ({ "wght": 500, "wdth": 100 })
                 font.features: ({ "tnum": 1 })
-                renderType: Text.NativeRendering
-                font.hintingPreference: Font.PreferVerticalHinting
+                renderType: Text.QtRendering
+                font.hintingPreference: Font.PreferNoHinting
+                antialiasing: true
+                smooth: true
             }
         }
     }

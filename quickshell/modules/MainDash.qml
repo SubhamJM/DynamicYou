@@ -60,7 +60,15 @@ Item {
     }
 
     onCurrentIslandTypeChanged: {
-        displayedIslandType = currentIslandType;
+        if (currentIslandType !== "") displayedIslandType = currentIslandType;
+    }
+
+    readonly property int restingIdleWidth: {
+        var source = (dash.isMediaPlaying && !dash.showMusicInfo && typeof musicIdleGlances !== "undefined")
+            ? musicIdleGlances
+            : (typeof idleGlances !== "undefined" ? idleGlances : null);
+        var w = Math.max(176, (source && source.implicitWidth > 40 ? Math.ceil(source.implicitWidth) : 176) + 28);
+        return w + (w % 2);
     }
 
     property int activeIslandWidth: {
@@ -69,24 +77,24 @@ Item {
         }
         if (displayedIslandType === "notif" || root.isNotifPopupActive) return notificationBanner.preferredWidth;
         if (displayedIslandType === "workspace" || root.isWorkspacePeeking) {
-            return Math.max(136, wsIslandRow.implicitWidth + 36);
+            var ww = Math.max(dash.restingIdleWidth, wsIslandRow.implicitWidth + 36);
+            return ww + (ww % 2);
         }
-        if (displayedIslandType === "bluetooth" || btIslandExpanded) return btPopupRow.implicitWidth + 36;
-        if (displayedIslandType === "power" || powerIslandExpanded) return powerPopupRow.implicitWidth + 36;
-        if (displayedIslandType === "net" || netIslandExpanded) return netPopupRow.implicitWidth + 36;
-        return 120;
+        if (displayedIslandType === "bluetooth" || btIslandExpanded) return Math.max(dash.restingIdleWidth, btPopupRow.implicitWidth + 36);
+        if (displayedIslandType === "power" || powerIslandExpanded) return Math.max(220, powerPopupRow.implicitWidth + 36);
+        if (displayedIslandType === "net" || netIslandExpanded) return Math.max(dash.restingIdleWidth, netPopupRow.implicitWidth + 36);
+        return dash.restingIdleWidth;
     }
 
     implicitWidth: {
-        if (isIslandActive) return activeIslandWidth;
+        if (isIslandActive || displayedIslandType !== "") return activeIslandWidth;
         if (root.activeMode === "hover") {
             return dashRow.implicitWidth + 36;
         }
-        if (dash.isMediaPlaying && root.activeMode === "idle") {
-            if (dash.showMusicInfo) return 360 + (expandedMusicReadouts.visible ? expandedMusicReadouts.implicitWidth + 10 : 0);
-            return Math.max(196, (typeof musicIdleRow !== "undefined" ? musicIdleRow.implicitWidth : 172) + 24);
+        if (dash.isMediaPlaying && root.activeMode === "idle" && dash.showMusicInfo) {
+            return 360 + (expandedMusicReadouts.visible ? expandedMusicReadouts.implicitWidth + 10 : 0);
         }
-        return Math.max(184, idleCluster.implicitWidth + 36);  // Iris idle width (DateMark + IrisClock)
+        return dash.restingIdleWidth;
     }
 
     property bool showMusicInfo: false
@@ -276,6 +284,9 @@ Item {
         return null;
     }
 
+    property bool btStartupGraceActive: true
+    Timer { id: btStartupGraceTimer; interval: 2200; running: true; repeat: false; onTriggered: dash.btStartupGraceActive = false }
+
     onConnectedBtDeviceChanged: {
         if (connectedBtDevice) {
             var newMac = connectedBtDevice.address || "";
@@ -284,7 +295,7 @@ Item {
             dash.btConnected = true;
             dash.btConnectedMac = newMac;
             dash.btDeviceName = newName;
-            if (isNewDevice) {
+            if (isNewDevice && !dash.btStartupGraceActive) {
                 dash.btIslandExpanded = true;
                 btPopupTimer.restart();
                 dash.triggerBtText = true;
@@ -428,7 +439,7 @@ Item {
             id: screenshotPopupRow
             anchors.centerIn: parent
             spacing: 10
-            visible: dash.currentIslandType === "screenshot"
+            visible: (dash.displayedIslandType || dash.currentIslandType) === "screenshot"
 
             // 1. Thumbnail Preview (or fallback icon)
             Rectangle {
@@ -452,9 +463,14 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     visible: root.screenshotIslandPath === ""
-                    text: "󰄀"
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
+                    text: "photo_camera"
+                    font.family: Theme.fontFamilyIcon
+                    font.pixelSize: 16
+                    font.hintingPreference: Font.PreferNoHinting
+                    font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 16, "wght": 500 })
+                    renderType: Text.CurveRendering
+                    antialiasing: true
+                    smooth: true
                     color: Theme.accent
                 }
             }
@@ -466,16 +482,26 @@ Item {
 
                 Text {
                     text: "Screenshot"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 11
-                    font.bold: true
+                    font.family: "Google Sans Flex"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    font.variableAxes: ({ "wght": 560, "wdth": 100 })
+                    font.hintingPreference: Font.PreferNoHinting
+                    renderType: Text.QtRendering
+                    antialiasing: true
+                    smooth: true
                     color: Theme.colors.text_primary ?? "white"
                 }
 
                 Text {
                     text: root.screenshotIslandStatus !== "" ? root.screenshotIslandStatus : "Captured & Copied"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 9
+                    font.family: "Google Sans Flex"
+                    font.pixelSize: 10
+                    font.variableAxes: ({ "wght": 450, "wdth": 100 })
+                    font.hintingPreference: Font.PreferNoHinting
+                    renderType: Text.QtRendering
+                    antialiasing: true
+                    smooth: true
                     color: root.screenshotIslandStatus !== "" ? Theme.accent : (Theme.colors.text_secondary ?? "#565f89")
                 }
             }
@@ -501,19 +527,29 @@ Item {
                         spacing: 4
 
                         Text {
-                            text: "󰏫"
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 11
-                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#000000") : Theme.accent
+                            text: "edit"
+                            font.family: Theme.fontFamilyIcon
+                            font.pixelSize: 13
+                            font.hintingPreference: Font.PreferNoHinting
+                            font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 13, "wght": 500 })
+                            renderType: Text.CurveRendering
+                            antialiasing: true
+                            smooth: true
+                            color: annotMouse.containsMouse ? Theme.onAccent : Theme.accent
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
                         Text {
                             text: "Annotate"
-                            font.family: "Noto Sans"
-                            font.pixelSize: 10
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: 11
                             font.weight: Font.DemiBold
-                            color: annotMouse.containsMouse ? (Theme.colors.bg ?? "#000000") : (Theme.colors.text_primary ?? "#ffffff")
+                            font.variableAxes: ({ "wght": 550, "wdth": 100 })
+                            font.hintingPreference: Font.PreferNoHinting
+                            renderType: Text.QtRendering
+                            antialiasing: true
+                            smooth: true
+                            color: annotMouse.containsMouse ? Theme.onAccent : (Theme.colors.text_primary ?? "#ffffff")
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -541,9 +577,14 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "󰅖"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
+                        text: "close"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 14
+                        font.hintingPreference: Font.PreferNoHinting
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 14, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        antialiasing: true
+                        smooth: true
                         color: closeMouse.containsMouse ? (Theme.colors.text_primary ?? "white") : (Theme.colors.text_secondary ?? "#565f89")
                     }
 
@@ -561,18 +602,18 @@ Item {
             }
         }
 
-        // Workspace switch OSD: the active dot stretches into a pill.
+        // Workspace switch OSD: the active dot stretches into a pill with comfortable spacing.
         Item {
             id: wsIslandContainer
             anchors.centerIn: parent
             width: wsIslandRow.implicitWidth
             height: wsIslandRow.implicitHeight
-            visible: dash.currentIslandType === "workspace"
+            visible: (dash.displayedIslandType || dash.currentIslandType) === "workspace"
 
             Row {
                 id: wsIslandRow
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: 12
 
                 Repeater {
                     model: dash.workspaceIds
@@ -633,128 +674,198 @@ Item {
             }
         }
 
-        // Bluetooth Connected Alert
+        // Bluetooth Connected OSD (Matushell OsdText style)
         Row {
             id: btPopupRow
             anchors.centerIn: parent
-            spacing: 8
-            visible: dash.currentIslandType === "bluetooth"
+            spacing: 10
+            visible: (dash.displayedIslandType || dash.currentIslandType) === "bluetooth"
 
-            Rectangle {
-                width: 22
-                height: 22
-                radius: 7
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
-                anchors.verticalCenter: parent.verticalCenter
-                Text { 
-                    anchors.centerIn: parent
-                    text: (dash.btDeviceName.toLowerCase().includes("bud") || dash.btDeviceName.toLowerCase().includes("headphone") || dash.btDeviceName.toLowerCase().includes("wh-")) ? "󰋋" : "󰂱"
-                    font.family: "JetBrainsMono Nerd Font"
-                    color: Theme.accent
-                    font.pixelSize: 13
-                }
+            readonly property bool isAudioDevice: {
+                const n = (dash.btDeviceName || "").toLowerCase();
+                return n.includes("bud") || n.includes("headphone") || n.includes("wh-") || n.includes("airpod") || n.includes("ear") || n.includes("pod") || n.includes("headset") || n.includes("tws");
             }
 
-            Text { 
-                text: dash.btDeviceName
-                color: Theme.colors.text_primary ?? "#eceff4"
-                font.family: "Noto Sans"
-                font.pixelSize: 12
-                font.bold: true
+            Text {
                 anchors.verticalCenter: parent.verticalCenter
+                text: btPopupRow.isAudioDevice ? "headphones" : "bluetooth"
+                color: Theme.accent
+                font.family: Theme.fontFamilyIcon
+                font.pixelSize: 20
+                font.hintingPreference: Font.PreferNoHinting
+                font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                renderType: Text.CurveRendering
+                antialiasing: true
+                smooth: true
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Connected: " + (dash.btDeviceName || "Bluetooth")
+                color: Theme.colors.text_primary ?? "#eceff4"
+                font.family: "Google Sans Flex"
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.variableAxes: ({ "wght": 560, "wdth": 100 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
             }
 
             Rectangle {
                 visible: dash.btIslandBattery !== ""
-                width: batRow.implicitWidth + 10
-                height: 18
-                radius: 9
-                color: Qt.rgba(1, 1, 1, 0.12)
                 anchors.verticalCenter: parent.verticalCenter
+                width: btBatRow.implicitWidth + 12
+                height: 20
+                radius: height / 2
+                color: Qt.alpha(Theme.accent, 0.16)
+
                 Row {
-                    id: batRow
+                    id: btBatRow
                     anchors.centerIn: parent
                     spacing: 3
+
                     Text {
-                        text: dash.btIslandBattery
-                        font.family: "Rubik"
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.features: ({ "tnum": 1 })
-                        color: Theme.accent
                         anchors.verticalCenter: parent.verticalCenter
+                        text: "battery_android_full"
+                        color: Theme.accent
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 13
+                        font.hintingPreference: Font.PreferNoHinting
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 13, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        antialiasing: true
+                        smooth: true
                     }
+
                     Text {
-                        text: "󰁹"
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 11
-                        color: Theme.accent
                         anchors.verticalCenter: parent.verticalCenter
+                        text: dash.btIslandBattery
+                        color: Theme.accent
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        font.variableAxes: ({ "wght": 560, "wdth": 100 })
+                        font.features: ({ "tnum": 1 })
+                        font.hintingPreference: Font.PreferNoHinting
+                        renderType: Text.QtRendering
+                        antialiasing: true
+                        smooth: true
                     }
                 }
             }
         }
 
-        // Power Notification (MagSafe style)
+        // Power / Charging Connected OSD (Matushell OsdProgress style)
         Row {
             id: powerPopupRow
             anchors.centerIn: parent
-            spacing: 12
-            visible: dash.currentIslandType === "power"
-            
-            Item {
-                width: 20
-                height: 20
+            spacing: 10
+            visible: (dash.displayedIslandType || dash.currentIslandType) === "power"
+
+            Text {
                 anchors.verticalCenter: parent.verticalCenter
-                
+                text: "battery_charging_full"
+                color: Theme.accent
+                font.family: Theme.fontFamilyIcon
+                font.pixelSize: 20
+                font.hintingPreference: Font.PreferNoHinting
+                font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                renderType: Text.CurveRendering
+                antialiasing: true
+                smooth: true
+            }
+
+            Item {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 96
+                height: 16
+                readonly property real frac: Math.max(0, Math.min(1, dash.currentBatteryLevel / 100.0))
+                readonly property real handleX: 3 + frac * (width - 6)
+
                 Rectangle {
-                    anchors.centerIn: parent
-                    width: 20; height: 20
-                    radius: 10
-                    color: "transparent"
-                    border.width: 3
-                    border.color: "#4caf50"
-                    opacity: dash.powerIslandExpanded ? 1.0 : 0.0
-                    scale: dash.powerIslandExpanded ? 1.0 : 0.5
-                    
-                    Behavior on scale { NumberAnimation { duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
-                    Behavior on opacity { NumberAnimation { duration: 320; easing.type: Easing.BezierSpline; easing.bezierCurve: dash.motionCurve } }
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, parent.handleX - 4.5)
+                    height: 8
+                    topLeftRadius: 4
+                    bottomLeftRadius: 4
+                    topRightRadius: 2
+                    bottomRightRadius: 2
+                    color: Theme.accent
                 }
-                
-                Text {
-                    anchors.centerIn: parent
-                    text: "󰚥"
-                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11
-                    color: "#4caf50"
+
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, (parent.width - parent.handleX) - 4.5)
+                    height: 8
+                    topLeftRadius: 2
+                    bottomLeftRadius: 2
+                    topRightRadius: 4
+                    bottomRightRadius: 4
+                    color: Qt.alpha(Theme.colors.text_primary ?? "#f5f5f7", 0.16)
+                }
+
+                Rectangle {
+                    x: Math.max(0, Math.min(parent.width - width, parent.handleX - width / 2))
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 4
+                    height: 15
+                    radius: 2
+                    color: Theme.accent
                 }
             }
 
             Text {
-                text: dash.currentBatteryLevel + "% Charging"
-                color: "#4caf50"
-                font.pixelSize: 14; font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
+                text: dash.currentBatteryLevel + "%"
+                color: Theme.colors.text_primary ?? "#f5f5f7"
+                font.family: "Google Sans Flex"
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.variableAxes: ({ "wght": 560, "wdth": 100 })
+                font.features: ({ "tnum": 1 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
             }
         }
 
-        // Network Handoff Notification
+        // Network Handoff OSD (Matushell OsdText style)
         Row {
             id: netPopupRow
             anchors.centerIn: parent
-            spacing: 8
-            visible: dash.currentIslandType === "net"
-            
+            spacing: 10
+            visible: (dash.displayedIslandType || dash.currentIslandType) === "net"
+
             Text {
-                text: dash.activeNetType === "eth" ? "󰈀" : "󰤨"
-                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 15
+                anchors.verticalCenter: parent.verticalCenter
+                text: dash.activeNetType === "eth" ? "lan" : "network_wifi"
                 color: Theme.accent
-                anchors.verticalCenter: parent.verticalCenter
+                font.family: Theme.fontFamilyIcon
+                font.pixelSize: 20
+                font.hintingPreference: Font.PreferNoHinting
+                font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                renderType: Text.CurveRendering
+                antialiasing: true
+                smooth: true
             }
+
             Text {
-                text: dash.activeNetType === "eth" ? "Switched to Wired" : "Switched to WiFi"
-                color: Theme.colors.text_primary ?? "white"
-                font.pixelSize: 14; font.bold: true
                 anchors.verticalCenter: parent.verticalCenter
+                text: "Connected: " + (dash.activeNetType === "eth" ? "Ethernet" : (dash.activeNetName || "Wi-Fi"))
+                color: Theme.colors.text_primary ?? "#f5f5f7"
+                font.family: "Google Sans Flex"
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.variableAxes: ({ "wght": 560, "wdth": 100 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
             }
         }
     }
@@ -837,105 +948,19 @@ Item {
             }
         }
 
-        // Grouped Iris DateMark + Separator + IrisClock cluster centered in the capsule
-        Row {
-            id: idleCluster
+        // Matushell resting Dynamic Island glance row
+        DashComponents.IslandIdleGlances {
+            id: idleGlances
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: -0.5
-            spacing: 7
             z: 2
-
-            Item {
-                id: idleTimeContainer
-                implicitWidth: idleTimeRow.implicitWidth
-                implicitHeight: idleTimeRow.implicitHeight
-                anchors.verticalCenter: parent.verticalCenter
-
-                Row {
-                    id: idleTimeRow
-                    spacing: 7
-
-                    // DateMark: weekday quiet, day number carrying accent,
-                    // sharing optical baseline directly with IrisClock figures
-                    Row {
-                        id: idleDateMark
-                        spacing: 4
-                        baselineOffset: idleWeekdayText.baselineOffset
-                        anchors.baseline: idleIrisClock.baseline
-
-                        Text {
-                            id: idleWeekdayText
-                            text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                            color: Theme.colors.text_muted ?? "#8e8e93"
-                            font.family: "Readex Pro"
-                            font.pixelSize: 13
-                            font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferVerticalHinting
-                        }
-
-                        Text {
-                            id: idleDayText
-                            anchors.baseline: idleWeekdayText.baseline
-                            text: Qt.formatDate(clock.date, "d")
-                            color: Theme.accent
-                            font.family: "Readex Pro"
-                            font.pixelSize: 14
-                            font.weight: Font.Bold
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferVerticalHinting
-                        }
-                    }
-
-                    // Material You subtle separator bullet
-                    Text {
-                        text: "•"
-                        anchors.baseline: idleIrisClock.baseline
-                        anchors.baselineOffset: -0.5
-                        color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                        font.family: "Readex Pro"
-                        font.pixelSize: 11
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferVerticalHinting
-                    }
-
-                    // IrisClock: clean Readex Pro numbers, accent colon, no leading zero in 12h
-                    IrisClock {
-                        id: idleIrisClock
-                        pixelSize: 16
-                        family: "Readex Pro"
-                        weight: Font.Bold
-                        text: {
-                            var h = clock.date.getHours() % 12 || 12;
-                            var m = clock.date.getMinutes();
-                            var hh = String(h);
-                            var mm = (m < 10 ? "0" : "") + m;
-                            return hh + ":" + mm;
-                        }
-                        color: Theme.colors.text_primary ?? "#f5f5f7"
-                        separatorColor: Theme.accent
-                        isScreenRecording: root.isScreenRecording
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: (mouse) => {
-                        if (mouse.button === Qt.RightButton) {
-                            root.openUtility("", true);
-                        } else {
-                            root.switchMode("calendar", true);
-                        }
-                    }
-                }
-            }
-
-            BarTimeReadouts {
-                anchors.verticalCenter: parent.verticalCenter
-                onOpenRequested: tab => root.openClockTab(tab)
-            }
+            clockDate: clock.date
+            isScreenRecording: root.isScreenRecording
+            notificationCount: (typeof globalNotifModel !== "undefined") ? globalNotifModel.count : 0
+            dndEnabled: root.dndEnabled
+            activeNetType: dash.activeNetType
+            activeNetName: dash.activeNetName
+            activeNetSignal: dash.activeNetSignal
+            onTimerOpenRequested: tab => root.openClockTab(tab)
         }
     }
 
@@ -952,116 +977,30 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
             onClicked: (mouse) => {
                 if (mouse.button === Qt.MiddleButton) {
                     Quickshell.execDetached(["playerctl", "play-pause"]);
+                } else if (mouse.button === Qt.RightButton) {
+                    root.switchMode("calendar", true);
                 } else {
                     root.switchMode("music", true);
                 }
             }
         }
 
-        Row {
-            id: musicIdleRow
+        DashComponents.IslandIdleGlances {
+            id: musicIdleGlances
             anchors.centerIn: parent
-            spacing: 9
-
-            // Center: DateMark + Separator + IrisClock cluster
-            Row {
-                id: musicIdleCluster
-                spacing: 7
-                anchors.verticalCenter: parent.verticalCenter
-                z: 2
-
-                Item {
-                    id: musicIdleTimeContainer
-                    implicitWidth: musicIdleTimeRow.implicitWidth
-                    implicitHeight: musicIdleTimeRow.implicitHeight
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    Row {
-                        id: musicIdleTimeRow
-                        spacing: 7
-
-                        Row {
-                            id: musicIdleDateMark
-                            spacing: 4
-                            baselineOffset: musicIdleWeekdayText.baselineOffset
-                            anchors.baseline: musicIdleClock.baseline
-
-                            Text {
-                                id: musicIdleWeekdayText
-                                text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                                color: Theme.colors.text_muted ?? "#8e8e93"
-                                font.family: "Readex Pro"
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                                renderType: Text.NativeRendering
-                                font.hintingPreference: Font.PreferVerticalHinting
-                            }
-
-                            Text {
-                                id: musicIdleDayText
-                                anchors.baseline: musicIdleWeekdayText.baseline
-                                text: Qt.formatDate(clock.date, "d")
-                                color: Theme.accent
-                                font.family: "Readex Pro"
-                                font.pixelSize: 14
-                                font.weight: Font.Bold
-                                renderType: Text.NativeRendering
-                                font.hintingPreference: Font.PreferVerticalHinting
-                            }
-                        }
-
-                        Text {
-                            text: "•"
-                            anchors.baseline: musicIdleClock.baseline
-                            anchors.baselineOffset: -0.5
-                            color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                            font.family: "Readex Pro"
-                            font.pixelSize: 11
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferVerticalHinting
-                        }
-
-                        IrisClock {
-                            id: musicIdleClock
-                            pixelSize: 16
-                            family: "Readex Pro"
-                            weight: Font.Bold
-                            text: {
-                                var h = clock.date.getHours() % 12 || 12;
-                                var m = clock.date.getMinutes();
-                                var hh = String(h);
-                                var mm = (m < 10 ? "0" : "") + m;
-                                return hh + ":" + mm;
-                            }
-                            color: Theme.colors.text_primary ?? "#f5f5f7"
-                            separatorColor: Theme.accent
-                            isScreenRecording: root.isScreenRecording
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        onClicked: (mouse) => {
-                            if (mouse.button === Qt.MiddleButton) {
-                                Quickshell.execDetached(["playerctl", "play-pause"]);
-                            } else {
-                                root.switchMode("calendar", true);
-                            }
-                        }
-                    }
-                }
-
-                BarTimeReadouts {
-                    anchors.verticalCenter: parent.verticalCenter
-                    onOpenRequested: tab => root.openClockTab(tab)
-                }
-            }
+            z: 2
+            clockDate: clock.date
+            isScreenRecording: root.isScreenRecording
+            notificationCount: (typeof globalNotifModel !== "undefined") ? globalNotifModel.count : 0
+            dndEnabled: root.dndEnabled
+            activeNetType: dash.activeNetType
+            activeNetName: dash.activeNetName
+            activeNetSignal: dash.activeNetSignal
+            onTimerOpenRequested: tab => root.openClockTab(tab)
         }
     }
 
@@ -1147,10 +1086,15 @@ Item {
                     return hh + ":" + mm;
                 }
                 color: Theme.colors.text_secondary ?? "#aeaeb2"
-                font.family: "Readex Pro"
-                font.pixelSize: 11
+                font.family: "Google Sans Flex"
+                font.pixelSize: 12
                 font.weight: Font.Medium
+                font.variableAxes: ({ "wght": 500, "wdth": 100 })
                 font.features: ({ "tnum": 1 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
                 Layout.alignment: Qt.AlignVCenter
             }
 

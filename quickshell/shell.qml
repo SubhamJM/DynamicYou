@@ -17,6 +17,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects
 import Quickshell.Services.Notifications
 import "./modules"
 import "./modules/widgets"
@@ -2364,7 +2365,15 @@ for f in sorted_files:
         Item {
             id: mediaBubble
             readonly property bool mediaActive: typeof MprisController !== "undefined" && !!MprisController.activePlayer
-            readonly property string artSource: mediaActive ? (MprisController.artUrl ?? "") : ""
+            readonly property string artSource: {
+                if (!mediaActive) return "";
+                const ctrlUrl = MprisController.artUrl ? String(MprisController.artUrl) : "";
+                if (ctrlUrl !== "") return ctrlUrl;
+                const playerUrl = MprisController.activePlayer && MprisController.activePlayer.trackArtUrl
+                    ? String(MprisController.activePlayer.trackArtUrl)
+                    : "";
+                return playerUrl;
+            }
             property real trackProgress: 0
 
             Timer {
@@ -2432,14 +2441,45 @@ for f in sorted_files:
                 scale: mediaHover.containsMouse ? (mediaHover.pressed ? 0.92 : 1.06) : 1.0
                 Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
+                Image {
+                    id: discArt
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    source: mediaBubble.artSource
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    sourceSize: Qt.size(96, 96)
+                    visible: false
+                }
+
+                Rectangle {
+                    id: discMask
+                    anchors.fill: discArt
+                    radius: width / 2
+                    visible: false
+                    layer.enabled: discArt.status === Image.Ready
+                    layer.smooth: true
+                    layer.textureSize: Qt.size(96, 96)
+                }
+
+                OpacityMask {
+                    anchors.fill: discArt
+                    source: discArt
+                    maskSource: discMask
+                    visible: discArt.status === Image.Ready
+                }
+
                 MaterialSymbol {
                     anchors.centerIn: parent
+                    visible: discArt.status !== Image.Ready
                     text: "music_note"
                     iconSize: 14
                     color: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#ffffff"
                 }
 
                 Shape {
+                    z: 2
                     x: -2.5
                     y: -2.5
                     width: 32
@@ -2464,6 +2504,7 @@ for f in sorted_files:
                 }
 
                 Shape {
+                    z: 2
                     visible: mediaBubble.trackProgress > 0.001
                     x: -2.5
                     y: -2.5

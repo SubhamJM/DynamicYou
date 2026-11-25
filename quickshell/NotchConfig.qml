@@ -92,7 +92,7 @@ QtObject {
         "lockscreen":    { width: 880, height: 360, radius: 24 },
         "engine":        { width: 840, height: 480, radius: 22 },
         "transition":    { width: 440, height: 320, radius: 22 },
-        "osd":           { width: 280, height: 40,  radius: 16 },
+        "osd":           { width: 340, height: 40,  radius: 20 },
         "wifi":          { width: 440, height: 460, radius: 22 },
         "bluetooth":     { width: 440, height: 360, radius: 22 },
         "recorder":      { width: 408, height: 350, radius: 24 },

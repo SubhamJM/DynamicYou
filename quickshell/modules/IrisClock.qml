@@ -7,12 +7,14 @@ Row {
     id: root
 
     property string text: ""
-    property int pixelSize: 16
-    property int weight: Font.Bold
+    property int pixelSize: 14
+    property int weight: Font.DemiBold
+    property int axisWeight: 560
+    property int renderType: Text.QtRendering
     property color color: Theme.colors.text_primary ?? "#f5f5f7"
     property color separatorColor: Theme.accent
-    property string family: "Readex Pro"
-    property real minorScale: 0.58
+    property string family: "Google Sans Flex"
+    property real minorScale: 0.68
     property bool isScreenRecording: false
 
     baselineOffset: hoursText.baselineOffset
@@ -36,21 +38,27 @@ Row {
         font.family: root.family
         font.pixelSize: root.pixelSize
         font.weight: root.weight
+        font.variableAxes: root.family === "Google Sans Flex" ? ({ "wght": root.axisWeight, "wdth": 100 }) : ({})
         font.features: ({ "tnum": 1 })
         font.letterSpacing: 0
+        font.hintingPreference: Font.PreferNoHinting
+        antialiasing: true
+        smooth: true
         color: root.color
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferVerticalHinting
+        renderType: root.renderType
     }
 
     component Minor: Text {
         font.family: root.family
         font.pixelSize: Math.round(root.pixelSize * root.minorScale)
         font.weight: Font.Medium
+        font.variableAxes: root.family === "Google Sans Flex" ? ({ "wght": 500, "wdth": 100 }) : ({})
         font.features: ({ "tnum": 1 })
-        color: Qt.alpha(root.color, 0.55)
-        renderType: Text.NativeRendering
-        font.hintingPreference: Font.PreferVerticalHinting
+        font.hintingPreference: Font.PreferNoHinting
+        antialiasing: true
+        smooth: true
+        color: Qt.alpha(root.color, 0.65)
+        renderType: root.renderType
     }
 
     // Hours, minutes and seconds count; the separator and period stay put.
@@ -60,6 +68,8 @@ Row {
         family: root.family
         pixelSize: root.pixelSize
         weight: root.weight
+        axisWeight: root.axisWeight
+        renderType: root.renderType
         letterSpacing: 0
         color: root.color
     }
@@ -69,9 +79,8 @@ Row {
         visible: root.parts.minutes.length > 0
         color: root.separatorColor
         anchors.baseline: hoursText.baseline
-        anchors.baselineOffset: -root.pixelSize * 0.04
-        leftPadding: 1.5
-        rightPadding: 1.5
+        leftPadding: 1
+        rightPadding: 1
     }
 
     IrisNumber {
@@ -80,14 +89,16 @@ Row {
         family: root.family
         pixelSize: root.pixelSize
         weight: root.weight
+        axisWeight: root.axisWeight
+        renderType: root.renderType
         letterSpacing: 0
         color: root.color
     }
 
     Item {
         visible: root.parts.seconds.length > 0
-        implicitWidth: secondsText.implicitWidth + root.pixelSize * 0.12
-        implicitHeight: secondsText.implicitHeight
+        implicitWidth: Math.ceil(secondsText.implicitWidth) + 2
+        implicitHeight: Math.ceil(secondsText.implicitHeight)
         baselineOffset: secondsText.baselineOffset
         anchors.baseline: hoursText.baseline
         IrisNumber {
@@ -97,14 +108,16 @@ Row {
             family: root.family
             pixelSize: Math.round(root.pixelSize * root.minorScale)
             weight: Font.Medium
-            color: Qt.alpha(root.color, 0.55)
+            axisWeight: 500
+            renderType: root.renderType
+            color: Qt.alpha(root.color, 0.65)
         }
     }
 
     Minor {
         visible: root.parts.period.length > 0
         text: root.parts.period
-        leftPadding: root.pixelSize * 0.16
+        leftPadding: 2
         anchors.baseline: hoursText.baseline
     }
 
