@@ -40,6 +40,7 @@ Row {
         font.letterSpacing: 0
         color: root.color
         renderType: Text.NativeRendering
+        font.hintingPreference: Font.PreferVerticalHinting
     }
 
     component Minor: Text {
@@ -49,6 +50,7 @@ Row {
         font.features: ({ "tnum": 1 })
         color: Qt.alpha(root.color, 0.55)
         renderType: Text.NativeRendering
+        font.hintingPreference: Font.PreferVerticalHinting
     }
 
     // Hours, minutes and seconds count; the separator and period stay put.

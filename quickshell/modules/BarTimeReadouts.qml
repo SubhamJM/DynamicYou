@@ -54,6 +54,7 @@ Row {
                 font.weight: Font.DemiBold
                 font.features: ({ "tnum": 1 })
                 renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferVerticalHinting
             }
         }
     }

@@ -1,0 +1,8 @@
+module qs.modules.widgets
+singleton WidgetStore 1.0 WidgetStore.qml
+singleton WidgetTelemetry 1.0 WidgetTelemetry.qml
+singleton WidgetDragSession 1.0 WidgetDragSession.qml
+WidgetSidebarWindow 1.0 WidgetSidebarWindow.qml
+WidgetDesktopHost 1.0 WidgetDesktopHost.qml
+WidgetDrawerView 1.0 WidgetDrawerView.qml
+WidgetCardContent 1.0 WidgetCardContent.qml

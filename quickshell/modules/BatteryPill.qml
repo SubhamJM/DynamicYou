@@ -97,6 +97,7 @@ Item {
             font.features: ({ "tnum": 1 })
             color: root.fillColor
             renderType: Text.NativeRendering
+            font.hintingPreference: Font.PreferVerticalHinting
         }
     }
 }

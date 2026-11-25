@@ -614,6 +614,8 @@ FocusScope {
 
             // Primary Text Input
             TextInput {
+                renderType: TextInput.NativeRendering
+                font.hintingPreference: Font.PreferVerticalHinting
                 id: searchInputField
                 anchors.left: searchLeadingIcon.right
                 anchors.leftMargin: 12
@@ -637,6 +639,8 @@ FocusScope {
                 Keys.forwardTo: [launcher]
 
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     id: placeholder
                     anchors.fill: parent
                     verticalAlignment: Text.AlignVCenter
@@ -670,6 +674,8 @@ FocusScope {
                     visible: !launcher.showTopApps && resultsModel.count > 0
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         id: countText
                         anchors.centerIn: parent
                         text: {
@@ -750,6 +756,8 @@ FocusScope {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.label
                                 color: launcher.cText
@@ -787,6 +795,8 @@ FocusScope {
             visible: launcher.showTopApps
 
             Text {
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferVerticalHinting
                 x: 4
                 text: "Suggestions"
                 color: launcher.cSubtext
@@ -871,6 +881,8 @@ FocusScope {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
@@ -941,6 +953,8 @@ FocusScope {
                                 }
 
                                 Text {
+                                    renderType: Text.NativeRendering
+                                    font.hintingPreference: Font.PreferVerticalHinting
                                     anchors.centerIn: parent
                                     visible: shortcut.modelData.key !== "clipboard"
                                     color: launcher.cSubtext
@@ -952,6 +966,8 @@ FocusScope {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 anchors.verticalCenter: parent.verticalCenter
                                 color: shortcutMouse.containsMouse ? launcher.cText : launcher.cSubtext
                                 font.pixelSize: 11
@@ -1064,6 +1080,8 @@ FocusScope {
                         spacing: 2
 
                         Text {
+                            renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                             width: parent.width
                             text: model.title
                             color: launcher.cText
@@ -1073,6 +1091,8 @@ FocusScope {
                         }
 
                         Text {
+                            renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                             width: parent.width
                             text: model.subtitle
                             color: launcher.cSubtext
@@ -1096,6 +1116,8 @@ FocusScope {
                         color: rowDelegate.isSelected ? launcher.cAccent : launcher.cCardBg
 
                         Text {
+                            renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                             id: actionLabel
                             anchors.centerIn: parent
                             text: model.actionText + " ↵"
@@ -1142,6 +1164,8 @@ FocusScope {
                     }
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "No results found"
                         color: launcher.cText
@@ -1150,6 +1174,8 @@ FocusScope {
                     }
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "Try entering math (e.g. 25 * 4), prefix '>' for terminal, or '?' for web"
                         color: launcher.cSubtextDim

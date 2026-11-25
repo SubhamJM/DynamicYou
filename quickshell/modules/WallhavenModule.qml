@@ -92,29 +92,37 @@ FocusScope {
 
             ColumnLayout {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 spacing: -2
 
                 Text {
+                    Layout.fillWidth: true
                     text: "Wallhaven Wallpapers"
                     color: Theme.text
                     font.family: Theme.fontFamilyBody
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
+                    elide: Text.ElideRight
                 }
 
                 Text {
+                    Layout.fillWidth: true
                     text: "Browse, search and set wallpapers online from wallhaven.cc"
                     color: Theme.subtext
                     font.family: Theme.fontFamilyBody
                     font.pixelSize: 11
+                    elide: Text.ElideRight
                 }
             }
+
+            Item { Layout.fillWidth: true }
 
             // Close button
             Rectangle {
                 id: closeBtn
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 radius: 16
                 color: closeMouse.containsMouse ? Theme.surfaceHighest : Theme.surfaceHigh
 

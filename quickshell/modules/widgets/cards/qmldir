@@ -1,0 +1,15 @@
+module qs.modules.widgets.cards
+BatteryTankCard 1.0 BatteryTankCard.qml
+CalendarCard 1.0 CalendarCard.qml
+ClockCard 1.0 ClockCard.qml
+DualChartWideCard 1.0 DualChartWideCard.qml
+ExpressiveMetricTileCard 1.0 ExpressiveMetricTileCard.qml
+ExpressiveShape 1.0 ExpressiveShape.qml
+LiquidWaveCard 1.0 LiquidWaveCard.qml
+MusicLyricsCard 1.0 MusicLyricsCard.qml
+SekaiBurst 1.0 SekaiBurst.qml
+SekaiDiamond 1.0 SekaiDiamond.qml
+SekaiLyricsLine 1.0 SekaiLyricsLine.qml
+SekaiLyricsWord 1.0 SekaiLyricsWord.qml
+SparklineCanvas 1.0 SparklineCanvas.qml
+WeatherPillCard 1.0 WeatherPillCard.qml

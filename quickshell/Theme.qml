@@ -93,11 +93,52 @@ QtObject {
     readonly property var curveEmphasizedDecel: [0.05, 0.7, 0.1, 1, 1, 1]
     readonly property var curveGlide: [0.37, 0, 0.63, 1, 1, 1]
 
-    readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config"
+    readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string activeThemeDir: configDir + "/active-theme"
+    readonly property string materialPalettePath: activeThemeDir + "/material.json"
     readonly property bool presetApplying: presetApplyProcess.running
     property string currentThemeName: "default"
     property string activeTransition: "simple"
+
+    property var m3: ({
+        "primary": "#00e5ff",
+        "on_primary": "#101014",
+        "primary_container": "#064a62",
+        "on_primary_container": "#e0f8ff",
+        "secondary": "#67e8f9",
+        "on_secondary": "#030a16",
+        "secondary_container": "#1b4057",
+        "on_secondary_container": "#e0f8ff",
+        "tertiary": "#00e5ff",
+        "on_tertiary": "#101014",
+        "tertiary_container": "#0b4567",
+        "on_tertiary_container": "#e0f8ff",
+        "surface": "#030a16",
+        "on_surface": "#e0f8ff",
+        "surface_variant": "#08162e",
+        "on_surface_variant": "#67e8f9",
+        "surface_dim": "#030a16",
+        "surface_bright": "#0e2246",
+        "surface_container_lowest": "#030913",
+        "surface_container_low": "#08162e",
+        "surface_container": "#0b1b39",
+        "surface_container_high": "#0e2246",
+        "surface_container_highest": "#1f3355",
+        "outline": "#163a70",
+        "outline_variant": "#0f2950",
+        "inverse_surface": "#e0f8ff",
+        "inverse_on_surface": "#030a16",
+        "inverse_primary": "#00e5ff",
+        "background": "#030a16",
+        "on_background": "#e0f8ff",
+        "shadow": "#000000",
+        "scrim": "#000000",
+        "surface_tint": "#00e5ff",
+        "error": "#ffb4ab",
+        "on_error": "#390005",
+        "error_container": "#93000a",
+        "on_error_container": "#ffdad6"
+    })
 
     signal themeReloaded()
     signal presetApplyFinished(bool success)
@@ -119,16 +160,35 @@ QtObject {
 
     function reload() {
         themeLoader.running = false;
+        materialLoader.running = false;
         themeNameLoader.running = false;
         transitionLoader.running = false;
         Qt.callLater(() => {
             themeLoader.running = true;
+            materialLoader.running = true;
             themeNameLoader.running = true;
             transitionLoader.running = true;
         });
     }
 
     Component.onCompleted: theme.reload()
+
+    property Process materialLoader: Process {
+        running: false
+        command: ["cat", theme.materialPalettePath]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!this.text || this.text.trim() === "") return;
+                try {
+                    var parsed = JSON.parse(this.text);
+                    theme.m3 = Object.assign({}, theme.m3, parsed);
+                    theme.themeReloaded();
+                } catch(e) {
+                    console.warn("[Quickshell Theme] Failed to parse material.json:", e);
+                }
+            }
+        }
+    }
 
     property Process themeLoader: Process {
         running: false

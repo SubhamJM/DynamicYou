@@ -5,6 +5,8 @@ import sys
 
 
 def main():
+    # Restore the shell's former physical size on a 1x monitor without scaling apps.
+    os.environ["QT_SCALE_FACTOR"] = "1.2"
     # Drop idle jemalloc pages promptly after closing QML panels.
     os.environ.setdefault(
         "MALLOC_CONF",

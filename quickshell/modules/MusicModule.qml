@@ -774,6 +774,8 @@ Item {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: musicModule.effectiveSource
                                 color: "#f5f5f7"
@@ -812,6 +814,8 @@ Item {
 
                 // Track Title (DemiBold, elided)
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     width: parent.width
                     text: musicModule.effectiveTitle
                     color: "#ffffff"
@@ -825,6 +829,8 @@ Item {
 
                 // Artist & Album
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     width: parent.width
                     text: musicModule.effectiveArtist
                     visible: text.length > 0
@@ -892,6 +898,8 @@ Item {
                 height: 16
 
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     anchors.left: parent.left
                     anchors.leftMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
@@ -903,6 +911,8 @@ Item {
                 }
 
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
@@ -960,6 +970,8 @@ Item {
                     }
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         anchors.verticalCenter: parent.verticalCenter
                         text: Math.round(musicModule.playerVolume * 100) + "%"
                         font.pixelSize: 11
@@ -1168,6 +1180,8 @@ Item {
                     spacing: 4
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         anchors.verticalCenter: parent.verticalCenter
                         text: "App"
                         font.pixelSize: 11
@@ -1209,6 +1223,8 @@ Item {
             }
 
             Text {
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferVerticalHinting
                 text: "OTHER PLAYERS"
                 font.pixelSize: 10
                 font.weight: Font.Bold
@@ -1247,6 +1263,8 @@ Item {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 text: String(playerChip.modelData?.trackTitle || playerChip.modelData?.identity || "Player")
                                 font.pixelSize: 11
                                 font.weight: Font.Medium
@@ -1296,6 +1314,8 @@ Item {
                 spacing: 8
 
                 Text {
+                    renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                     anchors.verticalCenter: parent.verticalCenter
                     text: "OUTPUT"
                     font.pixelSize: 10
@@ -1332,6 +1352,8 @@ Item {
                             }
 
                             Text {
+                                renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: musicModule.cleanDeviceName(sinkChip.modelData.name, sinkChip.modelData.desc)
                                 font.pixelSize: 11
@@ -1369,6 +1391,8 @@ Item {
             }
 
             Text {
+                renderType: Text.NativeRendering
+                font.hintingPreference: Font.PreferVerticalHinting
                 text: "APP STREAMS"
                 font.pixelSize: 10
                 font.weight: Font.Bold
@@ -1429,6 +1453,8 @@ Item {
                     }
 
                     Text {
+                        renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                         anchors.verticalCenter: parent.verticalCenter
                         width: 90
                         text: appLevel.nodes.length > 1 ? appLevel.modelData.name + " · " + appLevel.nodes.length : appLevel.modelData.name

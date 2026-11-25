@@ -18,6 +18,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell.Services.Notifications
 import "./modules"
+import "./modules/widgets"
 import "./" // Imports NotchConfig singleton
 import qs
 import qs.services
@@ -979,6 +980,11 @@ for f in sorted_files:
         onPressed: root.settingsOpen = !root.settingsOpen
     }
 
+    GlobalShortcut {
+        name: "toggleWidgetSidebar"
+        onPressed: WidgetStore.toggleSidebar()
+    }
+
     property bool switcherQuickTapArmed: false
 
     Timer {
@@ -1068,6 +1074,71 @@ for f in sorted_files:
                 close();
             else
                 open();
+        }
+    }
+
+    IpcHandler {
+        target: "sidebar"
+
+        function toggle(): string {
+            return WidgetStore.toggleSidebar();
+        }
+
+        function open(): string {
+            return WidgetStore.openSidebar();
+        }
+
+        function close(): string {
+            return WidgetStore.closeSidebar();
+        }
+    }
+
+    IpcHandler {
+        target: "widgets"
+
+        function toggle(): string {
+            return WidgetStore.toggleSidebar();
+        }
+
+        function open(): string {
+            return WidgetStore.openSidebar();
+        }
+
+        function close(): string {
+            return WidgetStore.closeSidebar();
+        }
+
+        function pin(cardId: string): string {
+            const screenName = widgetSidebar.screen ? String(widgetSidebar.screen.name || "") : "";
+            return WidgetStore.pinToDesktop(cardId, screenName) ? "OK" : "ERROR";
+        }
+
+        function unpin(cardId: string): string {
+            return WidgetStore.setContainer(cardId, "sidebar") ? "OK" : "ERROR";
+        }
+
+        function returnAll(): string {
+            WidgetStore.returnAllToSidebar();
+            return "OK";
+        }
+
+        function toggleClockStyle(): string {
+            WidgetStore.toggleClockStyle();
+            return WidgetStore.clockStyle;
+        }
+
+        function toggleMusicStyle(): string {
+            WidgetStore.toggleMusicStyle();
+            return WidgetStore.musicStyle;
+        }
+
+        function toggleSide(): string {
+            WidgetStore.toggleSidebarSide();
+            return WidgetStore.sidebarSide;
+        }
+
+        function scrollFraction(frac: real): string {
+            return widgetSidebar.scrollDrawer(frac);
         }
     }
 
@@ -2315,5 +2386,14 @@ for f in sorted_files:
                 }
             }
         }
+    }
+
+    WidgetDesktopHost {
+        id: widgetDesktopHost
+    }
+
+    WidgetSidebarWindow {
+        id: widgetSidebar
+        notchRoot: root
     }
 }

@@ -9,6 +9,7 @@ import Quickshell.Services.UPower
 import "../"
 import "."
 import "." as DashComponents
+import "./widgets"
 
 Item {
     id: dash
@@ -870,6 +871,7 @@ Item {
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                         }
 
                         Text {
@@ -881,6 +883,7 @@ Item {
                             font.pixelSize: 14
                             font.weight: Font.Bold
                             renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                         }
                     }
 
@@ -893,6 +896,7 @@ Item {
                         font.family: "Readex Pro"
                         font.pixelSize: 11
                         renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                     }
 
                     // IrisClock: clean Readex Pro numbers, accent colon, no leading zero in 12h
@@ -1003,6 +1007,7 @@ Item {
                                 font.pixelSize: 13
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                             }
 
                             Text {
@@ -1014,6 +1019,7 @@ Item {
                                 font.pixelSize: 14
                                 font.weight: Font.Bold
                                 renderType: Text.NativeRendering
+                                font.hintingPreference: Font.PreferVerticalHinting
                             }
                         }
 
@@ -1025,6 +1031,7 @@ Item {
                             font.family: "Readex Pro"
                             font.pixelSize: 11
                             renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
                         }
 
                         IrisClock {
@@ -1296,6 +1303,7 @@ Item {
                             font.pixelSize: 12
                             font.weight: Font.Black
                             renderType: Text.NativeRendering
+                            font.hintingPreference: Font.PreferVerticalHinting
 
                             Behavior on color { ColorAnimation { duration: 160 } }
                         }
@@ -1357,6 +1365,7 @@ Item {
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
                         renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                     }
 
                     Text {
@@ -1367,6 +1376,7 @@ Item {
                         font.pixelSize: 14
                         font.weight: Font.Bold
                         renderType: Text.NativeRendering
+                        font.hintingPreference: Font.PreferVerticalHinting
                     }
                 }
 
@@ -1378,6 +1388,7 @@ Item {
                     font.family: "Readex Pro"
                     font.pixelSize: 11
                     renderType: Text.NativeRendering
+                    font.hintingPreference: Font.PreferVerticalHinting
                 }
 
                 // Tabular Clock Time
@@ -1465,6 +1476,45 @@ Item {
                 height: 14
                 Layout.alignment: Qt.AlignVCenter
                 color: Theme.alpha(Theme.text, 0.14)
+            }
+
+            // Widget Sidebar Toggle
+            Item {
+                width: 28
+                height: 28
+                Layout.alignment: Qt.AlignVCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 8
+                    color: wdgMouse.pressed
+                        ? Qt.rgba(255, 255, 255, 0.14)
+                        : ((WidgetStore.sidebarOpen || wdgMouse.containsMouse) ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
+                    scale: wdgMouse.pressed ? 0.92 : (wdgMouse.containsMouse ? 1.06 : 1.0)
+
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "widgets"
+                        iconSize: 17
+                        fill: WidgetStore.sidebarOpen ? 1 : 0
+                        color: (WidgetStore.sidebarOpen || wdgMouse.containsMouse) ? Theme.accent : (Theme.colors.text_primary ?? "#ffffff")
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+                }
+
+                MouseArea {
+                    id: wdgMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.collapseToIdle();
+                        WidgetStore.toggleSidebar();
+                    }
+                }
             }
 
             // Revamped Control Center Toggle (Tune sliders icon)
