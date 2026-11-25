@@ -1,1 +1,1 @@
-/home/subham/.config/themes/Verdant/theme-name.txt
+/home/subham/.config/themes/Abyss/theme-name.txt

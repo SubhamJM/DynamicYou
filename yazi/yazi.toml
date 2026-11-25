@@ -35,6 +35,11 @@ reveal = [
 	{ run = 'xdg-open "$(dirname "$1")"', desc = "Reveal", for = "unix" },
 ]
 
+zen-pdf = [
+	{ run = 'zen-browser %S1', desc = "Zen Browser", orphan = true, for = "unix" },
+]
+
+
 [open]
 rules = [
 	{ mime = "folder/*", use = [ "edit", "open", "reveal" ] },
@@ -42,6 +47,7 @@ rules = [
 	{ mime = "image/*", use = [ "open", "reveal" ] },
 	{ mime = "{audio,video}/*", use = [ "open", "reveal" ] },
 	{ mime = "application/json", use = [ "edit", "reveal" ] },
+	{ mime = "application/pdf", use = [ "zen-pdf", "open", "reveal" ] },
 	{ mime = "application/{zip,rar,7z*,tar,gzip,xz,bzip2}", use = [ "open", "reveal" ] },
 	{ url = "*", use = [ "open", "reveal" ] },
 ]
