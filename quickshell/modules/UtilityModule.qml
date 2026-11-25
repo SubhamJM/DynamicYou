@@ -703,7 +703,7 @@ Item {
             width: height
             radius: Math.min(width, height) / 2
             visible: gtile.grouped
-            color: gtile.lit ? Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22)
+            color: gtile.lit ? (gtile.grouped ? Qt.rgba(1, 1, 1, tileMouse.containsMouse ? 0.22 : 0.14) : Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22))
                 : Theme.alpha(Theme.text, tileMouse.containsMouse ? 0.13 : 0.065)
             Behavior on color { ColorAnimation { duration: 100 } }
         }
@@ -713,7 +713,8 @@ Item {
             text: gtile.glyph
             fill: gtile.lit ? 1 : 0
             iconSize: 21
-            color: gtile.lit ? gtile.tint : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
+            color: gtile.lit ? (gtile.grouped ? utilModule.colText : gtile.tint)
+                : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
             Behavior on color { ColorAnimation { duration: 100 } }
         }
 

@@ -967,15 +967,6 @@ Item {
             anchors.centerIn: parent
             spacing: 9
 
-            // Left: Circular Album Cover (22px)
-            IrisArtwork {
-                source: dash.currentAlbumArt
-                circular: true
-                width: 22
-                height: 22
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
             // Center: DateMark + Separator + IrisClock cluster
             Row {
                 id: musicIdleCluster
@@ -1070,12 +1061,6 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     onOpenRequested: tab => root.openClockTab(tab)
                 }
-            }
-
-            // Right: Live Animated Waveform
-            IrisWaveform {
-                running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
-                anchors.verticalCenter: parent.verticalCenter
             }
         }
     }

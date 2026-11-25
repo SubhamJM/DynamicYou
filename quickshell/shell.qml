@@ -16,6 +16,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell.Services.Notifications
 import "./modules"
 import "./modules/widgets"
@@ -1475,6 +1476,10 @@ for f in sorted_files:
             Region {
                 item: (root.isScreenRecording && recordingBubble.visible) ? recordingBubble : null
             }
+
+            Region {
+                item: mediaBubble.mediaActive ? mediaBubble : null
+            }
         }
 
         WlrLayershell.keyboardFocus: root.notesPinned && !root.settingsOpen ? WlrKeyboardFocus.OnDemand
@@ -2337,6 +2342,144 @@ for f in sorted_files:
                         root.openClockTab("timer");
                     }
                 }
+            }
+        }
+
+        // Inir-style Media Disc Bubble (circular album art + playback progress ring, left of the bar)
+        Item {
+            id: mediaBubble
+            readonly property bool mediaActive: typeof MprisController !== "undefined" && !!MprisController.activePlayer
+            readonly property string artSource: mediaActive ? (MprisController.artUrl ?? "") : ""
+            property real trackProgress: 0
+
+            Timer {
+                interval: 1000
+                running: mediaBubble.mediaActive && mediaBubble.visible
+                repeat: true
+                triggeredOnStart: true
+                onTriggered: mediaBubble.trackProgress = (MprisController.trackProgressOf(MprisController.activePlayer) ?? 0)
+            }
+
+            z: 2
+            anchors.right: notchContainer.left
+            anchors.rightMargin: 8
+            anchors.top: parent.top
+            anchors.topMargin: root.notchHidden ? -50 : 4
+            width: 32
+            height: 32
+
+            Behavior on anchors.topMargin {
+                NumberAnimation {
+                    duration: root.notchHidden ? NotchConfig.animNotchExit : NotchConfig.animNotchEnter
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.notchHidden ? NotchConfig.curveAccel : NotchConfig.curveMorph
+                }
+            }
+
+            visible: opacity > 0.001
+            opacity: (mediaActive && root.isDashMode && !root.notchHidden) ? 1.0 : 0.0
+            scale: mediaActive ? 1.0 : 0.75
+            transformOrigin: Item.Center
+
+            Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 260; easing.type: Easing.OutBack } }
+            Behavior on trackProgress { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+
+            Rectangle {
+                id: mediaSilhouette
+                anchors.fill: parent
+                radius: 16
+                color: root.notchSurfaceColor
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: mediaSilhouette
+                source: mediaSilhouette
+                z: -1
+                shadowEnabled: NotchConfig.shadowEnabled
+                shadowColor: NotchConfig.shadowColor
+                shadowOpacity: 0.4
+                shadowBlur: 10
+                shadowVerticalOffset: 2
+            }
+
+            Rectangle {
+                id: mediaDisc
+                anchors.centerIn: parent
+                width: 27
+                height: 27
+                radius: 13.5
+                color: root.notchSurfaceColor
+                border.width: 1
+                border.color: Qt.rgba(255, 255, 255, 0.12)
+
+                scale: mediaHover.containsMouse ? (mediaHover.pressed ? 0.92 : 1.06) : 1.0
+                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "music_note"
+                    iconSize: 14
+                    color: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.text_primary) ? Theme.colors.text_primary : "#ffffff"
+                }
+
+                Shape {
+                    x: -2.5
+                    y: -2.5
+                    width: 32
+                    height: 32
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeColor: Qt.rgba(255, 255, 255, 0.22)
+                        strokeWidth: 2
+                        capStyle: ShapePath.RoundCap
+                        fillColor: "transparent"
+
+                        PathAngleArc {
+                            centerX: 16
+                            centerY: 16
+                            radiusX: 14.5
+                            radiusY: 14.5
+                            startAngle: 0
+                            sweepAngle: 360
+                        }
+                    }
+                }
+
+                Shape {
+                    visible: mediaBubble.trackProgress > 0.001
+                    x: -2.5
+                    y: -2.5
+                    width: 32
+                    height: 32
+                    preferredRendererType: Shape.CurveRenderer
+
+                    ShapePath {
+                        strokeColor: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.primary) ? Theme.colors.primary : "#25b4e5"
+                        strokeWidth: 2
+                        capStyle: ShapePath.RoundCap
+                        fillColor: "transparent"
+
+                        PathAngleArc {
+                            centerX: 16
+                            centerY: 16
+                            radiusX: 14.5
+                            radiusY: 14.5
+                            startAngle: -90
+                            sweepAngle: Math.min(1, Math.max(0, mediaBubble.trackProgress)) * 360
+                        }
+                    }
+                }
+            }
+
+            MouseArea {
+                id: mediaHover
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: root.switchMode("music", true)
             }
         }
 
