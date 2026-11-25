@@ -466,6 +466,53 @@ Item {
             }
 
             MenuRow {
+                readonly property var def: root.menuTileId !== "" ? Catalog.definitionFor(root.menuTileId) : null
+                readonly property var modes: (def && Array.isArray(def.sizeModes)) ? def.sizeModes : []
+                visible: modes.length > 0
+                icon: "aspect_ratio"
+                label: {
+                    if (modes.length === 0) return "";
+                    const cur = String(WidgetStore.cardOption(root.menuTileId, "sizeMode", modes[0]));
+                    return root.menuTileId === "end4Resources"
+                        ? ("Layout: " + (cur === "3x1" ? "Vertical" : "Horizontal"))
+                        : ("Cycle Size (" + cur.replace("x", "×") + ")");
+                }
+                onTriggered: {
+                    const idx = modes.indexOf(String(WidgetStore.cardOption(root.menuTileId, "sizeMode", modes[0])));
+                    const next = modes[(idx + 1) % modes.length];
+                    WidgetStore.setCardOption(root.menuTileId, "sizeMode", next);
+                }
+            }
+
+            MenuRow {
+                visible: root.menuTileId === "weather" || root.menuTileId === "end4Weather"
+                icon: "thermostat"
+                label: {
+                    const u = String(WidgetStore.cardOption(root.menuTileId, "unitMode", "auto"));
+                    return "Units: " + (u === "c" ? "°C" : (u === "f" ? "°F" : "Auto"));
+                }
+                onTriggered: {
+                    const order = ["auto", "c", "f"];
+                    const cur = String(WidgetStore.cardOption(root.menuTileId, "unitMode", "auto"));
+                    WidgetStore.setCardOption(root.menuTileId, "unitMode", order[(order.indexOf(cur) + 1) % order.length]);
+                }
+            }
+
+            MenuRow {
+                visible: root.menuTileId === "end4Media"
+                icon: "lyrics"
+                label: WidgetStore.cardOption("end4Media", "showLyrics", false) ? "Lyrics Drawer: On" : "Lyrics Drawer: Off"
+                onTriggered: WidgetStore.setCardOption("end4Media", "showLyrics", !WidgetStore.cardOption("end4Media", "showLyrics", false))
+            }
+
+            MenuRow {
+                visible: root.menuTileId === "image"
+                icon: "subtitles"
+                label: WidgetStore.cardOption("image", "showCaption", true) ? "Caption: Shown" : "Caption: Hidden"
+                onTriggered: WidgetStore.setCardOption("image", "showCaption", !WidgetStore.cardOption("image", "showCaption", true))
+            }
+
+            MenuRow {
                 visible: root.menuTileId === "network" && (WidgetTelemetry.netInterfaces || []).length > 0
                 icon: "swap_horiz"
                 label: "Cycle Interface"

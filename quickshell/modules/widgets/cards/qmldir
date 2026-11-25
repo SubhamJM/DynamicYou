@@ -14,3 +14,14 @@ SekaiLyricsWord 1.0 SekaiLyricsWord.qml
 SekaiPill 1.0 SekaiPill.qml
 SparklineCanvas 1.0 SparklineCanvas.qml
 WeatherPillCard 1.0 WeatherPillCard.qml
+MediaCard 1.0 MediaCard.qml
+ResourcesCard 1.0 ResourcesCard.qml
+ResourceMeter 1.0 ResourceMeter.qml
+UserCard 1.0 UserCard.qml
+ImageCard 1.0 ImageCard.qml
+End4WeatherCard 1.0 End4WeatherCard.qml
+End4MediaCard 1.0 End4MediaCard.qml
+End4ResourcesCard 1.0 End4ResourcesCard.qml
+End4UserCard 1.0 End4UserCard.qml
+End4ImageCard 1.0 End4ImageCard.qml
+End4ResizeHandle 1.0 End4ResizeHandle.qml

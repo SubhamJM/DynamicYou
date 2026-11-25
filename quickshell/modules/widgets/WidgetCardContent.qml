@@ -15,6 +15,7 @@ Item {
     property bool onDesktop: false
     property var notchRoot: null
     property bool useShellManagedSurface: true
+    readonly property bool draggingLocked: !!(cardLoader.item && cardLoader.item.resizing === true)
 
     readonly property var catalogEntry: Catalog.definitionFor(root.tileId)
     readonly property bool preserveDefaultSurface: root.catalogEntry !== null
@@ -144,13 +145,22 @@ Item {
                 case "calendar": return calendarComp;
                 case "weather": return weatherComp;
                 case "music": return musicComp;
+                case "media": return mediaComp;
+                case "resources": return resourcesComp;
+                case "usercard": return userComp;
+                case "image": return imageComp;
+                case "end4Weather": return end4WeatherComp;
+                case "end4Media": return end4MediaComp;
+                case "end4Resources": return end4ResourcesComp;
+                case "end4User": return end4UserComp;
+                case "end4Image": return end4ImageComp;
                 default: return null;
             }
         }
     }
 
     TapHandler {
-        enabled: root.interactive && (root.tileId === "wifi" || root.tileId === "calendar" || root.tileId === "weather")
+        enabled: root.interactive && (root.tileId === "wifi" || root.tileId === "calendar" || root.tileId === "weather" || root.tileId === "end4Weather")
         acceptedButtons: Qt.LeftButton
         onTapped: {
             if (!root.notchRoot) return;
@@ -160,7 +170,7 @@ Item {
             } else if (root.tileId === "calendar" && typeof root.notchRoot.openClockTab === "function") {
                 WidgetStore.closeSidebar();
                 root.notchRoot.openClockTab("calendar");
-            } else if (root.tileId === "weather" && typeof root.notchRoot.openClockTab === "function") {
+            } else if ((root.tileId === "weather" || root.tileId === "end4Weather") && typeof root.notchRoot.openClockTab === "function") {
                 WidgetStore.closeSidebar();
                 root.notchRoot.openClockTab("today");
             }
@@ -347,6 +357,81 @@ Item {
             active: root.active
             onDesktop: root.onDesktop
             notchRoot: root.notchRoot
+        }
+    }
+
+    Component {
+        id: mediaComp
+        MediaCard {
+            active: root.active
+            interactive: root.interactive
+        }
+    }
+
+    Component {
+        id: resourcesComp
+        ResourcesCard {
+            active: root.active
+        }
+    }
+
+    Component {
+        id: userComp
+        UserCard {
+            active: root.active
+        }
+    }
+
+    Component {
+        id: imageComp
+        ImageCard {
+            active: root.active
+        }
+    }
+
+    Component {
+        id: end4WeatherComp
+        End4WeatherCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: end4MediaComp
+        End4MediaCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: end4ResourcesComp
+        End4ResourcesCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: end4UserComp
+        End4UserCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+            notchRoot: root.notchRoot
+        }
+    }
+
+    Component {
+        id: end4ImageComp
+        End4ImageCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
         }
     }
 }

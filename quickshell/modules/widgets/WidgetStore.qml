@@ -44,6 +44,8 @@ Singleton {
 
     signal cardStateChanged(string cardId)
     signal layoutResetRequested()
+    signal menuRequested(string cardId)
+    signal desktopMenuRequested(real xPos, real yPos)
 
     FileView {
         id: storeFile
@@ -138,8 +140,74 @@ Singleton {
     }
 
     function cardSize(cardId) {
-        const base = Catalog.sizeFor(String(cardId));
+        const id = String(cardId);
+        const c = root.card(id);
+        const base = Catalog.sizeFor(id, c ? c.options : null);
         return { width: base.width * uiScale, height: base.height * uiScale };
+    }
+
+    function cardOptions(cardId) {
+        const c = root.card(String(cardId));
+        return (c && c.options) ? c.options : ({});
+    }
+
+    function cardOption(cardId, key, fallback) {
+        const opts = root.cardOptions(cardId);
+        return (opts && opts[key] !== undefined) ? opts[key] : fallback;
+    }
+
+    function setCardOption(cardId, key, value) {
+        const id = String(cardId);
+        return root.persist(State.setCardOption(root.internalState, id, String(key), value), id);
+    }
+
+    function resetCardOptions(cardId) {
+        const id = String(cardId);
+        return root.persist(State.resetCardOptions(root.internalState, id), id);
+    }
+
+    function openMenu(cardId) {
+        const id = String(cardId || "");
+        if (id !== "") root.menuRequested(id);
+        return id !== "" ? "OK" : "ERROR";
+    }
+
+    function openDesktopMenu(xPos, yPos) {
+        root.desktopMenuRequested(Number(xPos) || 0, Number(yPos) || 0);
+        return "OK";
+    }
+
+    Process {
+        id: imagePickerProc
+        property string targetCardId: ""
+        property string targetKey: "customPath"
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const chosen = String(this.text || "").trim().split("\n")[0];
+                if (chosen.indexOf("/") === 0 && imagePickerProc.targetCardId !== "") {
+                    root.setCardOption(imagePickerProc.targetCardId, imagePickerProc.targetKey, chosen);
+                }
+                imagePickerProc.targetCardId = "";
+            }
+        }
+    }
+
+    function pickImageOption(cardId, optionKey) {
+        if (imagePickerProc.running) return false;
+        imagePickerProc.targetCardId = String(cardId || "");
+        imagePickerProc.targetKey = String(optionKey || "customPath");
+        const startDir = (Quickshell.env("HOME") || "") + "/Pictures";
+        imagePickerProc.command = [
+            "sh", "-c",
+            "if command -v kdialog >/dev/null 2>&1; then " +
+            "  kdialog --getopenfilename \"$1\" \"Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp *.svg)\" 2>/dev/null || true; " +
+            "elif command -v zenity >/dev/null 2>&1; then " +
+            "  zenity --file-selection --filename=\"$1/\" --file-filter=\"Images | *.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp *.svg\" 2>/dev/null || true; " +
+            "fi",
+            "sh", startDir
+        ];
+        imagePickerProc.running = true;
+        return true;
     }
 
     function sidebarAnchor(cardId) {

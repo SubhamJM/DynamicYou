@@ -102,7 +102,9 @@ var cardDefinitions = [
         columnSpan: 2,
         rowSpan: 2,
         monitorModules: [],
-        preserveDefaultSurface: true
+        preserveDefaultSurface: true,
+        isM3: false,
+        defaultOptions: { unitMode: "auto", styleMode: "classic", showHourly: true, showRange: true }
     },
     {
         id: "music",
@@ -111,7 +113,112 @@ var cardDefinitions = [
         columnSpan: 3,
         rowSpan: 2,
         monitorModules: [],
-        preserveDefaultSurface: true
+        preserveDefaultSurface: true,
+        isM3: false
+    },
+    {
+        id: "media",
+        name: "Media",
+        icon: "play_circle",
+        columnSpan: 3,
+        rowSpan: 2,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: false,
+        defaultOptions: { showDuration: true, showArt: true, showBadge: true }
+    },
+    {
+        id: "resources",
+        name: "Resources",
+        icon: "monitor_heart",
+        columnSpan: 3,
+        rowSpan: 2,
+        monitorModules: ["cpu", "gpu", "memory"],
+        preserveDefaultSurface: true,
+        isM3: false,
+        defaultOptions: { showLoadBadge: true, showDetail: true, compactDetail: false }
+    },
+    {
+        id: "usercard",
+        name: "User",
+        icon: "person",
+        columnSpan: 1,
+        rowSpan: 2,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: false,
+        defaultOptions: { showHost: true, showBadges: true, showBanner: true, customAvatar: "" }
+    },
+    {
+        id: "image",
+        name: "Image",
+        icon: "image",
+        columnSpan: 2,
+        rowSpan: 2,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: false,
+        defaultOptions: { customPath: "", fitMode: "fill", zoom: 1.0, frameStyle: "polaroid", roundness: 12, opacityLevel: 1.0, showBorder: true, showCaption: true, tilted: true }
+    },
+    {
+        id: "end4Weather",
+        name: "Weather M3",
+        icon: "partly_cloudy_day",
+        columnSpan: 3,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "1x3", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "1x3", unitMode: "auto", showShadow: true }
+    },
+    {
+        id: "end4Media",
+        name: "Media M3",
+        icon: "album",
+        columnSpan: 3,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "1x3", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "1x3", showLyrics: false, showControls: true, showTitles: true, showShadow: true }
+    },
+    {
+        id: "end4Resources",
+        name: "Resources M3",
+        icon: "speed",
+        columnSpan: 3,
+        rowSpan: 1,
+        monitorModules: ["cpu", "memory"],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x3", "3x1"],
+        defaultOptions: { sizeMode: "1x3", thirdMetric: "auto", showShadow: true }
+    },
+    {
+        id: "end4User",
+        name: "User M3",
+        icon: "account_circle",
+        columnSpan: 2,
+        rowSpan: 2,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "2x2", showQuip: true, showUptime: true, showActions: true, showShadow: true, customAvatar: "", customBanner: "" }
+    },
+    {
+        id: "end4Image",
+        name: "Image M3",
+        icon: "photo",
+        columnSpan: 2,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "1x3", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "1x2", customPath: "", shapeMode: "rounded", fitMode: "fill", opacityLevel: 1.0, showShadow: true }
     }
 ];
 
@@ -127,7 +234,16 @@ var defaultAnchors = {
     wifi:            { column: 0, row: 6 },
     weather:         { column: 1, row: 6 },
     storageCapacity: { column: 0, row: 7 },
-    music:           { column: 0, row: 8 }
+    music:           { column: 0, row: 8 },
+    media:           { column: 0, row: 10 },
+    resources:       { column: 0, row: 12 },
+    usercard:        { column: 0, row: 14 },
+    image:           { column: 1, row: 14 },
+    end4Weather:     { column: 0, row: 16 },
+    end4Media:       { column: 0, row: 17 },
+    end4Resources:   { column: 0, row: 18 },
+    end4User:        { column: 0, row: 19 },
+    end4Image:       { column: 0, row: 21 }
 };
 
 function cloneDefinition(definition) {
@@ -164,13 +280,32 @@ function heightForSpan(rowSpan) {
     return span * baseCellHeight + (span - 1) * cellGap;
 }
 
-function sizeFor(id) {
+function spanForSizeMode(mode, fallbackCols, fallbackRows) {
+    var m = String(mode || "");
+    if (m === "1x1") return { columnSpan: 1, rowSpan: 1 };
+    if (m === "1x2") return { columnSpan: 2, rowSpan: 1 };
+    if (m === "1x3") return { columnSpan: 3, rowSpan: 1 };
+    if (m === "2x2") return { columnSpan: 2, rowSpan: 2 };
+    if (m === "2x3") return { columnSpan: 3, rowSpan: 2 };
+    if (m === "3x1") return { columnSpan: 1, rowSpan: 3 };
+    return {
+        columnSpan: Math.max(1, Math.round(Number(fallbackCols) || 1)),
+        rowSpan: Math.max(1, Math.round(Number(fallbackRows) || 1))
+    };
+}
+
+function sizeFor(id, options) {
     var definition = definitionFor(String(id));
     if (!definition)
         return { width: baseCellWidth, height: baseCellHeight };
+    var opts = (options && typeof options === "object") ? options : (definition.defaultOptions || {});
+    var span = spanForSizeMode(opts.sizeMode, definition.columnSpan, definition.rowSpan);
+    if (definition.id === "end4Media" && opts.showLyrics && span.rowSpan === 1 && span.columnSpan === 3) {
+        span = { columnSpan: 3, rowSpan: 2 };
+    }
     return {
-        width: widthForSpan(definition.columnSpan),
-        height: heightForSpan(definition.rowSpan)
+        width: widthForSpan(span.columnSpan),
+        height: heightForSpan(span.rowSpan)
     };
 }
 

@@ -1141,6 +1141,21 @@ for f in sorted_files:
         function scrollFraction(frac: real): string {
             return widgetSidebar.scrollDrawer(frac);
         }
+
+        function setOption(cardId: string, key: string, val: string): string {
+            let parsed = val;
+            if (val === "true") parsed = true;
+            else if (val === "false") parsed = false;
+            return WidgetStore.setCardOption(cardId, key, parsed) ? "OK" : "ERROR";
+        }
+
+        function openMenu(cardId: string): string {
+            return WidgetStore.openMenu(cardId);
+        }
+
+        function openDesktopMenu(xPos: real, yPos: real): string {
+            return WidgetStore.openDesktopMenu(xPos, yPos);
+        }
     }
 
     IpcHandler {
@@ -2533,6 +2548,7 @@ for f in sorted_files:
 
     WidgetDesktopHost {
         id: widgetDesktopHost
+        notchRoot: root
     }
 
     WidgetSidebarWindow {

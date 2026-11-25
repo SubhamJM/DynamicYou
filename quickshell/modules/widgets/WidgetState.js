@@ -37,6 +37,19 @@ function screenPoint(xNorm, yNorm, width, height, cardWidth, cardHeight) {
 
 function copy(v) { return JSON.parse(JSON.stringify(v)); }
 
+function mergeOptions(defaults, incoming) {
+    var out = {};
+    var def = isObject(defaults) ? defaults : {};
+    var src = isObject(incoming) ? incoming : {};
+    for (var k in def) out[k] = def[k];
+    for (var k2 in src) {
+        var v = src[k2];
+        if (typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && isFinite(v)))
+            out[k2] = v;
+    }
+    return out;
+}
+
 function defaultCard(def) {
     var anchor = defaultAnchorFor(def.id);
     return {
@@ -50,7 +63,8 @@ function defaultCard(def) {
         desktop: {
             xNorm: 0.08,
             yNorm: 0.12
-        }
+        },
+        options: mergeOptions(def.defaultOptions, {})
     };
 }
 
@@ -98,7 +112,8 @@ function normalize(raw) {
             desktop: {
                 xNorm: clamp01(dt.xNorm, fb.desktop.xNorm),
                 yNorm: clamp01(dt.yNorm, fb.desktop.yNorm)
-            }
+            },
+            options: mergeOptions(def.defaultOptions, c.options)
         };
     });
     return out;
@@ -162,5 +177,21 @@ function setDesktopPositions(state, positions) {
             yNorm: clamp01(pos.yNorm, next.cards[pos.id].desktop.yNorm)
         };
     });
+    return next;
+}
+
+function setCardOption(state, id, key, value) {
+    var next = copy(normalize(state));
+    if (!next.cards[id] || !key) return next;
+    if (!isObject(next.cards[id].options)) next.cards[id].options = {};
+    next.cards[id].options[String(key)] = value;
+    return next;
+}
+
+function resetCardOptions(state, id) {
+    var next = copy(normalize(state));
+    var def = definitionFor(String(id));
+    if (!next.cards[id]) return next;
+    next.cards[id].options = mergeOptions(def ? def.defaultOptions : {}, {});
     return next;
 }
