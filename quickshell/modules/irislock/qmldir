@@ -1,0 +1,12 @@
+module qs.modules.irislock
+singleton LockConfig 1.0 LockConfig.qml
+IrisBatteryMark 1.0 IrisBatteryMark.qml
+IrisGlassEdge 1.0 IrisGlassEdge.qml
+IrisLockContext 1.0 IrisLockContext.qml
+IrisLockMediaCard 1.0 IrisLockMediaCard.qml
+IrisLockKeyboard 1.0 IrisLockKeyboard.qml
+IrisLockStage 1.0 IrisLockStage.qml
+IrisLockSurface 1.0 IrisLockSurface.qml
+IrisLockInspector 1.0 IrisLockInspector.qml
+IrisLockRehearsal 1.0 IrisLockRehearsal.qml
+IrisLockManager 1.0 IrisLockManager.qml

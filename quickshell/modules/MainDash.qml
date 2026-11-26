@@ -60,7 +60,31 @@ Item {
     }
 
     onCurrentIslandTypeChanged: {
-        if (currentIslandType !== "") displayedIslandType = currentIslandType;
+        if (currentIslandType !== "") {
+            displayedIslandType = currentIslandType;
+        } else if (displayedIslandType === "notif" || !islandContainer.visible || islandContainer.opacity <= 0.01) {
+            displayedIslandType = "";
+        }
+    }
+
+    onIsIslandActiveChanged: {
+        if (!isIslandActive && (displayedIslandType === "notif" || !islandContainer.visible || islandContainer.opacity <= 0.01)) {
+            displayedIslandType = "";
+        }
+    }
+
+    Connections {
+        target: root
+        function onIsNotifPopupActiveChanged() {
+            if (!root.isNotifPopupActive && dash.displayedIslandType === "notif") {
+                dash.displayedIslandType = "";
+            }
+        }
+        function onActiveModeChanged() {
+            if (root.activeMode !== "idle" && !dash.isIslandActive) {
+                dash.displayedIslandType = "";
+            }
+        }
     }
 
     readonly property int restingIdleWidth: {
@@ -75,7 +99,7 @@ Item {
         if (displayedIslandType === "screenshot" || root.isScreenshotIslandActive) {
             return Math.max(260, screenshotPopupRow.implicitWidth + 36);
         }
-        if (displayedIslandType === "notif" || root.isNotifPopupActive) return notificationBanner.preferredWidth;
+        if (root.isNotifPopupActive) return notificationBanner.preferredWidth;
         if (displayedIslandType === "workspace" || root.isWorkspacePeeking) {
             var ww = Math.max(dash.restingIdleWidth, wsIslandRow.implicitWidth + 36);
             return ww + (ww % 2);
@@ -87,9 +111,10 @@ Item {
     }
 
     implicitWidth: {
-        if (isIslandActive || displayedIslandType !== "") return activeIslandWidth;
+        if (isIslandActive || (displayedIslandType !== "" && displayedIslandType !== "notif" && islandContainer.opacity > 0.01)) return activeIslandWidth;
         if (root.activeMode === "hover") {
-            return dashRow.implicitWidth + 36;
+            var hw = Math.ceil(dashRow.implicitWidth) + 32;
+            return hw + (hw % 2);
         }
         if (dash.isMediaPlaying && root.activeMode === "idle" && dash.showMusicInfo) {
             return 360 + (expandedMusicReadouts.visible ? expandedMusicReadouts.implicitWidth + 10 : 0);
@@ -201,7 +226,7 @@ Item {
     Timer { id: btTextTimer; interval: NotchConfig.timerIslandText; onTriggered: triggerBtText = false }
 
     onIsBatteryChargingChanged: {
-        if (isBatteryCharging) {
+        if (isBatteryCharging && !dash.btStartupGraceActive) {
             dash.powerIslandExpanded = true;
             powerPopupTimer.restart();
         }
@@ -1121,12 +1146,14 @@ Item {
     }
 
     // ========================================================
-    // 4. THE GOAT DYNAMIC ISLAND EXPANDED BAR (Hover Mode)
+    // 4. MATUSHELL-STYLE DYNAMIC ISLAND EXPANDED BAR (Hover Mode)
     // ========================================================
     RowLayout {
         id: dashRow
         anchors.centerIn: parent
         spacing: 10
+        readonly property color fgPrimary: Theme.colors.text_primary ?? "#f5f5f7"
+        readonly property color fgMuted: Qt.alpha(fgPrimary, 0.48)
         property real hoverBlend: root.activeMode === "hover" && !dash.isIslandActive ? 1 : 0
 
         opacity: hoverBlend * NotchConfig.revealBetween(dash.width / Math.max(1, implicitWidth), 0.72, 1.04)
@@ -1142,10 +1169,10 @@ Item {
         // ── 1. LEFT GROUP: LAUNCHER & WORKSPACES ─────────────────
         Row {
             id: leftGroupRow
-            spacing: 6
+            spacing: 8
             Layout.alignment: Qt.AlignVCenter
 
-            // Distro Launcher Icon Button (Arch Linux / Distro Specific)
+            // Distro Logo Launcher Button (crisp vector CurveRendering)
             Item {
                 width: 28
                 height: 28
@@ -1154,22 +1181,27 @@ Item {
                 Rectangle {
                     id: launcherBg
                     anchors.fill: parent
-                    radius: 8
-                    color: launcherMouse.pressed ? Qt.rgba(255, 255, 255, 0.14) : (launcherMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                    scale: launcherMouse.pressed ? 0.92 : (launcherMouse.containsMouse ? 1.08 : 1.0)
+                    radius: height / 2
+                    color: launcherMouse.pressed
+                        ? Qt.alpha(Theme.accent, 0.24)
+                        : (launcherMouse.containsMouse ? Qt.alpha(Theme.accent, 0.14) : "transparent")
+                    scale: launcherMouse.pressed ? 0.92 : (launcherMouse.containsMouse ? 1.05 : 1.0)
 
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
-                    MaterialSymbol {
+                    Text {
                         anchors.centerIn: parent
                         text: dash.distroGlyph
-                        iconSize: 18
-                        color: launcherMouse.containsMouse ? Qt.lighter(Theme.accent, 1.25) : Theme.accent
-                        rotation: launcherMouse.containsMouse ? -15 : 0
-
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                        Behavior on rotation { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
+                        color: Theme.accent
+                        font.family: Theme.fontFamilyNerd
+                        font.pixelSize: 18
+                        font.hintingPreference: Font.PreferNoHinting
+                        renderType: Text.CurveRendering
+                        antialiasing: true
+                        smooth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 
@@ -1187,10 +1219,10 @@ Item {
                 width: 1
                 height: 14
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.alpha(Theme.text, 0.14)
+                color: Qt.alpha(dashRow.fgPrimary, 0.14)
             }
 
-            // Workspaces Pager (Square Cells, Ultra-Bold Numbers & Occupied Window Dots)
+            // Workspaces Pager: clean pill chips in crisp Google Sans Flex
             Row {
                 id: wsRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -1201,40 +1233,50 @@ Item {
 
                     delegate: Rectangle {
                         id: wsCell
-                        property int wsId: modelData
-                        property bool isFocused: wsCell.wsId === dash.activeWsId
-                        property int winCount: dash.getWorkspaceWindowCount(wsCell.wsId)
-                        property bool hasWindows: wsCell.winCount > 0
+                        required property int modelData
+                        readonly property int wsId: modelData
+                        readonly property bool isFocused: wsCell.wsId === dash.activeWsId
+                        readonly property int winCount: dash.getWorkspaceWindowCount(wsCell.wsId)
+                        readonly property bool hasWindows: wsCell.winCount > 0
 
-                        width: 24
-                        height: 24
-                        implicitWidth: 24
-                        implicitHeight: 24
-                        radius: 6
+                        width: isFocused ? 28 : 22
+                        height: 22
+                        implicitWidth: width
+                        implicitHeight: height
+                        radius: height / 2
                         anchors.verticalCenter: parent.verticalCenter
 
                         color: isFocused
                             ? Theme.accent
-                            : (wsCellMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.12) : "transparent")
+                            : (wsCellMouse.containsMouse
+                                ? Qt.alpha(dashRow.fgPrimary, 0.14)
+                                : (wsCell.hasWindows ? Qt.alpha(dashRow.fgPrimary, 0.08) : "transparent"))
 
-                        scale: isFocused ? 1.05 : (wsCellMouse.pressed ? 0.92 : (wsCellMouse.containsMouse ? 1.05 : 1.0))
+                        scale: wsCellMouse.pressed ? 0.92 : (wsCellMouse.containsMouse && !isFocused ? 1.06 : 1.0)
 
-                        Behavior on color { ColorAnimation { duration: 160 } }
-                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
                         Text {
                             anchors.centerIn: parent
                             text: String(wsCell.wsId)
                             color: wsCell.isFocused
-                                ? (Theme.colors.on_primary ?? "#000000")
-                                : (wsCellMouse.containsMouse ? (Theme.colors.text_primary ?? "#ffffff") : (wsCell.hasWindows ? "#ffffff" : Qt.rgba(255, 255, 255, 0.35)))
-                            font.family: "Inter, Noto Sans"
+                                ? Theme.onAccent
+                                : (wsCellMouse.containsMouse || wsCell.hasWindows
+                                    ? dashRow.fgPrimary
+                                    : Qt.alpha(dashRow.fgPrimary, 0.4))
+                            font.family: "Google Sans Flex"
                             font.pixelSize: 12
-                            font.weight: Font.Black
-                            renderType: Text.NativeRendering
-                            font.hintingPreference: Font.PreferVerticalHinting
+                            font.weight: wsCell.isFocused ? Font.DemiBold : Font.Medium
+                            font.variableAxes: ({ "wght": wsCell.isFocused ? 620 : 500, "wdth": 100 })
+                            font.features: ({ "tnum": 1 })
+                            font.hintingPreference: Font.PreferNoHinting
+                            renderType: Text.QtRendering
+                            antialiasing: true
+                            smooth: true
 
-                            Behavior on color { ColorAnimation { duration: 160 } }
+                            Behavior on color { ColorAnimation { duration: 150 } }
                         }
 
                         MouseArea {
@@ -1256,87 +1298,79 @@ Item {
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: 1
-            Layout.preferredHeight: 16
-            color: Theme.alpha(Theme.text, 0.14)
+            Layout.preferredHeight: 14
+            color: Qt.alpha(dashRow.fgPrimary, 0.14)
         }
 
-        // ── 2. CENTER GROUP: DATE & TABULAR CLOCK (Original Design) ─
+        // ── 2. CENTER GROUP: MATUSHELL DATE & CLOCK ──────────────
         Item {
             id: centerItem
             Layout.preferredHeight: 28
-            Layout.preferredWidth: centerGroupRow.implicitWidth + 8
+            Layout.preferredWidth: centerGroupRow.implicitWidth + 14
             Layout.alignment: Qt.AlignVCenter
 
             Rectangle {
                 anchors.fill: parent
-                radius: 8
-                color: centerMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"
-                Behavior on color { ColorAnimation { duration: 130 } }
+                radius: height / 2
+                color: centerMouse.containsMouse ? Qt.alpha(dashRow.fgPrimary, 0.08) : "transparent"
+                Behavior on color { ColorAnimation { duration: 140 } }
             }
 
             RowLayout {
                 id: centerGroupRow
                 z: 1
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: 6
 
-                // Calendar / Date Chip (Original format: Sat 7)
                 Row {
-                    id: hoverDateRow
-                    spacing: 4
+                    id: hoverDateClockRow
                     Layout.alignment: Qt.AlignVCenter
+                    spacing: 5
 
                     Text {
-                        id: hoverWeekdayText
-                        text: Qt.formatDate(clock.date, "ddd").replace(/\.$/, "")
-                        color: Theme.colors.text_muted ?? "#8e8e93"
-                        font.family: "Readex Pro"
+                        anchors.baseline: hoverClock.baseline
+                        text: Qt.formatDate(clock.date, "ddd, MMM d")
+                        color: dashRow.fgPrimary
+                        font.family: "Google Sans Flex"
                         font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferVerticalHinting
+                        font.weight: Font.Medium
+                        font.variableAxes: ({ "wght": 500, "wdth": 100 })
+                        font.hintingPreference: Font.PreferNoHinting
+                        renderType: Text.QtRendering
+                        antialiasing: true
+                        smooth: true
                     }
 
                     Text {
-                        id: hoverDayText
-                        text: Qt.formatDate(clock.date, "d")
-                        color: Theme.accent
-                        font.family: "Readex Pro"
-                        font.pixelSize: 14
-                        font.weight: Font.Bold
-                        renderType: Text.NativeRendering
-                        font.hintingPreference: Font.PreferVerticalHinting
+                        anchors.baseline: hoverClock.baseline
+                        text: "•"
+                        color: Qt.alpha(dashRow.fgPrimary, 0.72)
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        font.variableAxes: ({ "wght": 500, "wdth": 100 })
+                        font.hintingPreference: Font.PreferNoHinting
+                        renderType: Text.QtRendering
+                        antialiasing: true
+                        smooth: true
                     }
-                }
 
-                // Material subtle separator bullet
-                Text {
-                    text: "•"
-                    Layout.alignment: Qt.AlignVCenter
-                    color: Qt.alpha(Theme.colors.text_muted ?? "#8e8e93", 0.5)
-                    font.family: "Readex Pro"
-                    font.pixelSize: 11
-                    renderType: Text.NativeRendering
-                    font.hintingPreference: Font.PreferVerticalHinting
-                }
-
-                // Tabular Clock Time
-                IrisClock {
-                    id: hoverClock
-                    pixelSize: 16
-                    family: "Readex Pro"
-                    weight: Font.Bold
-                    text: {
-                        var h = clock.date.getHours() % 12 || 12;
-                        var m = clock.date.getMinutes();
-                        var hh = String(h);
-                        var mm = (m < 10 ? "0" : "") + m;
-                        return hh + ":" + mm;
+                    IrisClock {
+                        id: hoverClock
+                        pixelSize: 13
+                        family: "Google Sans Flex"
+                        weight: Font.Medium
+                        axisWeight: 500
+                        renderType: Text.QtRendering
+                        text: {
+                            var h = clock.date.getHours() % 12 || 12;
+                            var m = clock.date.getMinutes();
+                            return String(h) + ":" + (m < 10 ? "0" : "") + m;
+                        }
+                        color: dashRow.fgPrimary
+                        separatorColor: Theme.accent
+                        isScreenRecording: root.isScreenRecording
                     }
-                    color: Theme.colors.text_primary ?? "#ffffff"
-                    separatorColor: Theme.accent
-                    isScreenRecording: root.isScreenRecording
-                    Layout.alignment: Qt.AlignVCenter
                 }
 
                 BarTimeReadouts {
@@ -1360,32 +1394,34 @@ Item {
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: 1
-            Layout.preferredHeight: 16
-            color: Theme.alpha(Theme.text, 0.14)
+            Layout.preferredHeight: 14
+            color: Qt.alpha(dashRow.fgPrimary, 0.14)
         }
 
-        // ── 3. RIGHT GROUP: BATTERY PILL & REVAMPED QUICK CONTROLS ─
+        // ── 3. RIGHT GROUP: MATUS BATTERY CAPSULE & CONTROLS ────
         RowLayout {
             id: rightGroupRow
-            spacing: 5
+            spacing: 4
             Layout.alignment: Qt.AlignVCenter
 
-            // Battery Status Pill (Lucid 1:1, strictly untouched)
+            // Shared Matushell Material Battery Capsule (same icon/font as resting island)
             Item {
                 Layout.preferredHeight: 28
-                Layout.preferredWidth: battPill.implicitWidth + 8
+                Layout.preferredWidth: hoverBattery.implicitWidth + 10
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 8
-                    color: battMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent"
+                    radius: height / 2
+                    color: battMouse.pressed
+                        ? Qt.alpha(dashRow.fgPrimary, 0.14)
+                        : (battMouse.containsMouse ? Qt.alpha(dashRow.fgPrimary, 0.08) : "transparent")
                     scale: battMouse.pressed ? 0.94 : (battMouse.containsMouse ? 1.04 : 1.0)
                     Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-                    BatteryPill {
-                        id: battPill
+                    DashComponents.MatusBatteryCapsule {
+                        id: hoverBattery
                         anchors.centerIn: parent
                     }
                 }
@@ -1404,10 +1440,12 @@ Item {
                 width: 1
                 height: 14
                 Layout.alignment: Qt.AlignVCenter
-                color: Theme.alpha(Theme.text, 0.14)
+                Layout.leftMargin: 2
+                Layout.rightMargin: 2
+                color: Qt.alpha(dashRow.fgPrimary, 0.14)
             }
 
-            // Widget Sidebar Toggle
+            // Control Center Toggle (clean instant_mix sliders icon)
             Item {
                 width: 28
                 height: 28
@@ -1415,58 +1453,33 @@ Item {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 8
-                    color: wdgMouse.pressed
-                        ? Qt.rgba(255, 255, 255, 0.14)
-                        : ((WidgetStore.sidebarOpen || wdgMouse.containsMouse) ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                    scale: wdgMouse.pressed ? 0.92 : (wdgMouse.containsMouse ? 1.06 : 1.0)
+                    radius: height / 2
+                    color: ccMouse.pressed
+                        ? Qt.alpha(Theme.accent, 0.24)
+                        : (ccMouse.containsMouse ? Qt.alpha(Theme.accent, 0.14) : "transparent")
+                    scale: ccMouse.pressed ? 0.92 : (ccMouse.containsMouse ? 1.05 : 1.0)
 
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
-                    MaterialSymbol {
+                    Text {
                         anchors.centerIn: parent
-                        text: "widgets"
-                        iconSize: 17
-                        fill: WidgetStore.sidebarOpen ? 1 : 0
-                        color: (WidgetStore.sidebarOpen || wdgMouse.containsMouse) ? Theme.accent : (Theme.colors.text_primary ?? "#ffffff")
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                    }
-                }
+                        text: "instant_mix"
+                        color: ccMouse.containsMouse ? Theme.accent : dashRow.fgPrimary
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 17
+                        font.hintingPreference: Font.PreferNoHinting
+                        font.variableAxes: ({
+                            "FILL": 0,
+                            "GRAD": Theme.fontIconGrad,
+                            "opsz": 17,
+                            "wght": 500
+                        })
+                        renderType: Text.CurveRendering
+                        antialiasing: true
+                        smooth: true
 
-                MouseArea {
-                    id: wdgMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.collapseToIdle();
-                        WidgetStore.toggleSidebar();
-                    }
-                }
-            }
-
-            // Revamped Control Center Toggle (Tune sliders icon)
-            Item {
-                width: 28
-                height: 28
-                Layout.alignment: Qt.AlignVCenter
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 8
-                    color: ccMouse.pressed ? Qt.rgba(255, 255, 255, 0.14) : (ccMouse.containsMouse ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
-                    scale: ccMouse.pressed ? 0.92 : (ccMouse.containsMouse ? 1.06 : 1.0)
-
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "tune"
-                        iconSize: 17
-                        color: ccMouse.containsMouse ? Theme.accent : (Theme.colors.text_primary ?? "#ffffff")
-                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on color { ColorAnimation { duration: 140 } }
                     }
                 }
 
@@ -1479,7 +1492,7 @@ Item {
                 }
             }
 
-            // Revamped Power Menu Toggle (Power off with crimson hover state)
+            // Power Menu Toggle (clean power_settings_new with soft crimson hover tint)
             Item {
                 width: 28
                 height: 28
@@ -1487,19 +1500,33 @@ Item {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 8
-                    color: pwrMouse.pressed ? Qt.rgba(255, 84, 73, 0.22) : (pwrMouse.containsMouse ? Qt.rgba(255, 84, 73, 0.14) : "transparent")
-                    scale: pwrMouse.pressed ? 0.92 : (pwrMouse.containsMouse ? 1.06 : 1.0)
+                    radius: height / 2
+                    color: pwrMouse.pressed
+                        ? Qt.rgba(1, 0.33, 0.29, 0.24)
+                        : (pwrMouse.containsMouse ? Qt.rgba(1, 0.33, 0.29, 0.15) : "transparent")
+                    scale: pwrMouse.pressed ? 0.92 : (pwrMouse.containsMouse ? 1.05 : 1.0)
 
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
-                    MaterialSymbol {
+                    Text {
                         anchors.centerIn: parent
                         text: "power_settings_new"
-                        iconSize: 17
-                        color: pwrMouse.containsMouse ? "#ff5449" : (Theme.colors.text_secondary ?? "#8e8e93")
-                        Behavior on color { ColorAnimation { duration: 120 } }
+                        color: pwrMouse.containsMouse ? (Theme.colors.error ?? "#ffb4ab") : Qt.alpha(dashRow.fgPrimary, 0.85)
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 17
+                        font.hintingPreference: Font.PreferNoHinting
+                        font.variableAxes: ({
+                            "FILL": 0,
+                            "GRAD": Theme.fontIconGrad,
+                            "opsz": 17,
+                            "wght": 500
+                        })
+                        renderType: Text.CurveRendering
+                        antialiasing: true
+                        smooth: true
+
+                        Behavior on color { ColorAnimation { duration: 140 } }
                     }
                 }
 

@@ -12,6 +12,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Widgets
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -24,6 +25,7 @@ import "./modules/widgets"
 import "./" // Imports NotchConfig singleton
 import qs
 import qs.services
+import qs.modules.irislock
 
 ShellRoot {
     id: root
@@ -457,7 +459,24 @@ ShellRoot {
         command: ["sh", "-c", `python3 -c "
 import os, subprocess
 
-wall_dir = os.path.expanduser('~/Pictures/Wallpapers')
+home = os.path.expanduser('~')
+theme = '${Theme.currentThemeName}'.strip()
+if not theme or theme.lower() == 'default':
+    name_file = os.path.join(home, '.config/active-theme/theme-name.txt')
+    if os.path.exists(name_file):
+        try:
+            with open(name_file, 'r') as f:
+                t = f.read().strip()
+                if t: theme = t
+        except Exception:
+            pass
+
+theme_lower = theme.lower()
+wall_dir = ''
+for c in [os.path.join(home, f'Pictures/Wallpapers/{theme}'), os.path.join(home, f'Pictures/Wallpapers/{theme_lower}')]:
+    if os.path.isdir(c):
+        wall_dir = c
+        break
 
 active_wall = ''
 try:
@@ -472,41 +491,76 @@ try:
 except Exception:
     pass
 
-exts = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
+exts = ('.jpg', '.jpeg', '.png', '.webp', '.mp4')
 files = []
-if os.path.isdir(wall_dir):
+if wall_dir and os.path.exists(wall_dir):
     for root_dir, dirs, fnames in os.walk(wall_dir):
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for fn in fnames:
             if fn.lower().endswith(exts) and not fn.startswith('.'):
                 files.append(os.path.join(root_dir, fn))
 
+if not files:
+    base = os.path.join(home, 'Pictures/Wallpapers')
+    if os.path.isdir(base):
+        for root_dir, dirs, fnames in os.walk(base):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for fn in fnames:
+                if fn.lower().endswith(exts) and not fn.startswith('.'):
+                    files.append(os.path.join(root_dir, fn))
+
+if active_wall and os.path.isfile(active_wall) and active_wall not in files:
+    files.append(active_wall)
+
 def safe_mtime(p):
     try: return os.path.getmtime(p)
     except Exception: return 0
 
-sorted_files = sorted(list(set(files)), key=safe_mtime, reverse=True)
-for f in sorted_files:
-    name = os.path.basename(f)
-    print(f'{name}|||{f}|||{active_wall}')
+files_with_mtime = [(f, safe_mtime(f)) for f in set(files) if os.path.isfile(f)]
+files_with_mtime.sort(key=lambda x: x[1], reverse=True)
+
+thumbs_dir = os.path.join(home, '.cache/lucid/wallpaper-thumbs/680x422')
+thumbs_map = {}
+if os.path.isdir(thumbs_dir):
+    try:
+        for t in os.listdir(thumbs_dir):
+            if t.endswith('.jpg'):
+                parts = t.rsplit('-', 1)
+                if len(parts) == 2:
+                    thumbs_map[parts[0]] = os.path.join(thumbs_dir, t)
+    except Exception:
+        pass
+
+for f, mtime in files_with_mtime:
+    name = os.path.splitext(os.path.basename(f))[0]
+    thumb_path = ''
+    try:
+        st = os.stat(f)
+        thumb_path = thumbs_map.get(f'{st.st_ino}-{st.st_size}', '')
+    except Exception:
+        pass
+    print(f'{name}|||{f}|||{thumb_path}|||{active_wall}|||{int(mtime)}')
 "
         `]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n");
+                var raw = this.text.trim();
+                var lines = raw === "" ? [] : raw.split("\n");
                 var temp = [];
                 var activeFromQuery = "";
 
                 for (var i = 0; i < lines.length; i++) {
                     var parts = lines[i].split("|||");
                     if (parts.length >= 2) {
+                        var act = parts.length >= 4 ? parts[3].trim() : "";
+                        if (act !== "") activeFromQuery = act;
                         temp.push({
-                            "fileName": parts[0],
-                            "filePath": parts[1]
+                            "name": parts[0],
+                            "path": parts[1],
+                            "thumb": parts.length >= 3 ? parts[2] : "",
+                            "mtime": parts.length >= 5 ? (parseInt(parts[4]) || 0) : 0,
+                            "temp": false
                         });
-                        if (parts.length >= 3 && parts[2].trim() !== "") {
-                            activeFromQuery = parts[2].trim();
-                        }
                     }
                 }
 
@@ -520,8 +574,8 @@ for f in sorted_files:
 
     Timer {
         id: globalWallpaperScanTimer
-        interval: 1500
-        running: false
+        interval: 250
+        running: true
         repeat: false
         triggeredOnStart: false
         onTriggered: {
@@ -1858,7 +1912,7 @@ for f in sorted_files:
                 Item {
                     id: modulesContainer
                     property size layoutSize: Qt.size(0, 0)
-                    readonly property bool fullBleed: ["music", "launcher", "wallpaper", "utility"].includes(root.loadedExpandedMode)
+                    readonly property bool fullBleed: ["music", "launcher", "wallpaper", "utility", "powermenu", "calendar", "clipboard"].includes(root.loadedExpandedMode)
                     readonly property int inset: fullBleed ? 0 : 12
                     readonly property real revealProgress: NotchConfig.popupReveal(root.loadedExpandedMode,
                         layoutSize.width, layoutSize.height, inset, notch.width, notch.height)
@@ -2374,7 +2428,83 @@ for f in sorted_files:
                     : "";
                 return playerUrl;
             }
+            readonly property bool remoteArt: /^https?:/.test(artSource)
+            readonly property string remoteArtCachePath: {
+                if (!remoteArt) return "";
+                var h = 5381;
+                for (var i = 0; i < artSource.length; i++) h = ((h * 33) ^ artSource.charCodeAt(i)) >>> 0;
+                return (Quickshell.env("HOME") || "") + "/.cache/quickshell/art/" + h.toString(16) + ".img";
+            }
+            property string localFetchedArt: ""
+            readonly property string quantizerSource: {
+                if (!mediaActive || artSource === "") return "";
+                if (remoteArt) return localFetchedArt;
+                if (artSource.startsWith("file://")) return artSource;
+                if (artSource.startsWith("/")) return "file://" + artSource;
+                return "";
+            }
+            property color extractedArtColor: (typeof Theme !== "undefined") ? Theme.accent : "#25b4e5"
+            readonly property color ringColor: mediaActive && quantizerSource !== "" ? extractedArtColor : ((typeof Theme !== "undefined") ? Theme.accent : "#25b4e5")
             property real trackProgress: 0
+
+            function refreshBubbleArtCache() {
+                if (remoteArtCachePath === "") {
+                    localFetchedArt = "";
+                    return;
+                }
+                bubbleArtFetch.superseded = bubbleArtFetch.running;
+                bubbleArtFetch.file = remoteArtCachePath;
+                bubbleArtFetch.running = false;
+                bubbleArtFetch.command = ["sh", "-c", bubbleArtFetch.script, "sh", remoteArtCachePath, artSource];
+                bubbleArtFetch.running = true;
+            }
+
+            onRemoteArtCachePathChanged: refreshBubbleArtCache()
+            onArtSourceChanged: {
+                if (!remoteArt) localFetchedArt = "";
+                if (artSource === "") extractedArtColor = (typeof Theme !== "undefined") ? Theme.accent : "#25b4e5";
+            }
+            Component.onCompleted: refreshBubbleArtCache()
+
+            Process {
+                id: bubbleArtFetch
+                property string file: ""
+                property bool superseded: false
+                readonly property string script: "f=\"$1\"; d=\"$(dirname \"$f\")\"; mkdir -p \"$d\"; [ -s \"$f\" ] || { t=\"$f.$$\"; curl -sfL --max-time 8 -o \"$t\" \"$2\" && mv \"$t\" \"$f\" || rm -f \"$t\"; }; [ -s \"$f\" ]"
+                onExited: (code) => {
+                    if (bubbleArtFetch.superseded) {
+                        bubbleArtFetch.superseded = false;
+                        return;
+                    }
+                    mediaBubble.localFetchedArt = (code === 0) ? ("file://" + bubbleArtFetch.file) : "";
+                }
+            }
+
+            ColorQuantizer {
+                id: bubbleQuantizer
+                source: mediaBubble.quantizerSource
+                depth: 3
+                rescaleSize: 48
+                onColorsChanged: {
+                    if (!colors || colors.length === 0) return;
+                    let best = null;
+                    let bestScore = -1;
+                    for (let i = 0; i < colors.length; i++) {
+                        const c = colors[i];
+                        const score = Math.max(0, c.hslSaturation) * (1 - Math.abs(c.hslLightness - 0.5));
+                        if (score > bestScore) { bestScore = score; best = c; }
+                    }
+                    if (best && best.hslSaturation >= 0.14 && best.hslHue >= 0) {
+                        const extracted = Qt.hsla(best.hslHue, Math.max(0.55, best.hslSaturation),
+                            Math.max(0.60, Math.min(0.76, best.hslLightness + 0.18)), 1);
+                        mediaBubble.extractedArtColor = extracted;
+                        if (typeof Theme !== "undefined") Theme.setMediaAccent(extracted.toString());
+                    } else if (colors[0]) {
+                        const mono = colors[0];
+                        mediaBubble.extractedArtColor = Qt.hsla(0, 0, Math.max(0.68, Math.min(0.86, mono.hslLightness + 0.25)), 1);
+                    }
+                }
+            }
 
             Timer {
                 interval: 1000
@@ -2513,10 +2643,14 @@ for f in sorted_files:
                     preferredRendererType: Shape.CurveRenderer
 
                     ShapePath {
-                        strokeColor: (typeof Theme !== "undefined" && Theme.colors && Theme.colors.primary) ? Theme.colors.primary : "#25b4e5"
+                        strokeColor: mediaBubble.ringColor
                         strokeWidth: 2
                         capStyle: ShapePath.RoundCap
                         fillColor: "transparent"
+
+                        Behavior on strokeColor {
+                            ColorAnimation { duration: 280 }
+                        }
 
                         PathAngleArc {
                             centerX: 16
@@ -2595,5 +2729,37 @@ for f in sorted_files:
     WidgetSidebarWindow {
         id: widgetSidebar
         notchRoot: root
+    }
+
+    IrisLockManager {
+        id: irisLock
+        recordingActive: root.isScreenRecording
+    }
+
+    IpcHandler {
+        target: "lock"
+        function lock(): string {
+            root.collapseToIdle();
+            irisLock.lock();
+            return "LOCKED";
+        }
+        function edit(): string {
+            root.collapseToIdle();
+            if (LockConfig.editing) {
+                LockConfig.editing = false;
+                LockConfig.selection = "";
+                return "EDIT_CLOSED";
+            }
+            irisLock.openEditor();
+            return "EDITING";
+        }
+        function preview(open: bool): string {
+            root.collapseToIdle();
+            irisLock.togglePreview(open);
+            return open ? "PREVIEW_ON" : "PREVIEW_OFF";
+        }
+        function status(): string {
+            return LockConfig.locked ? "locked" : (LockConfig.editing ? "editing" : "unlocked");
+        }
     }
 }

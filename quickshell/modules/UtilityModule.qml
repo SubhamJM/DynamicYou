@@ -536,14 +536,49 @@ Item {
     }
 
     // ========================================================
-    // REUSABLE MODERN BENTO GRID COMPONENTS
+    // MATUSHELL CRISP TYPOGRAPHY & ICON PRIMITIVES
     // ========================================================
+    component CrispIcon: Text {
+        property real iconSize: 18
+        property real fill: 0
+        property int weightAxis: 500
+
+        font.family: Theme.fontFamilyIcon
+        font.pixelSize: iconSize
+        font.hintingPreference: Font.PreferNoHinting
+        font.variableAxes: ({
+            "FILL": fill,
+            "GRAD": Theme.fontIconGrad,
+            "opsz": iconSize,
+            "wght": weightAxis
+        })
+        renderType: Text.CurveRendering
+        antialiasing: true
+        smooth: true
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+    }
+
+    component CrispText: Text {
+        property int weightAxis: 500
+
+        font.family: "Google Sans Flex"
+        font.weight: weightAxis >= 580 ? Font.DemiBold : (weightAxis >= 480 ? Font.Medium : Font.Normal)
+        font.variableAxes: ({
+            "wght": weightAxis,
+            "wdth": 100
+        })
+        font.hintingPreference: Font.PreferNoHinting
+        renderType: Text.QtRendering
+        antialiasing: true
+        smooth: true
+    }
 
     // ========================================================
-    // IRIS 1:1 REUSABLE DESIGN COMPONENTS (ZERO BORDERS, MATERIAL YOU)
+    // REUSABLE MATUSHELL CONTROL CENTER COMPONENTS
     // ========================================================
 
-    // 1. Iris 1:1 Wide Action Plate (2x1) - Neutral Dark Glass with Accent Disc & Morphing Radius
+    // 1. Matushell Wide Action Plate (Wi-Fi, Bluetooth, Audio Output, Recorder)
     component IrisActionPlate: Rectangle {
         id: iplate
         property string glyph: ""
@@ -558,16 +593,17 @@ Item {
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
-        implicitHeight: 48
-        radius: 14
+        implicitHeight: 50
+        radius: 18
 
-        // Material 3 Surface Container plate
-        color: plateMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+        color: iplate.lit
+            ? Qt.alpha(iplate.tint, plateMouse.containsMouse ? 0.18 : 0.12)
+            : (plateMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard)
         border.width: 0
 
         scale: plateMouse.pressed ? utilModule.pressScale : 1.0
         Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: 140 } }
 
         // Whole card click area (opens popup / details)
         MouseArea {
@@ -582,7 +618,7 @@ Item {
             anchors.fill: parent
             anchors.leftMargin: 8
             anchors.rightMargin: 12
-            spacing: 8
+            spacing: 9
 
             // Left: Circular Icon Disc (toggles state specifically)
             Rectangle {
@@ -590,21 +626,21 @@ Item {
                 z: 10
                 Layout.preferredWidth: 34
                 Layout.preferredHeight: 34
-                radius: 12
+                radius: 17
                 color: iplate.lit
                     ? iplate.tint
-                    : (discMouse.containsMouse ? utilModule.colCardHover : Qt.rgba(255, 255, 255, 0.08))
+                    : (discMouse.containsMouse ? Qt.alpha(utilModule.colText, 0.16) : Qt.alpha(utilModule.colText, 0.08))
                 scale: discMouse.pressed ? utilModule.pressScale : 1.0
                 Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on color { ColorAnimation { duration: 120 } }
 
-                MaterialSymbol {
+                CrispIcon {
                     anchors.centerIn: parent
                     text: iplate.glyph
                     fill: iplate.lit ? 1 : 0
-                    iconSize: 19
-                    color: iplate.lit ? utilModule.colBg : utilModule.colText
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    iconSize: 18
+                    color: iplate.lit ? Theme.onAccent : utilModule.colText
+                    Behavior on color { ColorAnimation { duration: 120 } }
                 }
 
                 MouseArea {
@@ -626,12 +662,11 @@ Item {
                 spacing: 1
                 Layout.alignment: Qt.AlignVCenter
 
-                Text {
+                CrispText {
                     Layout.fillWidth: true
                     text: iplate.title
-                    font.family: "Noto Sans"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
+                    font.pixelSize: 13
+                    weightAxis: 580
                     color: utilModule.colText
                     fontSizeMode: Text.HorizontalFit
                     minimumPixelSize: 10
@@ -639,31 +674,30 @@ Item {
                     maximumLineCount: 1
                 }
 
-                Text {
+                CrispText {
                     Layout.fillWidth: true
                     text: iplate.subtitle
                     visible: iplate.subtitle !== ""
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.Normal
-                    color: utilModule.colSubtext
+                    font.pixelSize: 11
+                    weightAxis: 430
+                    color: iplate.lit ? Qt.alpha(utilModule.colText, 0.78) : utilModule.colSubtext
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
             }
 
             // Right: Chevron / Status Indicator
-            MaterialSymbol {
+            CrispIcon {
                 visible: iplate.showChevron
                 text: "chevron_right"
-                iconSize: 15
-                color: utilModule.colMuted
-                opacity: 0.8
+                iconSize: 16
+                color: iplate.lit ? iplate.tint : utilModule.colMuted
+                opacity: 0.85
             }
         }
     }
 
-    // 2. Iris 1:1 Action Square Tile (Hotspot, Caffeine, Night Light, DND, Color, Timer)
+    // 2. Matushell Quick Action Tile (Hotspot, Caffeine, Night Light, DND, Color, Wallpapers)
     component IrisGridTile: Rectangle {
         id: gtile
         property string glyph: ""
@@ -676,8 +710,8 @@ Item {
         signal contextRequested()
 
         Accessible.name: label
-        ToolTip.visible: contextHint !== "" && tileMouse.containsMouse
-        ToolTip.text: contextHint
+        ToolTip.visible: (contextHint !== "" || label !== "") && tileMouse.containsMouse
+        ToolTip.text: contextHint !== "" ? (label + " • " + contextHint) : label
         ToolTip.delay: 500
 
         Layout.fillWidth: true
@@ -685,17 +719,16 @@ Item {
         Layout.fillHeight: true
         Layout.preferredHeight: 48
         implicitHeight: 48
-        radius: 14
+        radius: 18
 
-        // Material 3 tonal surface
         color: gtile.grouped ? "transparent" : (gtile.lit
-            ? Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22)
+            ? Qt.alpha(gtile.tint, tileMouse.containsMouse ? 0.28 : 0.20)
             : (tileMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard))
         border.width: 0
 
         scale: tileMouse.pressed ? utilModule.pressScale : 1.0
         Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on color { ColorAnimation { duration: 120 } }
 
         Rectangle {
             anchors.centerIn: parent
@@ -703,19 +736,21 @@ Item {
             width: height
             radius: Math.min(width, height) / 2
             visible: gtile.grouped
-            color: gtile.lit ? (gtile.grouped ? Qt.rgba(1, 1, 1, tileMouse.containsMouse ? 0.22 : 0.14) : Theme.alpha(gtile.tint, tileMouse.containsMouse ? 0.30 : 0.22))
-                : Theme.alpha(Theme.text, tileMouse.containsMouse ? 0.13 : 0.065)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            color: gtile.lit
+                ? gtile.tint
+                : Qt.alpha(utilModule.colText, tileMouse.containsMouse ? 0.14 : 0.08)
+            Behavior on color { ColorAnimation { duration: 120 } }
         }
 
-        MaterialSymbol {
+        CrispIcon {
             anchors.centerIn: parent
             text: gtile.glyph
             fill: gtile.lit ? 1 : 0
-            iconSize: 21
-            color: gtile.lit ? (gtile.grouped ? utilModule.colText : gtile.tint)
+            iconSize: 20
+            color: gtile.lit
+                ? (gtile.grouped ? Theme.onAccent : gtile.tint)
                 : (tileMouse.containsMouse ? utilModule.colText : utilModule.colSubtext)
-            Behavior on color { ColorAnimation { duration: 100 } }
+            Behavior on color { ColorAnimation { duration: 120 } }
         }
 
         MouseArea {
@@ -733,7 +768,7 @@ Item {
         }
     }
 
-    // 3. Iris 1:1 Vertical Capsule Slider (Visible Bold Fill + Tactile Handle Bar)
+    // 3. Matushell Vertical MatusSlider Fader (Thick segmented track, pill handle, endDot)
     component IrisVerticalCapsuleSlider: Item {
         id: vslider
         property real value: 0.5
@@ -747,11 +782,12 @@ Item {
 
         property real dragVal: -1
         readonly property real currentRatio: Math.max(0.0, Math.min(1.0, vslider.dragVal >= 0 ? vslider.dragVal : vslider.value))
+        readonly property color effectiveFill: vslider.muted ? (Theme.colors.error ?? "#ffb4ab") : vslider.activeColor
 
         property real fillRatio: valueReady && !muted ? currentRatio : 0
         Behavior on fillRatio {
             enabled: root.expandedContentReady && vslider.dragVal < 0
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 140; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curveDefaultSpatial ?? [0.38, 1.21, 0.22, 1, 1, 1] }
         }
 
         Layout.fillWidth: true
@@ -762,55 +798,97 @@ Item {
         Rectangle {
             id: track
             anchors.fill: parent
-            radius: 15
-            color: utilModule.colCard
+            radius: 18
+            color: vsliderMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
             border.width: 0
             clip: true
+            Behavior on color { ColorAnimation { duration: 120 } }
 
-            // A slim track leaves the control's icon and value easy to read.
-            Rectangle {
+            // MatusSlider-style Vertical Segmented Track
+            Item {
                 id: sliderRail
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                anchors.topMargin: 33
-                anchors.bottomMargin: 40
-                width: 5
-                radius: width / 2
-                color: Theme.alpha(Theme.text, 0.13)
+                anchors.topMargin: 32
+                anchors.bottomMargin: 42
+                width: 18
+
+                readonly property int barWidth: 10
+                readonly property int handleHeight: 5
+                readonly property int handleGap: 3
+                readonly property real handleCenterY: Math.max(handleGap, Math.min(height - handleGap, (1 - vslider.fillRatio) * height))
+                readonly property real topEmptyHeight: Math.max(0, handleCenterY - (handleHeight / 2 + handleGap))
+                readonly property real bottomFillHeight: Math.max(0, (height - handleCenterY) - (handleHeight / 2 + handleGap))
+                readonly property real topDotOpacity: Math.max(0, Math.min(1, (1 - vslider.fillRatio) / 0.08))
+
+                // Top inactive track with Matushell endDot
                 Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: parent.height * vslider.fillRatio
-                    radius: width / 2
-                    color: vslider.activeColor
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: sliderRail.barWidth
+                    height: sliderRail.topEmptyHeight
+                    topLeftRadius: width / 2
+                    topRightRadius: width / 2
+                    bottomLeftRadius: 2
+                    bottomRightRadius: 2
+                    color: Qt.alpha(utilModule.colText, 0.14)
+                    visible: height > 1
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: Math.round(4 * sliderRail.topDotOpacity)
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.round(4 * sliderRail.topDotOpacity)
+                        height: width
+                        radius: width / 2
+                        color: vslider.effectiveFill
+                        opacity: sliderRail.topDotOpacity
+                        visible: opacity > 0.05
+                    }
                 }
+
+                // Bottom active track
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: sliderRail.barWidth
+                    height: sliderRail.bottomFillHeight
+                    topLeftRadius: 2
+                    topRightRadius: 2
+                    bottomLeftRadius: width / 2
+                    bottomRightRadius: width / 2
+                    color: vslider.effectiveFill
+                    visible: height > 1
+
+                    Behavior on color { ColorAnimation { duration: 140 } }
+                }
+
+                // Horizontal pill handle
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: Math.max(-height / 2, Math.min(parent.height - height / 2, parent.height * (1 - vslider.fillRatio) - height / 2))
-                    width: 14
-                    height: 14
-                    radius: 7
-                    color: vslider.valueReady && !vslider.muted ? vslider.activeColor : utilModule.colSubtext
-                    border.width: 2
-                    border.color: utilModule.colCard
+                    y: Math.max(0, Math.min(parent.height - height, sliderRail.handleCenterY - height / 2))
+                    width: 18
+                    height: sliderRail.handleHeight
+                    radius: height / 2
+                    color: vslider.effectiveFill
+
+                    Behavior on color { ColorAnimation { duration: 140 } }
                 }
             }
 
-            // Top Numeric Percentage Readout
-            Text {
+            // Top Numeric Percentage Readout (Google Sans Flex)
+            CrispText {
                 anchors.top: parent.top
                 anchors.topMargin: 10
                 anchors.horizontalCenter: parent.horizontalCenter
                 z: 5
                 text: vslider.valueReady ? vslider.percentText : "—"
-                font.family: "Noto Sans"
-                font.pixelSize: 11
-                font.weight: Font.Bold
+                font.pixelSize: 12
+                weightAxis: 580
                 font.features: ({ "tnum": 1 })
                 color: vslider.muted
-                    ? (Theme.colors.error || "#ffb4ab")
+                    ? (Theme.colors.error ?? "#ffb4ab")
                     : utilModule.colText
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
@@ -826,19 +904,19 @@ Item {
                 radius: 16
                 z: 6
                 color: viconMouse.containsMouse
-                    ? (vslider.currentRatio >= 0.25 ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(255, 255, 255, 0.12))
+                    ? Qt.alpha(utilModule.colText, 0.12)
                     : "transparent"
                 scale: viconMouse.pressed ? utilModule.pressScale : 1.0
                 Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 120 } }
 
-                MaterialSymbol {
+                CrispIcon {
                     anchors.centerIn: parent
                     text: vslider.icon
-                    fill: 1
+                    fill: vslider.muted ? 1 : 0
                     iconSize: 18
                     color: vslider.muted
-                        ? (Theme.colors.error || "#ffb4ab")
+                        ? (Theme.colors.error ?? "#ffb4ab")
                         : utilModule.colText
                     Behavior on color { ColorAnimation { duration: 120 } }
                 }
@@ -865,11 +943,11 @@ Item {
                 preventStealing: true
 
                 function calcRatio(mouseY) {
-                    return Math.max(0.0, Math.min(1.0, (height - 40 - mouseY) / Math.max(1, height - 73)));
+                    return Math.max(0.0, Math.min(1.0, (height - 42 - mouseY) / Math.max(1, height - 74)));
                 }
 
                 onPressed: (mouse) => {
-                    if (mouse.y >= height - 36) return; // Handled by icon pocket
+                    if (mouse.y >= height - 38) return; // Handled by icon pocket
                     vslider.dragVal = calcRatio(mouse.y);
                     vslider.moved(vslider.dragVal);
                 }
@@ -1265,19 +1343,19 @@ Item {
         }
     }
 
-    // 6. Compact Header Quick Action Button
+    // 6. Compact Header Quick Action Pill Button
     component HeaderQuickBtn: Rectangle {
         id: hbtn
         property string glyph: ""
         property string hint: ""
         property color iconColor: utilModule.colSubtext
         property color customBg: utilModule.colCard
-        property color hoverBg: utilModule.colCardHover
+        property color hoverBg: Qt.alpha(utilModule.colAccent, 0.16)
         signal clicked()
 
-        Layout.preferredWidth: 24
+        Layout.preferredWidth: 28
         Layout.preferredHeight: 28
-        radius: 8
+        radius: 14
         color: hmouse.containsMouse ? hbtn.hoverBg : hbtn.customBg
         border.width: 0
         Accessible.name: hint
@@ -1287,12 +1365,12 @@ Item {
 
         scale: hmouse.pressed ? utilModule.pressScale : 1.0
         Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on color { ColorAnimation { duration: 120 } }
 
-        MaterialSymbol {
+        CrispIcon {
             anchors.centerIn: parent
             text: hbtn.glyph
-            iconSize: 15
+            iconSize: 16
             color: hmouse.containsMouse ? utilModule.colText : hbtn.iconColor
         }
 
@@ -1318,19 +1396,18 @@ Item {
         Layout.fillWidth: true
         spacing: 5
 
-        Text {
+        CrispText {
             Layout.leftMargin: 3
             text: group.heading
-            color: Theme.alpha(Theme.text, 0.74)
-            font.family: Theme.fontFamilyBody
+            color: Theme.alpha(Theme.text, 0.78)
             font.pixelSize: 12
-            font.weight: Font.DemiBold
+            weightAxis: 580
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: rows.implicitHeight + 4
-            radius: 12
+            radius: 14
             color: Theme.alpha(Theme.text, 0.055)
             border.color: group.outline
 
@@ -1340,7 +1417,7 @@ Item {
                 anchors.margins: 2
                 spacing: 0
 
-                Text {
+                CrispText {
                     Layout.fillWidth: true
                     Layout.leftMargin: 10
                     Layout.preferredHeight: 34
@@ -1348,8 +1425,8 @@ Item {
                     visible: group.devices.length === 0
                     text: utilModule.audioDevicesReady ? group.emptyText : "Looking for devices…"
                     color: Theme.alpha(Theme.text, 0.64)
-                    font.family: Theme.fontFamilyBody
-                    font.pixelSize: 11
+                    font.pixelSize: 12
+                    weightAxis: 430
                 }
 
                 Repeater {
@@ -1377,7 +1454,7 @@ Item {
                             readonly property bool selected: entry.modelData.isDefault
 
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: 34
                             leftPadding: 10
                             rightPadding: 10
                             topPadding: 0
@@ -1392,8 +1469,8 @@ Item {
                             }
 
                             background: Rectangle {
-                                radius: 8
-                                color: device.selected ? Theme.alpha(Theme.accent, device.down ? 0.22 : 0.13)
+                                radius: 10
+                                color: device.selected ? Theme.alpha(Theme.accent, device.down ? 0.22 : 0.14)
                                     : Theme.alpha(Theme.text, device.down ? 0.12 : device.hovered ? 0.07 : 0)
                                 border.color: device.visualFocus ? Theme.accent : "transparent"
                                 Behavior on color { ColorAnimation { duration: utilModule.feedbackDuration } }
@@ -1402,23 +1479,23 @@ Item {
                             contentItem: RowLayout {
                                 spacing: 9
 
-                                MaterialSymbol {
+                                CrispIcon {
                                     text: group.input ? "mic" : utilModule.getSinkIcon(entry.modelData.name, entry.modelData.desc)
                                     iconSize: 16
+                                    fill: device.selected ? 1 : 0
                                     color: device.selected ? Theme.accent : Theme.alpha(Theme.text, 0.72)
                                 }
 
-                                Text {
+                                CrispText {
                                     Layout.fillWidth: true
                                     text: device.text
                                     color: Theme.text
-                                    font.family: Theme.fontFamilyBody
                                     font.pixelSize: 12
-                                    font.weight: device.selected ? Font.DemiBold : Font.Normal
+                                    weightAxis: device.selected ? 580 : 440
                                     elide: Text.ElideRight
                                 }
 
-                                MaterialSymbol {
+                                CrispIcon {
                                     visible: device.selected
                                     text: "check"
                                     iconSize: 16
@@ -1449,19 +1526,20 @@ Item {
             Layout.preferredHeight: 32
             spacing: 8
 
-            // Tactile Back / Exit Button
+            // Tactile Back / Control Center Pill Icon
             Rectangle {
                 width: 30; height: 30; radius: 15
-                color: headerBackMouse.containsMouse ? utilModule.colCardHover : utilModule.colCard
+                color: headerBackMouse.containsMouse ? Qt.alpha(utilModule.colAccent, 0.16) : utilModule.colCard
                 border.width: 0
                 scale: headerBackMouse.pressed ? utilModule.pressScale : 1.0
                 Behavior on scale { NumberAnimation { duration: utilModule.feedbackDuration; easing.type: Easing.OutCubic } }
+                Behavior on color { ColorAnimation { duration: 120 } }
 
-                MaterialSymbol {
+                CrispIcon {
                     anchors.centerIn: parent
-                    text: utilModule.activeSection !== "" ? "arrow_back" : "tune"
-                    iconSize: 16
-                    color: utilModule.activeSection !== "" ? utilModule.colAccent : utilModule.colText
+                    text: utilModule.activeSection !== "" ? "arrow_back" : "instant_mix"
+                    iconSize: 17
+                    color: utilModule.colAccent
                 }
 
                 MouseArea {
@@ -1481,27 +1559,26 @@ Item {
 
             // Title & Date Subtitle
             ColumnLayout {
-                spacing: 1
+                spacing: 0
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 120
                 Layout.alignment: Qt.AlignVCenter
 
-                Text {
+                CrispText {
                     Layout.fillWidth: true
                     text: utilModule.activeSection === "audio" ? "Sound Devices" : (utilModule.activeSection === "vpn" ? "VPN & Privacy" : "Control Center")
-                    font.family: "Noto Sans"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    font.pixelSize: 14
+                    weightAxis: 580
                     color: utilModule.colText
                     elide: Text.ElideRight
                 }
 
-                Text {
+                CrispText {
                     Layout.fillWidth: true
-                    text: utilModule.activeSection === "audio" ? "Choose an output or microphone" : (utilModule.activeSection === "vpn" ? "Select network provider or quick-connect" : Qt.formatDate(clock.date, "dddd, d MMMM"))
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
+                    text: utilModule.activeSection === "audio" ? "Choose an output or microphone" : (utilModule.activeSection === "vpn" ? "Select network provider or quick-connect" : Qt.formatDate(clock.date, "dddd, MMM d"))
+                    font.pixelSize: 11
+                    weightAxis: 430
                     color: utilModule.colSubtext
                     elide: Text.ElideRight
                 }
@@ -1513,50 +1590,53 @@ Item {
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 visible: utilModule.activeSection === ""
 
-                // 1. Notes
                 HeaderQuickBtn {
                     glyph: "edit_note"
+                    hint: "Notes"
                     onClicked: root.switchMode("notes", false)
                 }
 
-                // 2. Clipboard History
                 HeaderQuickBtn {
-                    glyph: "assignment"
+                    glyph: "content_paste"
+                    hint: "Clipboard"
                     onClicked: root.switchMode("clipboard", false)
                 }
 
-                // 3. Theme Selector
                 HeaderQuickBtn {
                     glyph: "palette"
+                    hint: "Theme"
                     onClicked: root.switchMode("theme", false)
                 }
 
                 HeaderQuickBtn {
-                    glyph: "auto_awesome_mosaic"
-                    hint: "Wallpaper Color Sorter"
-                    onClicked: root.switchMode("wallsort", false)
-                }
-
-                // 4. Task Manager
-                HeaderQuickBtn {
-                    glyph: "monitoring"
-                    onClicked: root.switchMode("taskmanager", false)
-                }
-
-                // 5. Screen Lock
-                HeaderQuickBtn {
-                    glyph: "lock"
+                    glyph: "grid_view"
+                    hint: "Widgets"
                     onClicked: {
                         root.collapseToIdle();
-                        Quickshell.execDetached(["hyprlock"]);
+                        WidgetStore.toggleSidebar();
                     }
                 }
 
-                // 6. Power Menu
+                HeaderQuickBtn {
+                    glyph: "monitoring"
+                    hint: "Task Manager"
+                    onClicked: root.switchMode("taskmanager", false)
+                }
+
+                HeaderQuickBtn {
+                    glyph: "lock"
+                    hint: "Lock Screen"
+                    onClicked: {
+                        root.collapseToIdle();
+                        Quickshell.execDetached(["sh", "-c", "qs ipc call lock lock >/dev/null 2>&1 || pidof hyprlock || hyprlock"]);
+                    }
+                }
+
                 HeaderQuickBtn {
                     glyph: "power_settings_new"
-                    iconColor: "#ff453a"
-                    hoverBg: Qt.rgba(255, 69, 58, 0.18)
+                    hint: "Power Menu"
+                    iconColor: Theme.colors.error ?? "#ffb4ab"
+                    hoverBg: Qt.rgba(1, 0.33, 0.29, 0.18)
                     onClicked: root.switchMode("powermenu", false)
                 }
             }
@@ -1571,14 +1651,13 @@ Item {
                 color: headerDiscMouse.containsMouse ? Qt.rgba(255, 105, 97, 0.25) : Qt.rgba(255, 105, 97, 0.14)
                 border.width: 0
 
-                Text {
+                CrispText {
                     id: headerDisconnectText
                     anchors.centerIn: parent
                     text: utilModule.vpnConnecting ? "Cancel" : "Disconnect"
-                    font.family: "Noto Sans"
-                    font.pixelSize: 10
-                    font.weight: Font.DemiBold
-                    color: "#ff6961"
+                    font.pixelSize: 11
+                    weightAxis: 580
+                    color: Theme.colors.error ?? "#ff6961"
                 }
 
                 MouseArea {
@@ -1689,12 +1768,12 @@ Item {
                             glyph: "coffee"
                             label: "Caffeine"
                             lit: utilModule.caffeineActive
-                            tint: "#fbbf24"
+                            tint: utilModule.colAccent
                             onClicked: utilModule.toggleCaffeine()
                         }
                     }
 
-                    // 4. Lower Action Buttons (Night Light, DND) - Aligned with Color & Timer
+                    // 4. Lower Action Buttons (Night Light, DND)
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -1704,20 +1783,20 @@ Item {
                         // Night Light
                         IrisGridTile {
                             grouped: true
-                            glyph: "nightlight"
+                            glyph: "bedtime"
                             label: "Night Light"
                             lit: utilModule.nightLightActive
-                            tint: "#f59e0b"
+                            tint: utilModule.colAccent
                             onClicked: utilModule.toggleNightLight()
                         }
 
                         // DND
                         IrisGridTile {
                             grouped: true
-                            glyph: (typeof root !== "undefined" && root.dndEnabled) ? "do_not_disturb_on" : "do_not_disturb_off"
+                            glyph: (typeof root !== "undefined" && root.dndEnabled) ? "notifications_paused" : "notifications_off"
                             label: "DND"
                             lit: typeof root !== "undefined" && root.dndEnabled
-                            tint: "#a855f7"
+                            tint: utilModule.colAccent
                             onClicked: utilModule.toggleDnd()
                         }
                     }
@@ -1950,12 +2029,12 @@ Item {
                                     color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.085) : Qt.rgba(255, 255, 255, 0.04))
                                     border.width: 0
 
-                                    MaterialSymbol {
+                                    CrispIcon {
                                         anchors.centerIn: parent
                                         text: modelData.icon || "shield"
                                         fill: (modelData.active || modelData.connecting) ? 1 : 0
                                         iconSize: 17
-                                        color: (modelData.active || modelData.connecting) ? "#101318" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
+                                        color: (modelData.active || modelData.connecting) ? Theme.onAccent : (modelData.installed ? utilModule.colText : utilModule.colMuted)
                                     }
                                 }
 
@@ -1966,11 +2045,10 @@ Item {
 
                                     RowLayout {
                                         spacing: 6
-                                        Text {
+                                        CrispText {
                                             text: modelData.name
-                                            font.family: "Noto Sans"
-                                            font.pixelSize: 12
-                                            font.weight: Font.DemiBold
+                                            font.pixelSize: 13
+                                            weightAxis: 580
                                             color: (modelData.active || modelData.connecting) ? utilModule.colAccent : utilModule.colText
                                         }
 
@@ -1982,22 +2060,21 @@ Item {
                                             color: Qt.rgba(255, 255, 255, 0.08)
                                             border.width: 0
 
-                                            Text {
+                                            CrispText {
                                                 id: defText
                                                 anchors.centerIn: parent
                                                 text: "Default"
-                                                font.family: "Noto Sans"
-                                                font.pixelSize: 9
-                                                font.weight: Font.Normal
+                                                font.pixelSize: 10
+                                                weightAxis: 450
                                                 color: utilModule.colMuted
                                             }
                                         }
                                     }
 
-                                    Text {
+                                    CrispText {
                                         text: modelData.connecting ? "Connecting to network..." : (modelData.installed ? modelData.subtitle : "Not installed on system")
-                                        font.family: "Noto Sans"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 11
+                                        weightAxis: 430
                                         color: (modelData.active || modelData.connecting) ? utilModule.colAccent : utilModule.colMuted
                                         elide: Text.ElideRight
                                     }
@@ -2011,14 +2088,13 @@ Item {
                                     color: (modelData.active || modelData.connecting) ? utilModule.colAccent : (modelData.installed ? Qt.rgba(255, 255, 255, 0.08) : "transparent")
                                     border.width: 0
 
-                                    Text {
+                                    CrispText {
                                         id: statusLabel
                                         anchors.centerIn: parent
                                         text: modelData.connecting ? "Connecting..." : (modelData.active ? "Connected" : (modelData.installed ? "Connect" : "Install"))
-                                        font.family: "Noto Sans"
-                                        font.pixelSize: 10
-                                        font.weight: Font.DemiBold
-                                        color: (modelData.active || modelData.connecting) ? "#101318" : (modelData.installed ? utilModule.colText : utilModule.colMuted)
+                                        font.pixelSize: 11
+                                        weightAxis: 580
+                                        color: (modelData.active || modelData.connecting) ? Theme.onAccent : (modelData.installed ? utilModule.colText : utilModule.colMuted)
                                     }
                                 }
                             }

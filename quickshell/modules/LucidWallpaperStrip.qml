@@ -85,13 +85,17 @@ Item {
         view.highlightMoveDuration = 0;
         view.currentIndex = i;
         strip.pendingCenterIndex = i;
-        Qt.callLater(strip.centerPending);
+        view.forceLayout();
+        strip.centerPending();
         restoreAnim.restart();
     }
 
     // deferred — straight from a delegate handler this crashes mid-incubation
     function relayout() {
         view.forceLayout();
+        if (strip.syncing && view.currentIndex >= 0) {
+            view.positionViewAtIndex(view.currentIndex, ListView.Center);
+        }
     }
 
     function centerPending() {
@@ -115,8 +119,12 @@ Item {
     Timer {
         id: restoreAnim
 
-        interval: 120
+        interval: 180
         onTriggered: {
+            view.forceLayout();
+            if (view.currentIndex >= 0) {
+                view.positionViewAtIndex(view.currentIndex, ListView.Center);
+            }
             view.highlightMoveDuration = Theme.ms(260);
             strip.syncing = false;
         }
@@ -147,10 +155,17 @@ Item {
         highlightRangeMode: ListView.StrictlyEnforceRange
         preferredHighlightBegin: (view.width - strip.heroW) / 2
         preferredHighlightEnd: (view.width + strip.heroW) / 2
-        highlightMoveDuration: Theme.ms(260)
+        highlightMoveDuration: strip.syncing ? 0 : Theme.ms(260)
         flickDeceleration: 3000
         visible: count > 0
         cacheBuffer: strip.heroW * 6
+
+        onWidthChanged: {
+            if (strip.syncing && view.currentIndex >= 0) {
+                view.forceLayout();
+                view.positionViewAtIndex(view.currentIndex, ListView.Center);
+            }
+        }
 
         onCurrentIndexChanged: {
             Qt.callLater(strip.relayout);
@@ -163,23 +178,6 @@ Item {
 
             strip.pendingPreviewPath = item.path;
             previewThrottle.restart();
-        }
-
-        add: Transition {
-            NumberAnimation {
-                properties: "scale"
-                from: 0.6
-                duration: Theme.durEnter
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.4
-            }
-
-            NumberAnimation {
-                properties: "opacity"
-                from: 0
-                duration: Theme.ms(200)
-            }
-
         }
 
         delegate: Item {
@@ -213,12 +211,12 @@ Item {
             onWidthChanged: Qt.callLater(strip.relayout)
 
             Behavior on width {
+                enabled: !strip.syncing
                 NumberAnimation {
-                    duration: Theme.ms(300)
+                    duration: Theme.ms(260)
                     easing.type: Easing.Bezier
                     easing.bezierCurve: Theme.easeEmphasizedDecel
                 }
-
             }
 
             ClippingRectangle {
@@ -231,38 +229,38 @@ Item {
                 height: slot.targetH
 
                 Behavior on anchors.verticalCenterOffset {
+                    enabled: !strip.syncing
                     NumberAnimation {
                         duration: Theme.durShort
                         easing.type: Easing.OutCubic
                     }
-
                 }
 
                 Behavior on scale {
+                    enabled: !strip.syncing
                     NumberAnimation {
                         duration: Theme.durShort
                         easing.type: Easing.OutCubic
                     }
-
                 }
-                radius: slot.tier === 0 ? Theme.shapeXlInc : (slot.tier === 1 ? Theme.shapeLgInc : (slot.tier === 2 ? Theme.shapeMd : Theme.shapeSm))
+                radius: slot.tier === 0 ? Theme.shapeXl : (slot.tier === 1 ? Theme.shapeLg : (slot.tier === 2 ? Theme.shapeMd : Theme.shapeSm))
                 color: Theme.bgTile
-                opacity: (slot.tier === 0 || slot.hovered) ? 1 : (slot.tier === 1 ? 0.78 : (slot.tier === 2 ? 0.5 : 0.36))
+                opacity: (slot.tier === 0 || slot.hovered) ? 1 : (slot.tier === 1 ? 0.64 : (slot.tier === 2 ? 0.36 : 0.22))
 
                 Behavior on height {
+                    enabled: !strip.syncing
                     NumberAnimation {
-                        duration: Theme.ms(300)
+                        duration: Theme.ms(260)
                         easing.type: Easing.Bezier
                         easing.bezierCurve: Theme.easeEmphasizedDecel
                     }
-
                 }
 
                 Behavior on opacity {
+                    enabled: !strip.syncing
                     NumberAnimation {
-                        duration: Theme.ms(300)
+                        duration: Theme.ms(240)
                     }
-
                 }
 
 
@@ -296,6 +294,16 @@ Item {
 
             }
 
+            // Subtle accent outline on the centered hero card for crisp M3 framing
+            Rectangle {
+                anchors.fill: card
+                radius: card.radius
+                color: "transparent"
+                border.width: slot.tier === 0 ? 1.5 : 0
+                border.color: slot.isApplied ? Theme.accent : Qt.alpha(Theme.text, 0.22)
+                visible: slot.tier === 0
+            }
+
             Rectangle {
                 anchors.right: card.right
                 anchors.top: card.top
@@ -307,31 +315,35 @@ Item {
                 scale: slot.isApplied ? 1 : 0.4
 
                 Behavior on scale {
+                    enabled: !strip.syncing
                     NumberAnimation {
                         duration: Theme.durFastSpatial
                         easing.type: Easing.Bezier
                         easing.bezierCurve: Theme.curveDefaultSpatial
                     }
-
                 }
                 opacity: slot.isApplied ? 1 : 0
                 visible: opacity > 0.01
 
-                DockGlyph {
+                Text {
                     anchors.centerIn: parent
-                    width: Theme.dp(15)
-                    height: Theme.dp(15)
-                    pathData: DockIcons.check
-                    glyphColor: Theme.fgAccent
+                    text: "check"
+                    color: Theme.fgAccent
+                    font.family: Theme.fontFamilyIcon
+                    font.pixelSize: 15
+                    font.hintingPreference: Font.PreferNoHinting
+                    font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 15, "wght": 600 })
+                    renderType: Text.CurveRendering
+                    antialiasing: true
+                    smooth: true
                 }
 
                 Behavior on opacity {
+                    enabled: !strip.syncing
                     NumberAnimation {
                         duration: Theme.durShort
                     }
-
                 }
-
             }
 
             // set from outside the folder, from lumen say: in the strip only while
@@ -402,15 +414,22 @@ Item {
             anchors.centerIn: parent
             spacing: Theme.dp(10)
 
-            LText {
+            Text {
                 id: capName
 
                 anchors.verticalCenter: parent.verticalCenter
-                role: "titleSmall"
                 text: capRow.entry ? capRow.entry.name : ""
                 color: Theme.text
+                font.family: "Google Sans Flex"
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.variableAxes: ({ "wght": 580, "wdth": 100 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
                 elide: Text.ElideRight
-                width: Math.min(capMetrics.width + Theme.dp(2), Math.max(0, strip.width - Theme.dp(220)))
+                width: Math.min(capMetrics.width + Theme.dp(4), Math.max(0, strip.width - Theme.dp(220)))
 
                 TextMetrics {
                     id: capMetrics
@@ -418,7 +437,6 @@ Item {
                     font: capName.font
                     text: capName.text
                 }
-
             }
 
             Rectangle {
@@ -429,23 +447,36 @@ Item {
                 color: Theme.accent
                 visible: capRow.entry !== null && strip.appliedPath !== "" && strip.appliedPath === capRow.entry.path
 
-                LText {
+                Text {
                     id: appliedLabel
 
                     anchors.centerIn: parent
-                    role: "labelSmall"
                     text: I18n.tr("On the desktop")
                     color: Theme.fgAccent
+                    font.family: "Google Sans Flex"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    font.variableAxes: ({ "wght": 580, "wdth": 100 })
+                    font.hintingPreference: Font.PreferNoHinting
+                    renderType: Text.QtRendering
+                    antialiasing: true
+                    smooth: true
                 }
-
             }
 
-            LText {
+            Text {
                 anchors.verticalCenter: parent.verticalCenter
-                role: "labelMedium"
-                tabular: true
                 text: strip.model && strip.model.count > 0 ? (capRow.at + 1) + " / " + strip.model.count : ""
                 color: Theme.subtextDim
+                font.family: "Google Sans Flex"
+                font.pixelSize: 12
+                font.weight: Font.Medium
+                font.variableAxes: ({ "wght": 500, "wdth": 100 })
+                font.features: ({ "tnum": 1 })
+                font.hintingPreference: Font.PreferNoHinting
+                renderType: Text.QtRendering
+                antialiasing: true
+                smooth: true
             }
 
         }

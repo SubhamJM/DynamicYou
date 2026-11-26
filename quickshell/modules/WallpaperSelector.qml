@@ -95,14 +95,7 @@ FocusScope {
         }
 
         if (displayModel.count > 0 && wallStrip) {
-            if (!wallModule.userInteracted) {
-                Qt.callLater(() => {
-                    if (generation === wallModule.filterGeneration && !wallModule.userInteracted && targetIdx < displayModel.count)
-                        wallStrip.setIndexImmediate(targetIdx);
-                });
-            } else {
-                wallStrip.setIndexImmediate(targetIdx);
-            }
+            wallStrip.setIndexImmediate(targetIdx);
         }
     }
 
@@ -180,27 +173,46 @@ FocusScope {
         }
     }
 
-    Component.onCompleted: {
+    function openPicker() {
         wallModule.userInteracted = false;
-        wallModule.loadCachedWallpapers();
+        wallModule.sortDropdownOpen = false;
+        if (wallModule.searchText !== "") wallModule.searchText = "";
+        if (searchInput && searchInput.text !== "") searchInput.text = "";
+        if (fullWallpaperModel.count === 0) {
+            wallModule.loadCachedWallpapers();
+        } else if (wallStrip && displayModel.count > 0) {
+            var activeIdx = 0;
+            for (var i = 0; i < displayModel.count; i++) {
+                if (wallModule.lastAppliedWallpaper !== "" && displayModel.get(i).path === wallModule.lastAppliedWallpaper) {
+                    activeIdx = i;
+                    break;
+                }
+            }
+            wallStrip.setIndexImmediate(activeIdx);
+        }
         wallModule.scanWallpapers();
         Qt.callLater(() => {
             if (searchInput) searchInput.forceActiveFocus();
         });
     }
 
+    Component.onCompleted: {
+        wallModule.openPicker();
+    }
+
+    onVisibleChanged: {
+        if (visible && fullWallpaperModel.count === 0 && !wallpaperScanner.running) {
+            wallModule.openPicker();
+        }
+    }
+
     Connections {
         target: (typeof root !== "undefined") ? root : null
         function onActiveModeChanged() {
             if (root.activeMode === "wallpaper") {
-                wallModule.userInteracted = false;
-                wallModule.searchText = "";
-                if (searchInput) searchInput.text = "";
-                wallModule.loadCachedWallpapers();
-                wallModule.scanWallpapers();
-                Qt.callLater(() => {
-                    if (searchInput) searchInput.forceActiveFocus();
-                });
+                wallModule.openPicker();
+            } else {
+                wallModule.sortDropdownOpen = false;
             }
         }
     }
@@ -212,16 +224,6 @@ FocusScope {
                 wallModule.userInteracted = false;
                 wallModule.scanWallpapers();
             }
-        }
-    }
-
-    onVisibleChanged: {
-        if (visible) {
-            wallModule.userInteracted = false;
-            wallModule.searchText = "";
-            wallModule.loadCachedWallpapers();
-            wallModule.scanWallpapers();
-            Qt.callLater(() => wallModule.forceActiveFocus());
         }
     }
 
@@ -337,8 +339,9 @@ for f, mtime in files_with_mtime:
         `]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n");
-                fullWallpaperModel.clear();
+                var raw = this.text.trim();
+                var lines = raw === "" ? [] : raw.split("\n");
+                var scanned = [];
                 var activeFromQuery = "";
 
                 for (var i = 0; i < lines.length; i++) {
@@ -350,8 +353,7 @@ for f, mtime in files_with_mtime:
                         var act = parts.length >= 4 ? parts[3].trim() : "";
                         var mtime = parts.length >= 5 ? parseInt(parts[4]) : 0;
                         if (act !== "") activeFromQuery = act;
-
-                        fullWallpaperModel.append({
+                        scanned.push({
                             "name": name,
                             "path": fPath,
                             "thumb": thumb,
@@ -361,22 +363,67 @@ for f, mtime in files_with_mtime:
                     }
                 }
 
+                var prevActive = wallModule.lastAppliedWallpaper;
+                var activeChanged = activeFromQuery !== "" && activeFromQuery !== prevActive;
                 if (activeFromQuery !== "") {
                     wallModule.lastAppliedWallpaper = activeFromQuery;
                 }
 
-                if (typeof root !== "undefined") {
-                    var cacheArr = [];
-                    for (var c = 0; c < fullWallpaperModel.count; c++) {
-                        cacheArr.push(fullWallpaperModel.get(c));
+                // Compare paths in-order so opening scans do not wipe & rebuild identical models
+                var samePaths = (scanned.length === fullWallpaperModel.count);
+                if (samePaths) {
+                    for (var s = 0; s < scanned.length; s++) {
+                        if (fullWallpaperModel.get(s).path !== scanned[s].path) {
+                            samePaths = false;
+                            break;
+                        }
                     }
-                    root.cachedWallpapers = cacheArr;
-                    if (activeFromQuery !== "") root.cachedActiveWallpaper = activeFromQuery;
                 }
 
-                wallModule.filterWallpapers();
+                if (samePaths && fullWallpaperModel.count > 0) {
+                    var thumbByPath = {};
+                    for (var k = 0; k < scanned.length; k++) {
+                        var item = scanned[k];
+                        var existing = fullWallpaperModel.get(k);
+                        if (existing.thumb !== item.thumb) {
+                            fullWallpaperModel.setProperty(k, "thumb", item.thumb);
+                        }
+                        if (existing.mtime !== item.mtime) {
+                            fullWallpaperModel.setProperty(k, "mtime", item.mtime);
+                        }
+                        thumbByPath[item.path] = item;
+                    }
+                    for (var d = 0; d < displayModel.count; d++) {
+                        var dm = displayModel.get(d);
+                        var updated = thumbByPath[dm.path];
+                        if (updated && dm.thumb !== updated.thumb) {
+                            displayModel.setProperty(d, "thumb", updated.thumb);
+                        }
+                    }
+                    if (typeof root !== "undefined") {
+                        root.cachedWallpapers = scanned;
+                        if (activeFromQuery !== "") root.cachedActiveWallpaper = activeFromQuery;
+                    }
+                    if (activeChanged && !wallModule.userInteracted && wallStrip && displayModel.count > 0) {
+                        for (var a = 0; a < displayModel.count; a++) {
+                            if (displayModel.get(a).path === activeFromQuery) {
+                                wallStrip.setIndexImmediate(a);
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    fullWallpaperModel.clear();
+                    for (var n = 0; n < scanned.length; n++) {
+                        fullWallpaperModel.append(scanned[n]);
+                    }
+                    if (typeof root !== "undefined") {
+                        root.cachedWallpapers = scanned;
+                        if (activeFromQuery !== "") root.cachedActiveWallpaper = activeFromQuery;
+                    }
+                    wallModule.filterWallpapers();
+                }
 
-                // Trigger background thumbnail caching if needed
                 thumbsRunner.running = true;
             }
         }
@@ -416,44 +463,63 @@ for f, mtime in files_with_mtime:
         anchors.fill: parent
 
         // ------------------------------------------
-        // 1. TOP HEADER BAR: Back, Themes, Jump Arrows & Sort Dropdown
+        // 1. TOP HEADER BAR: Clean Matushell Action Pills
         // ------------------------------------------
         Item {
             id: topHeaderBar
             anchors.top: parent.top
-            anchors.topMargin: 12
+            anchors.topMargin: 14
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
+            anchors.leftMargin: 22
+            anchors.rightMargin: 22
             height: 36
             z: 20
 
-            // Left Stack: Back Button, Title, Count Badge, Themes Button
+            // Left Stack: Back Button, Title, Count Pill, Themes Pill
             RowLayout {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 10
 
-                IrisIconButton {
-                    buttonSize: 32
-                    buttonRadius: 16
-                    flat: true
-                    icon: "arrow_back"
-                    iconSize: 18
-                    iconColor: Theme.alpha(Theme.text, 0.75)
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Back to idle"
-                    onClicked: {
-                        if (typeof root !== "undefined") root.collapseToIdle();
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    radius: 16
+                    color: backMouse.pressed
+                        ? Qt.alpha(Theme.text, 0.16)
+                        : (backMouse.containsMouse ? Qt.alpha(Theme.text, 0.10) : Qt.alpha(Theme.text, 0.05))
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "arrow_back"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 17
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: backMouse.containsMouse ? Theme.text : Qt.alpha(Theme.text, 0.80)
+                    }
+
+                    MouseArea {
+                        id: backMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (typeof root !== "undefined") root.collapseToIdle();
+                        }
                     }
                 }
 
                 Text {
                     text: "Wallpapers"
-                    font.family: Theme.fontFamilyBody
+                    font.family: "Google Sans Flex"
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
+                    renderType: Text.QtRendering
+                    font.hintingPreference: Font.PreferNoHinting
                     color: Theme.text
                 }
 
@@ -461,38 +527,33 @@ for f, mtime in files_with_mtime:
                 Rectangle {
                     visible: displayModel.count > 0
                     Layout.preferredHeight: 22
-                    Layout.preferredWidth: countRow.implicitWidth + 14
+                    Layout.preferredWidth: countLabel.implicitWidth + 14
                     radius: 11
-                    color: Theme.alpha(Theme.text, 0.08)
-                    border.width: 0
+                    color: Qt.alpha(Theme.text, 0.08)
 
-                    Row {
-                        id: countRow
+                    Text {
+                        id: countLabel
                         anchors.centerIn: parent
-                        spacing: 3
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: displayModel.count.toString()
-                            font.family: Theme.fontFamilyBody
-                            font.pixelSize: 11
-                            font.weight: Font.DemiBold
-                            font.features: ({ "tnum": 1 })
-                            color: Theme.subtext
-                        }
+                        text: displayModel.count.toString()
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        font.features: ({ "tnum": 1 })
+                        renderType: Text.QtRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: Theme.subtext
                     }
                 }
 
-                // Switch to Themes Button (M3 Tonal Action Pill)
+                // Switch to Themes Pill
                 Rectangle {
                     id: themeBtn
                     Layout.preferredHeight: 32
                     Layout.preferredWidth: themeRow.implicitWidth + 24
-                    radius: 10
+                    radius: 16
                     color: themeMouse.pressed
-                        ? Theme.alpha(Theme.accent, 0.25)
-                        : (themeMouse.containsMouse ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.accent, 0.10))
-                    border.width: 0
+                        ? Qt.alpha(Theme.accent, 0.24)
+                        : (themeMouse.containsMouse ? Qt.alpha(Theme.accent, 0.16) : Qt.alpha(Theme.accent, 0.10))
 
                     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -501,19 +562,25 @@ for f, mtime in files_with_mtime:
                         anchors.centerIn: parent
                         spacing: 6
 
-                        MaterialSymbol {
+                        Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "palette"
-                            iconSize: 15
+                            font.family: Theme.fontFamilyIcon
+                            font.pixelSize: 15
+                            font.variableAxes: ({ "FILL": 1, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                            renderType: Text.CurveRendering
+                            font.hintingPreference: Font.PreferNoHinting
                             color: Theme.accent
                         }
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Themes"
-                            font.family: Theme.fontFamilyBody
+                            font.family: "Google Sans Flex"
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
+                            renderType: Text.QtRendering
+                            font.hintingPreference: Font.PreferNoHinting
                             color: Theme.text
                         }
                     }
@@ -530,77 +597,124 @@ for f, mtime in files_with_mtime:
                 }
             }
 
-            // Right Stack: Start Arrow, Random/Shuffle, Last Arrow, Sort Dropdown Button
+            // Right Stack: First, Shuffle, Last, Sort Pill
             RowLayout {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
 
-                // Jump to Start
-                IrisIconButton {
-                    buttonSize: 32
-                    buttonRadius: 16
-                    flat: true
-                    icon: "first_page"
-                    iconSize: 18
-                    iconColor: Theme.alpha(Theme.text, 0.72)
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "First Wallpaper"
-                    onClicked: {
-                        if (displayModel.count > 0 && wallStrip) {
-                            wallModule.userInteracted = true;
-                            wallStrip.setIndexImmediate(0);
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    radius: 16
+                    color: firstMouse.pressed
+                        ? Qt.alpha(Theme.text, 0.14)
+                        : (firstMouse.containsMouse ? Qt.alpha(Theme.text, 0.08) : "transparent")
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "first_page"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 18
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: firstMouse.containsMouse ? Theme.text : Qt.alpha(Theme.text, 0.72)
+                    }
+
+                    MouseArea {
+                        id: firstMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (displayModel.count > 0 && wallStrip) {
+                                wallModule.userInteracted = true;
+                                wallStrip.setIndexImmediate(0);
+                            }
                         }
                     }
                 }
 
-                // Random / Shuffle Wallpaper
-                IrisIconButton {
-                    buttonSize: 32
-                    buttonRadius: 16
-                    flat: true
-                    icon: "casino"
-                    iconSize: 18
-                    iconColor: Theme.accent
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Random Wallpaper"
-                    onClicked: {
-                        if (displayModel.count > 0 && wallStrip) {
-                            wallModule.userInteracted = true;
-                            var randIdx = Math.floor(Math.random() * displayModel.count);
-                            wallStrip.setIndexImmediate(randIdx);
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    radius: 16
+                    color: randMouse.pressed
+                        ? Qt.alpha(Theme.accent, 0.22)
+                        : (randMouse.containsMouse ? Qt.alpha(Theme.accent, 0.14) : "transparent")
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "shuffle"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 17
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: Theme.accent
+                    }
+
+                    MouseArea {
+                        id: randMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (displayModel.count > 0 && wallStrip) {
+                                wallModule.userInteracted = true;
+                                var randIdx = Math.floor(Math.random() * displayModel.count);
+                                wallStrip.setIndexImmediate(randIdx);
+                            }
                         }
                     }
                 }
 
-                // Jump to Last
-                IrisIconButton {
-                    buttonSize: 32
-                    buttonRadius: 16
-                    flat: true
-                    icon: "last_page"
-                    iconSize: 18
-                    iconColor: Theme.alpha(Theme.text, 0.72)
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Last Wallpaper"
-                    onClicked: {
-                        if (displayModel.count > 0 && wallStrip) {
-                            wallModule.userInteracted = true;
-                            wallStrip.setIndexImmediate(displayModel.count - 1);
+                Rectangle {
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    radius: 16
+                    color: lastMouse.pressed
+                        ? Qt.alpha(Theme.text, 0.14)
+                        : (lastMouse.containsMouse ? Qt.alpha(Theme.text, 0.08) : "transparent")
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "last_page"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 18
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: lastMouse.containsMouse ? Theme.text : Qt.alpha(Theme.text, 0.72)
+                    }
+
+                    MouseArea {
+                        id: lastMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (displayModel.count > 0 && wallStrip) {
+                                wallModule.userInteracted = true;
+                                wallStrip.setIndexImmediate(displayModel.count - 1);
+                            }
                         }
                     }
                 }
 
-                // Sort Dropdown Button (M3 Tonal Pill)
+                // Sort Dropdown Pill
                 Rectangle {
                     id: sortButton
                     Layout.preferredHeight: 32
                     Layout.preferredWidth: sortRow.implicitWidth + 24
-                    radius: 10
+                    radius: 16
                     color: wallModule.sortDropdownOpen
                         ? Theme.accent
-                        : (sortMouse.containsMouse ? Theme.alpha(Theme.text, 0.12) : Theme.alpha(Theme.text, 0.07))
-                    border.width: 0
+                        : (sortMouse.containsMouse ? Qt.alpha(Theme.text, 0.12) : Qt.alpha(Theme.text, 0.07))
 
                     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -609,10 +723,14 @@ for f, mtime in files_with_mtime:
                         anchors.centerIn: parent
                         spacing: 6
 
-                        MaterialSymbol {
+                        Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "sort"
-                            iconSize: 15
+                            font.family: Theme.fontFamilyIcon
+                            font.pixelSize: 15
+                            font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                            renderType: Text.CurveRendering
+                            font.hintingPreference: Font.PreferNoHinting
                             color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.accent
                         }
 
@@ -625,16 +743,22 @@ for f, mtime in files_with_mtime:
                                 if (wallModule.sortMode === "shuffle") return "Shuffle";
                                 return "Recent";
                             }
-                            font.family: Theme.fontFamilyBody
+                            font.family: "Google Sans Flex"
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
+                            renderType: Text.QtRendering
+                            font.hintingPreference: Font.PreferNoHinting
                             color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.text
                         }
 
-                        MaterialSymbol {
+                        Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: wallModule.sortDropdownOpen ? "expand_less" : "expand_more"
-                            iconSize: 16
+                            font.family: Theme.fontFamilyIcon
+                            font.pixelSize: 16
+                            font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                            renderType: Text.CurveRendering
+                            font.hintingPreference: Font.PreferNoHinting
                             color: wallModule.sortDropdownOpen ? (Theme.fgPrimary || "#101014") : Theme.subtext
                         }
                     }
@@ -661,19 +785,20 @@ for f, mtime in files_with_mtime:
         }
 
         // ------------------------------------------
-        // Real Sort Dropdown Card
+        // Sort Dropdown Card
         // ------------------------------------------
         Rectangle {
             id: sortDropdownCard
             z: 100
             anchors.top: topHeaderBar.bottom
-            anchors.topMargin: 6
+            anchors.topMargin: 8
             anchors.right: topHeaderBar.right
-            width: 190
+            width: 196
             height: sortCol.implicitHeight + 12
-            radius: 14
+            radius: 16
             color: Theme.colors.card_bg || "#181a20"
-            border.width: 0
+            border.width: 1
+            border.color: Qt.alpha(Theme.text, 0.10)
             visible: wallModule.sortDropdownOpen
 
             Column {
@@ -700,11 +825,10 @@ for f, mtime in files_with_mtime:
 
                         width: sortCol.width
                         height: 34
-                        radius: 8
+                        radius: 10
                         color: sortItemRect.active
-                            ? Theme.alpha(Theme.accent, 0.16)
-                            : (itemMouse.containsMouse ? Theme.alpha(Theme.text, 0.08) : "transparent")
-                        border.width: 0
+                            ? Qt.alpha(Theme.accent, 0.16)
+                            : (itemMouse.containsMouse ? Qt.alpha(Theme.text, 0.08) : "transparent")
 
                         Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -714,26 +838,36 @@ for f, mtime in files_with_mtime:
                             anchors.rightMargin: 10
                             spacing: 8
 
-                            MaterialSymbol {
+                            Text {
                                 text: sortItemRect.modelData.icon
-                                iconSize: 16
+                                font.family: Theme.fontFamilyIcon
+                                font.pixelSize: 16
+                                font.variableAxes: ({ "FILL": sortItemRect.active ? 1 : 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                                renderType: Text.CurveRendering
+                                font.hintingPreference: Font.PreferNoHinting
                                 color: sortItemRect.active ? Theme.accent : Theme.subtext
                             }
 
                             Text {
                                 Layout.fillWidth: true
                                 text: sortItemRect.modelData.label
-                                font.family: Theme.fontFamilyBody
+                                font.family: "Google Sans Flex"
                                 font.pixelSize: 12
-                                font.weight: sortItemRect.active ? Font.Bold : Font.Normal
+                                font.weight: sortItemRect.active ? Font.DemiBold : Font.Medium
+                                renderType: Text.QtRendering
+                                font.hintingPreference: Font.PreferNoHinting
                                 color: sortItemRect.active ? Theme.accent : Theme.text
                                 elide: Text.ElideRight
                             }
 
-                            MaterialSymbol {
+                            Text {
                                 visible: sortItemRect.active
                                 text: "check"
-                                iconSize: 16
+                                font.family: Theme.fontFamilyIcon
+                                font.pixelSize: 16
+                                font.variableAxes: ({ "FILL": 1, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 600 })
+                                renderType: Text.CurveRendering
+                                font.hintingPreference: Font.PreferNoHinting
                                 color: Theme.accent
                             }
                         }
@@ -755,16 +889,18 @@ for f, mtime in files_with_mtime:
         }
 
         // ------------------------------------------
-        // Center: Lucid Wallpaper Carousel (WallpaperStrip)
+        // Center: Wallpaper Carousel Strip
         // ------------------------------------------
         Item {
             id: stripContainer
             anchors.top: topHeaderBar.bottom
             anchors.topMargin: 8
             anchors.bottom: searchBar.top
-            anchors.bottomMargin: 10
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 880
+            anchors.bottomMargin: 8
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
             clip: true
 
             LucidWallpaperStrip {
@@ -776,11 +912,10 @@ for f, mtime in files_with_mtime:
 
                 onChosen: (path) => wallModule.applyWallpaperPath(path)
             }
-
         }
 
         // ------------------------------------------
-        // Bottom: Material 3 Styled Search Bar
+        // Bottom: Matushell Pill Search Bar
         // ------------------------------------------
         Rectangle {
             id: searchBar
@@ -788,15 +923,16 @@ for f, mtime in files_with_mtime:
             anchors.bottomMargin: 14
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            height: 44
-            radius: 14
-            color: searchInput.activeFocus ? Theme.alpha(Theme.text, 0.10) : Theme.alpha(Theme.text, 0.06)
-            border.width: 0
-            border.color: "transparent"
+            anchors.leftMargin: 22
+            anchors.rightMargin: 22
+            height: 40
+            radius: 20
+            color: searchInput.activeFocus ? Qt.alpha(Theme.text, 0.10) : Qt.alpha(Theme.text, 0.06)
+            border.width: 1
+            border.color: searchInput.activeFocus ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.text, 0.06)
 
             Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on border.color { ColorAnimation { duration: 140 } }
 
             MouseArea {
                 anchors.fill: parent
@@ -810,13 +946,17 @@ for f, mtime in files_with_mtime:
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 16
-                anchors.rightMargin: 14
+                anchors.rightMargin: 12
                 spacing: 10
 
-                MaterialSymbol {
+                Text {
                     text: "search"
-                    iconSize: 18
-                    color: searchInput.activeFocus ? Theme.accent : Theme.alpha(Theme.text, 0.45)
+                    font.family: Theme.fontFamilyIcon
+                    font.pixelSize: 18
+                    font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                    renderType: Text.CurveRendering
+                    font.hintingPreference: Font.PreferNoHinting
+                    color: searchInput.activeFocus ? Theme.accent : Qt.alpha(Theme.text, 0.48)
                 }
 
                 // Input + Ghost Placeholder Container
@@ -829,17 +969,23 @@ for f, mtime in files_with_mtime:
                         anchors.left: parent.left
                         visible: searchInput.text === ""
                         text: "Search wallpapers…"
-                        font.family: Theme.fontFamilyBody
-                        font.pixelSize: 14
-                        color: Theme.alpha(Theme.text, 0.40)
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        renderType: Text.QtRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: Qt.alpha(Theme.text, 0.42)
                     }
 
                     TextInput {
                         id: searchInput
                         anchors.fill: parent
                         verticalAlignment: TextInput.AlignVCenter
-                        font.family: Theme.fontFamilyBody
-                        font.pixelSize: 14
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        renderType: Text.QtRendering
+                        font.hintingPreference: Font.PreferNoHinting
                         color: Theme.text
                         selectionColor: Theme.accent
                         selectedTextColor: Theme.fgAccent
@@ -900,51 +1046,34 @@ for f, mtime in files_with_mtime:
                     }
                 }
 
-                // Hint Chip when empty
-                Rectangle {
-                    visible: searchInput.text === ""
-                    Layout.preferredHeight: 22
-                    Layout.preferredWidth: tabHintRow.implicitWidth + 12
-                    radius: 7
-                    color: Theme.alpha(Theme.text, 0.08)
-
-                    Row {
-                        id: tabHintRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        MaterialSymbol {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "keyboard_tab"
-                            iconSize: 12
-                            color: Theme.subtext
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "Themes"
-                            font.family: Theme.fontFamilyBody
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                            color: Theme.subtext
-                        }
-                    }
-                }
-
                 // Clear button when text present
-                IrisIconButton {
+                Rectangle {
                     visible: searchInput.text !== ""
-                    buttonSize: 26
-                    buttonRadius: 13
-                    flat: true
-                    icon: "close"
-                    iconSize: 14
-                    iconColor: Theme.subtext
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Clear search"
-                    onClicked: {
-                        searchInput.text = "";
-                        searchInput.forceActiveFocus();
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: 12
+                    color: clearMouse.containsMouse ? Qt.alpha(Theme.text, 0.12) : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "close"
+                        font.family: Theme.fontFamilyIcon
+                        font.pixelSize: 15
+                        font.variableAxes: ({ "FILL": 0, "GRAD": Theme.fontIconGrad, "opsz": 20, "wght": 500 })
+                        renderType: Text.CurveRendering
+                        font.hintingPreference: Font.PreferNoHinting
+                        color: Theme.subtext
+                    }
+
+                    MouseArea {
+                        id: clearMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            searchInput.text = "";
+                            searchInput.forceActiveFocus();
+                        }
                     }
                 }
             }

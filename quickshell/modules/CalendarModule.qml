@@ -1,11 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "../lucidbar"
-import "../lucidui"
-import "../"
 import qs
-import qs.lucidui
-import qs.lucidbar
+import "calendar"
 
 FocusScope {
     id: calRoot
@@ -14,13 +10,12 @@ FocusScope {
     focus: true
 
     readonly property real targetWidth: 720
-    readonly property real targetHeight: 490
+    readonly property real targetHeight: 492
 
     property string tab: "calendar"
     property bool tabSwitching: false
     readonly property bool expanded: visible && (typeof root === "undefined" || root.activeMode === "calendar")
 
-    readonly property int pad: Theme.dp(16)
     readonly property var tabs: [
         { "key": "today", "label": I18n.tr("Today"), "icon": "wb_sunny" },
         { "key": "calendar", "label": I18n.tr("Calendar"), "icon": "calendar_month" },
@@ -31,15 +26,13 @@ FocusScope {
 
     readonly property int tabIndex: {
         for (var i = 0; i < calRoot.tabs.length; i++) {
-            if (calRoot.tabs[i].key === calRoot.tab)
-                return i;
+            if (calRoot.tabs[i].key === calRoot.tab) return i;
         }
         return 1;
     }
 
     function showTab(t) {
-        if (t === calRoot.tab)
-            return;
+        if (t === calRoot.tab) return;
         calRoot.tabSwitching = true;
         tabSwitchTimer.restart();
         calRoot.tab = t;
@@ -51,7 +44,7 @@ FocusScope {
 
     Timer {
         id: tabSwitchTimer
-        interval: Theme.barMs(350)
+        interval: 260
         onTriggered: calRoot.tabSwitching = false
     }
 
@@ -59,31 +52,132 @@ FocusScope {
         if (typeof root !== "undefined") root.collapseToIdle();
     }
 
-    Item {
+    ColumnLayout {
         anchors.fill: parent
+        anchors.margins: 14
+        spacing: 12
 
-        Tabs {
-            id: tabsBar
-            x: calRoot.pad
-            y: calRoot.pad - Theme.dp(6)
-            width: parent.width - calRoot.pad * 2
-            inline: true
-            options: calRoot.tabs
-            current: calRoot.tab
-            onPicked: (k) => {
-                calRoot.showTab(k);
+        // Matushell Header Bar: Back Pill + Segmented Tab Pill Switcher
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 36
+            spacing: 10
+
+            Rectangle {
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                radius: 18
+                color: backM.pressed ? Qt.alpha(Theme.text, 0.16) : (backM.containsMouse ? Qt.alpha(Theme.text, 0.10) : Qt.alpha(Theme.text, 0.06))
+                border.width: 1
+                border.color: Qt.alpha(Theme.text, 0.07)
+
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                CalIcon {
+                    anchors.centerIn: parent
+                    text: "arrow_back"
+                    font.pixelSize: 17
+                    filled: backM.containsMouse
+                    color: backM.containsMouse ? Theme.text : Qt.alpha(Theme.text, 0.78)
+                }
+
+                MouseArea {
+                    id: backM
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (typeof root !== "undefined") root.collapseToIdle();
+                    }
+                }
+            }
+
+            Rectangle {
+                id: tabBarBg
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                radius: 18
+                color: Qt.alpha(Theme.text, 0.06)
+                border.width: 1
+                border.color: Qt.alpha(Theme.text, 0.07)
+
+                readonly property real segW: (width - 6) / Math.max(1, calRoot.tabs.length)
+
+                // Sliding Accent Pill Indicator
+                Rectangle {
+                    x: 3 + calRoot.tabIndex * tabBarBg.segW
+                    y: 3
+                    width: tabBarBg.segW
+                    height: parent.height - 6
+                    radius: 15
+                    color: Theme.accent
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 210
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 3
+
+                    Repeater {
+                        model: calRoot.tabs
+
+                        delegate: Item {
+                            required property var modelData
+                            required property int index
+                            readonly property bool active: calRoot.tab === modelData.key
+
+                            width: tabBarBg.segW
+                            height: tabBarBg.height - 6
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                CalIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.icon
+                                    font.pixelSize: 16
+                                    filled: active
+                                    color: active ? Theme.onAccent : (tabM.containsMouse ? Theme.text : Theme.subtext)
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+
+                                CalText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    font.pixelSize: 12
+                                    weightAxis: active ? 660 : 540
+                                    color: active ? Theme.onAccent : (tabM.containsMouse ? Theme.text : Theme.subtext)
+                                    text: modelData.label
+
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+                                }
+                            }
+
+                            MouseArea {
+                                id: tabM
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: calRoot.showTab(modelData.key)
+                            }
+                        }
+                    }
+                }
             }
         }
 
+        // Slideable Viewport
         Item {
             id: viewport
-            anchors.top: tabsBar.bottom
-            anchors.topMargin: Theme.dp(10)
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: calRoot.pad
-            anchors.rightMargin: calRoot.pad
-            height: Math.max(0, Math.min(Theme.dp(404), parent.height - y))
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             clip: true
 
             Item {
@@ -95,13 +189,12 @@ FocusScope {
                 Behavior on x {
                     enabled: calRoot.tabSwitching
                     NumberAnimation {
-                        duration: Theme.durDefaultSpatial
-                        easing.type: Easing.Bezier
-                        easing.bezierCurve: Theme.curveDefaultSpatial
+                        duration: 240
+                        easing.type: Easing.OutCubic
                     }
                 }
 
-                ClockToday {
+                CalToday {
                     x: 0 * viewport.width
                     width: viewport.width
                     height: viewport.height
@@ -114,7 +207,7 @@ FocusScope {
                     }
                 }
 
-                ClockCalendar {
+                CalCalendar {
                     id: calendarPage
                     x: 1 * viewport.width
                     width: viewport.width
@@ -123,8 +216,7 @@ FocusScope {
                     visible: calRoot.tabIndex === 1 || calRoot.tabSwitching
                 }
 
-                ClockTimers {
-                    id: timersPage
+                CalTimers {
                     x: 2 * viewport.width
                     width: viewport.width
                     height: viewport.height
@@ -132,8 +224,7 @@ FocusScope {
                     visible: calRoot.tabIndex === 2 || calRoot.tabSwitching
                 }
 
-                ClockStopwatch {
-                    id: stopwatchPage
+                CalStopwatch {
                     x: 3 * viewport.width
                     width: viewport.width
                     height: viewport.height
@@ -141,8 +232,7 @@ FocusScope {
                     visible: calRoot.tabIndex === 3 || calRoot.tabSwitching
                 }
 
-                ClockWorld {
-                    id: worldPage
+                CalWorld {
                     x: 4 * viewport.width
                     width: viewport.width
                     height: viewport.height
@@ -154,8 +244,6 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        if (calendarPage) {
-            calendarPage.startVisit();
-        }
+        if (calendarPage) calendarPage.startVisit();
     }
 }
