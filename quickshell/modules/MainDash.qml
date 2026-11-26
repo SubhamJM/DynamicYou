@@ -147,7 +147,7 @@ Item {
     // Cava visualizer for music
     CavaProcess {
         id: cavaViz
-        active: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
+        active: dash.isMediaPlaying && !root.notchHidden && (root.activeMode === "idle" || root.activeMode === "hover")
         bars: 5
     }
 
@@ -898,7 +898,7 @@ Item {
     // Iris Cava Waveform Component
     component IrisWaveform: Item {
         id: wave
-        property bool running: dash.isMediaPlaying && (root.activeMode === "idle" || root.activeMode === "hover")
+        property bool running: dash.isMediaPlaying && !root.notchHidden && (root.activeMode === "idle" || root.activeMode === "hover")
         property int bars: 5
         property real barHeight: 13
         

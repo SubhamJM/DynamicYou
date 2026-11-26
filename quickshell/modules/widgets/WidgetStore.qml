@@ -27,6 +27,7 @@ Singleton {
     }
 
     property bool sidebarOpen: false
+    property bool desktopKeyboardFocus: false
     property bool loaded: false
     property var internalState: State.defaultState()
 
@@ -168,8 +169,8 @@ Singleton {
 
     function openMenu(cardId) {
         const id = String(cardId || "");
-        if (id !== "") root.menuRequested(id);
-        return id !== "" ? "OK" : "ERROR";
+        root.menuRequested(id);
+        return "OK";
     }
 
     function openDesktopMenu(xPos, yPos) {

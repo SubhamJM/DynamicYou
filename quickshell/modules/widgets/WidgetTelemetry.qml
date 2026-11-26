@@ -41,6 +41,11 @@ Singleton {
     property real batteryHealth: -1
     property real batteryRateW: NaN
 
+    // Shared desktop wallpaper & user avatar cache (eliminates per-card sh/awww forks)
+    property string wallpaperPath: ""
+    property string avatarUrl: ""
+    property int _pollTick: 0
+
     // Wi-Fi live status (Quickshell.Networking)
     readonly property var wifiDevice: {
         if (typeof Networking === "undefined" || !Networking.devices) return null;
@@ -96,8 +101,49 @@ Singleton {
     }
 
     function pollAll() {
+        root._pollTick = (root._pollTick + 1) % 2;
         if (!statProc.running) statProc.running = true;
-        if (!gpuProc.running) gpuProc.running = true;
+        if ((root._pollTick === 0 || !root.hasGpu) && !gpuProc.running) gpuProc.running = true;
+    }
+
+    function refreshEnvironment() {
+        if (!envProbe.running) envProbe.running = true;
+    }
+
+    Component.onCompleted: refreshEnvironment()
+
+    Connections {
+        target: typeof Theme !== "undefined" ? Theme : null
+        function onThemeReloaded() { root.refreshEnvironment(); }
+    }
+
+    Process {
+        id: envProbe
+        running: false
+        command: [
+            "sh", "-c",
+            "av=''; for f in \"$HOME/.face\" \"$HOME/.face.icon\" \"/var/lib/AccountsService/icons/$USER\"; do " +
+            "  if [ -f \"$f\" ]; then av=\"file://$f\"; break; fi; " +
+            "done; " +
+            "wp=$(awww query 2>/dev/null | sed -n 's/.*currently displaying: image: //p' | head -n1); " +
+            "if [ -z \"$wp\" ] || [ ! -f \"$wp\" ]; then " +
+            "  cfg=\"${XDG_CONFIG_HOME:-$HOME/.config}/active-theme\"; " +
+            "  for f in \"$cfg/current-wallpaper.txt\" \"$HOME/.cache/current_wallpaper\"; do " +
+            "    if [ -f \"$f\" ]; then c=$(head -n1 \"$f\"); [ -f \"$c\" ] && wp=\"$c\" && break; fi; " +
+            "  done; " +
+            "  if [ -z \"$wp\" ] && [ -e \"$cfg/current-wallpaper\" ]; then wp=$(realpath -e -- \"$cfg/current-wallpaper\" 2>/dev/null || true); fi; " +
+            "fi; " +
+            "printf '%s\\n%s' \"$av\" \"$wp\""
+        ]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = String(this.text || "").split("\n");
+                const av = (lines[0] || "").trim();
+                const wp = (lines[1] || "").trim();
+                if (av.indexOf("file://") === 0) root.avatarUrl = av;
+                if (wp.indexOf("/") === 0) root.wallpaperPath = wp;
+            }
+        }
     }
 
     Timer {
@@ -119,7 +165,7 @@ Singleton {
     }
 
     Timer {
-        interval: 1500
+        interval: 2000
         repeat: true
         running: root.active
         triggeredOnStart: false

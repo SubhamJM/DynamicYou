@@ -17,6 +17,7 @@ Item {
     property var _smoothed: []
     property var _peaks: []
     property real lastAudioTime: 0
+    property bool _zeroSent: false
 
     Process {
         id: cavaProc
@@ -54,8 +55,10 @@ Item {
                     if (isSignaled) {
                         root.lastAudioTime = now;
                         root.audioSignalActive = true;
+                        root._zeroSent = false;
                     } else if (now - root.lastAudioTime > 2000) {
                         root.audioSignalActive = false;
+                        if (rawPeak === 0 && root._zeroSent) return;
                     }
 
                     // Sekai-Pop Asymmetric Attack/Release Filter
@@ -65,6 +68,7 @@ Item {
                     var newPeaks = [];
                     var curSmooth = root._smoothed || [];
                     var curPeaks = root._peaks || [];
+                    var anyNonZero = false;
 
                     for (var b = 0; b < root.bars; b++) {
                         var target = pts[b] || 0;
@@ -76,11 +80,13 @@ Item {
                             s = prev + (target - prev) * 0.14;
                         }
                         if (s < 0.05) s = 0;
+                        else anyNonZero = true;
                         newSmooth.push(s);
 
                         var prevPk = (curPeaks.length > b) ? curPeaks[b] : 0;
                         var pk = Math.max(s, prevPk * 0.94);
                         if (pk < 0.05) pk = 0;
+                        else anyNonZero = true;
                         newPeaks.push(pk);
                     }
 
@@ -88,6 +94,7 @@ Item {
                     root._peaks = newPeaks;
                     root.points = newSmooth;
                     root.peaks = newPeaks;
+                    root._zeroSent = (!anyNonZero && rawPeak === 0);
                     
                     var targetCeil = Math.max(20, rawPeak * 1.15);
                     if (targetCeil >= root.normalizationCeiling) {
@@ -109,6 +116,7 @@ Item {
             peaks = [];
             normalizationCeiling = 100;
             audioSignalActive = false;
+            _zeroSent = false;
         }
     }
 }

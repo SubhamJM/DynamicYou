@@ -27,7 +27,7 @@ Item {
     readonly property bool tilted: opts.tilted !== false
 
     property bool dropHover: false
-    property string wallpaperPath: ""
+    readonly property string wallpaperPath: (typeof WidgetTelemetry !== "undefined") ? WidgetTelemetry.wallpaperPath : ""
 
     readonly property string configuredWallpaper: {
         const bg = (Config.options && Config.options.background && Config.options.background.wallpaperPath)
@@ -55,38 +55,7 @@ Item {
     readonly property color onAccent: Theme.m3.on_primary ?? "#101014"
 
     onConfiguredWallpaperChanged: {
-        if (!readWallpaper.running) readWallpaper.running = true;
-    }
-
-    Process {
-        id: readWallpaper
-        running: true
-        command: [
-            "sh", "-c",
-            "p=$(awww query 2>/dev/null | sed -n 's/.*currently displaying: image: //p' | head -n1); " +
-            "if [ -n \"$p\" ] && [ -f \"$p\" ]; then printf '%s' \"$p\"; exit 0; fi; " +
-            "cfg=\"${XDG_CONFIG_HOME:-$HOME/.config}/active-theme\"; " +
-            "for f in \"$cfg/current-wallpaper.txt\" \"$HOME/.cache/current_wallpaper\"; do " +
-            "  if [ -f \"$f\" ]; then c=$(head -n1 \"$f\"); [ -f \"$c\" ] && printf '%s' \"$c\" && exit 0; fi; " +
-            "done; " +
-            "if [ -e \"$cfg/current-wallpaper\" ]; then realpath -e -- \"$cfg/current-wallpaper\" 2>/dev/null || true; fi"
-        ]
-
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const path = String(this.text || "").trim().split("\n")[0];
-                root.wallpaperPath = path.indexOf("/") === 0 ? path : "";
-            }
-        }
-    }
-
-    Timer {
-        interval: 15000
-        repeat: true
-        running: root.active && root.customPath === ""
-        onTriggered: {
-            if (!readWallpaper.running) readWallpaper.running = true;
-        }
+        if (typeof WidgetTelemetry !== "undefined") WidgetTelemetry.refreshEnvironment();
     }
 
     function acceptDrop(drop) {

@@ -1,10 +1,12 @@
 {
-  "bg": "#14090c",
-  "card_bg": "#1e0f14",
-  "hover_bg": "#2b141d",
-  "border": "#481825",
-  "border_hover": "#ff2a5f",
-  "text_primary": "#fff0f2",
-  "text_secondary": "#fda4af",
-  "accent": "#ff2a5f"
+  "bg": "#0c0d11",
+  "card_bg": "#14161c",
+  "hover_bg": "#1d2028",
+  "border": "#282932",
+  "border_hover": "#fb7185",
+  "text_primary": "#f6f4f5",
+  "text_secondary": "#9aa3b2",
+  "accent": "#fb7185",
+  "secondary_accent": "#fda4af",
+  "tertiary_accent": "#f43f5e"
 }

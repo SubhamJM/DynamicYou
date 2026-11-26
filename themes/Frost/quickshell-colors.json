@@ -1,10 +1,12 @@
 {
-  "bg": "#111215",
-  "card_bg": "#1a1c22",
-  "hover_bg": "#242831",
-  "border": "#3e4452",
-  "border_hover": "#ffffff",
+  "bg": "#0c0d11",
+  "card_bg": "#14161c",
+  "hover_bg": "#1d2028",
+  "border": "#282c36",
+  "border_hover": "#f8fafc",
   "text_primary": "#ffffff",
   "text_secondary": "#94a3b8",
-  "accent": "#ffffff"
+  "accent": "#f8fafc",
+  "secondary_accent": "#cbd5e1",
+  "tertiary_accent": "#94a3b8"
 }

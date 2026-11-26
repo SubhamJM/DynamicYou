@@ -26,16 +26,16 @@ QtObject {
         var activeAcc = theme.accent;
         var raw = theme.rawThemeColors || {};
         theme.colors = {
-            "bg": raw.bg || "#030a16",
-            "card_bg": raw.card_bg || "#1c1b1f",
-            "hover_bg": raw.hover_bg || "#2b2930",
+            "bg": raw.bg || "#0c0d11",
+            "card_bg": raw.card_bg || "#14161c",
+            "hover_bg": raw.hover_bg || "#1d2028",
             "border": "transparent",
             "border_hover": raw.border_hover || activeAcc,
-            "text_primary": raw.text_primary || "#f0dfd7",
-            "text_secondary": raw.text_secondary || "#d7c2b8",
-            "text_muted": raw.text_muted || "#9f8d84",
+            "text_primary": raw.text_primary || "#f4f6fa",
+            "text_secondary": raw.text_secondary || "#9aa3b2",
+            "text_muted": raw.text_muted || "#6e7685",
             "accent": activeAcc,
-            "accent_secondary": raw.border || activeAcc,
+            "accent_secondary": raw.secondary_accent || raw.border || activeAcc,
             "error": raw.error || "#ffb4ab",
             "warning": raw.warning || "#fbbf24"
         };

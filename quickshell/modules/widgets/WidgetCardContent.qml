@@ -154,6 +154,12 @@ Item {
                 case "end4Resources": return end4ResourcesComp;
                 case "end4User": return end4UserComp;
                 case "end4Image": return end4ImageComp;
+                case "github": return githubComp;
+                case "nothingBuds": return nothingBudsComp;
+                case "nothingGreeting": return nothingGreetingComp;
+                case "nothingResources": return nothingResourcesComp;
+                case "nothingPlayer": return nothingPlayerComp;
+                case "bgVisualiser": return bgVisualiserComp;
                 default: return null;
             }
         }
@@ -348,6 +354,9 @@ Item {
         id: weatherComp
         WeatherPillCard {
             active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+            notchRoot: root.notchRoot
         }
     }
 
@@ -372,6 +381,8 @@ Item {
         id: resourcesComp
         ResourcesCard {
             active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
         }
     }
 
@@ -379,6 +390,9 @@ Item {
         id: userComp
         UserCard {
             active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+            notchRoot: root.notchRoot
         }
     }
 
@@ -429,6 +443,60 @@ Item {
     Component {
         id: end4ImageComp
         End4ImageCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: githubComp
+        GithubCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: nothingBudsComp
+        NothingBudsCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: nothingGreetingComp
+        NothingGreetingCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: nothingResourcesComp
+        NothingResourcesCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: nothingPlayerComp
+        NothingPlayerCard {
+            active: root.active
+            interactive: root.interactive
+            onDesktop: root.onDesktop
+        }
+    }
+
+    Component {
+        id: bgVisualiserComp
+        MatusBackgroundVisualiser {
             active: root.active
             interactive: root.interactive
             onDesktop: root.onDesktop

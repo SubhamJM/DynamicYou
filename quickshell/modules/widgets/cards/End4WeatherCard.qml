@@ -91,11 +91,11 @@ Item {
         radius: WidgetStore.s(28)
         color: root.cardBg
 
-        layer.enabled: root.showShadow && root.visible && width > 1 && height > 1
+        layer.enabled: root.onDesktop && root.showShadow && root.visible && width > 1 && height > 1
         layer.smooth: true
         layer.textureSize: Qt.size(
-            Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)),
-            Math.max(1, Math.round(height * 2 * WidgetStore.qtScale))
+            Math.max(1, Math.round(width * WidgetStore.qtScale)),
+            Math.max(1, Math.round(height * WidgetStore.qtScale))
         )
         layer.effect: MultiEffect {
             shadowEnabled: true

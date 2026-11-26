@@ -911,12 +911,21 @@ for f, mtime in files_with_mtime:
         }
     }
 
-    function triggerFullscreenCheck() {
-        if (!checkFullscreenProc.running) {
-            checkFullscreenProc.running = true;
-        } else {
-            root.fullscreenCheckPending = true;
+    Timer {
+        id: fullscreenCheckDebounce
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (!checkFullscreenProc.running) {
+                checkFullscreenProc.running = true;
+            } else {
+                root.fullscreenCheckPending = true;
+            }
         }
+    }
+
+    function triggerFullscreenCheck() {
+        fullscreenCheckDebounce.restart();
     }
 
     Process {

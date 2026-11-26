@@ -3,14 +3,7 @@
 # Supports variable bar counts and dynamic pipewire audio streams
 
 BARS="${1:-12}"
-CONF_FILE="/tmp/cava_${BARS}_$$.conf"
-
-cleanup() {
-    rm -f "$CONF_FILE" 2>/dev/null
-    exit 0
-}
-
-trap cleanup EXIT INT TERM
+CONF_FILE="/tmp/dy_cava_$(id -u)_${BARS}.conf"
 
 cat > "$CONF_FILE" << CAVA_EOF
 [general]
@@ -40,4 +33,4 @@ gravity = 90
 monstercat = 1.2
 CAVA_EOF
 
-exec cava -p "$CONF_FILE" < /dev/null
+exec setpriv --pdeathsig TERM cava -p "$CONF_FILE" < /dev/null

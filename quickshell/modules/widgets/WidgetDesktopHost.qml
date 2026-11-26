@@ -36,6 +36,8 @@ Variants {
             const _cards = WidgetStore.cards;
             return _cards ? WidgetStore.desktopIdsForScreen(win.screenKey, win.screenNames) : [];
         }
+        readonly property bool visualiserPinned: win.desktopIds.indexOf("bgVisualiser") !== -1
+        readonly property var cardDesktopIds: win.desktopIds.filter(id => id !== "bgVisualiser")
 
         readonly property bool ownsExternalGhost: WidgetDragSession.presentationActive
             && WidgetDragSession.screenName === win.screenKey
@@ -58,7 +60,7 @@ Variants {
 
         function currentCardRects() {
             const list = [];
-            win.desktopIds.forEach(id => {
+            win.cardDesktopIds.forEach(id => {
                 const c = WidgetStore.card(id);
                 const sz = WidgetStore.cardSize(id);
                 if (!c) return;
@@ -81,12 +83,13 @@ Variants {
         }
 
         readonly property bool desktopRightClickEnabled: (typeof Prefs === "undefined") || Prefs.desktopMenu !== false
+        readonly property bool hostActive: !(win.notchRoot && win.notchRoot.isWindowFullscreen && !win.notchRoot.fullscreenHoverRevealed && !WidgetStore.sidebarOpen && win.menuTileId === "" && !win.desktopMenuOpen)
         visible: desktopRightClickEnabled || win.desktopIds.length > 0 || win.ownsExternalGhost || win.desktopMenuOpen || win.menuTileId !== ""
         screen: modelData
-        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.layer: (win.menuTileId !== "" || WidgetStore.desktopKeyboardFocus) ? WlrLayer.Top : WlrLayer.Bottom
         WlrLayershell.namespace: "quickshell-desktop-widgets"
         WlrLayershell.exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (win.menuTileId !== "" || WidgetStore.desktopKeyboardFocus) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         color: "transparent"
 
         anchors {
@@ -99,27 +102,32 @@ Variants {
         // Static per-catalog-index mask regions + desktop backdrop + context menu regions
         mask: Region {
             Region { item: win.desktopRightClickEnabled ? desktopBackdrop : null }
-            Region { item: win.desktopIds.length > 0 ? win.slotItemFor(0) : null }
-            Region { item: win.desktopIds.length > 1 ? win.slotItemFor(1) : null }
-            Region { item: win.desktopIds.length > 2 ? win.slotItemFor(2) : null }
-            Region { item: win.desktopIds.length > 3 ? win.slotItemFor(3) : null }
-            Region { item: win.desktopIds.length > 4 ? win.slotItemFor(4) : null }
-            Region { item: win.desktopIds.length > 5 ? win.slotItemFor(5) : null }
-            Region { item: win.desktopIds.length > 6 ? win.slotItemFor(6) : null }
-            Region { item: win.desktopIds.length > 7 ? win.slotItemFor(7) : null }
-            Region { item: win.desktopIds.length > 8 ? win.slotItemFor(8) : null }
-            Region { item: win.desktopIds.length > 9 ? win.slotItemFor(9) : null }
-            Region { item: win.desktopIds.length > 10 ? win.slotItemFor(10) : null }
-            Region { item: win.desktopIds.length > 11 ? win.slotItemFor(11) : null }
-            Region { item: win.desktopIds.length > 12 ? win.slotItemFor(12) : null }
-            Region { item: win.desktopIds.length > 13 ? win.slotItemFor(13) : null }
-            Region { item: win.desktopIds.length > 14 ? win.slotItemFor(14) : null }
-            Region { item: win.desktopIds.length > 15 ? win.slotItemFor(15) : null }
-            Region { item: win.desktopIds.length > 16 ? win.slotItemFor(16) : null }
-            Region { item: win.desktopIds.length > 17 ? win.slotItemFor(17) : null }
-            Region { item: win.desktopIds.length > 18 ? win.slotItemFor(18) : null }
-            Region { item: win.desktopIds.length > 19 ? win.slotItemFor(19) : null }
-            Region { item: win.desktopIds.length > 20 ? win.slotItemFor(20) : null }
+            Region { item: win.cardDesktopIds.length > 0 ? win.slotItemFor(0) : null }
+            Region { item: win.cardDesktopIds.length > 1 ? win.slotItemFor(1) : null }
+            Region { item: win.cardDesktopIds.length > 2 ? win.slotItemFor(2) : null }
+            Region { item: win.cardDesktopIds.length > 3 ? win.slotItemFor(3) : null }
+            Region { item: win.cardDesktopIds.length > 4 ? win.slotItemFor(4) : null }
+            Region { item: win.cardDesktopIds.length > 5 ? win.slotItemFor(5) : null }
+            Region { item: win.cardDesktopIds.length > 6 ? win.slotItemFor(6) : null }
+            Region { item: win.cardDesktopIds.length > 7 ? win.slotItemFor(7) : null }
+            Region { item: win.cardDesktopIds.length > 8 ? win.slotItemFor(8) : null }
+            Region { item: win.cardDesktopIds.length > 9 ? win.slotItemFor(9) : null }
+            Region { item: win.cardDesktopIds.length > 10 ? win.slotItemFor(10) : null }
+            Region { item: win.cardDesktopIds.length > 11 ? win.slotItemFor(11) : null }
+            Region { item: win.cardDesktopIds.length > 12 ? win.slotItemFor(12) : null }
+            Region { item: win.cardDesktopIds.length > 13 ? win.slotItemFor(13) : null }
+            Region { item: win.cardDesktopIds.length > 14 ? win.slotItemFor(14) : null }
+            Region { item: win.cardDesktopIds.length > 15 ? win.slotItemFor(15) : null }
+            Region { item: win.cardDesktopIds.length > 16 ? win.slotItemFor(16) : null }
+            Region { item: win.cardDesktopIds.length > 17 ? win.slotItemFor(17) : null }
+            Region { item: win.cardDesktopIds.length > 18 ? win.slotItemFor(18) : null }
+            Region { item: win.cardDesktopIds.length > 19 ? win.slotItemFor(19) : null }
+            Region { item: win.cardDesktopIds.length > 20 ? win.slotItemFor(20) : null }
+            Region { item: win.cardDesktopIds.length > 21 ? win.slotItemFor(21) : null }
+            Region { item: win.cardDesktopIds.length > 22 ? win.slotItemFor(22) : null }
+            Region { item: win.cardDesktopIds.length > 23 ? win.slotItemFor(23) : null }
+            Region { item: win.cardDesktopIds.length > 24 ? win.slotItemFor(24) : null }
+            Region { item: win.cardDesktopIds.length > 25 ? win.slotItemFor(25) : null }
             Region { item: (win.menuTileId !== "" || win.desktopMenuOpen) ? menuScrim : null }
             Region { item: win.menuTileId !== "" ? contextMenu : null }
             Region { item: win.desktopMenuOpen ? desktopMenu : null }
@@ -152,6 +160,20 @@ Variants {
         Item {
             id: desktopCanvas
             anchors.fill: parent
+
+            // Matushell Background Audio Visualiser pinned to full bottom wallpaper edge
+            Loader {
+                id: bgVisLoader
+                anchors.fill: parent
+                z: 0
+                active: win.visible && win.visualiserPinned
+                sourceComponent: Component {
+                    MatusBackgroundVisualiser {
+                        active: win.visible && win.visualiserPinned && win.hostActive
+                        onDesktop: true
+                    }
+                }
+            }
 
             // Empty-desktop click layer (sits on WlrLayer.Bottom below normal windows & pinned cards)
             MouseArea {
@@ -242,7 +264,7 @@ Variants {
             // Persistent desktop-pinned widget slots
             Repeater {
                 id: slotRepeater
-                model: win.desktopIds
+                model: win.cardDesktopIds
 
                 delegate: Item {
                     id: cardSlot
@@ -317,7 +339,7 @@ Variants {
                         id: cardContent
                         anchors.fill: parent
                         tileId: cardSlot.tileId
-                        active: win.visible && !cardSlot.waitingGhostHandoff
+                        active: win.visible && win.hostActive && !cardSlot.waitingGhostHandoff
                         interactive: !cardSlot.isDragged
                         onDesktop: true
                         notchRoot: win.notchRoot
@@ -454,8 +476,8 @@ Variants {
                     layer.enabled: desktopMenu.visible && width > 1 && height > 1
                     layer.smooth: true
                     layer.textureSize: Qt.size(
-                        Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)),
-                        Math.max(1, Math.round(height * 2 * WidgetStore.qtScale))
+                        Math.max(1, Math.round(width * WidgetStore.qtScale)),
+                        Math.max(1, Math.round(height * WidgetStore.qtScale))
                     )
                     layer.effect: MultiEffect {
                         shadowEnabled: true

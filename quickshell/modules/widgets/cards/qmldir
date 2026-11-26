@@ -25,3 +25,14 @@ End4ResourcesCard 1.0 End4ResourcesCard.qml
 End4UserCard 1.0 End4UserCard.qml
 End4ImageCard 1.0 End4ImageCard.qml
 End4ResizeHandle 1.0 End4ResizeHandle.qml
+GithubCard 1.0 GithubCard.qml
+NothingGlyphTokens 1.0 NothingGlyphTokens.qml
+NothingDotRing 1.0 NothingDotRing.qml
+NothingDotMask 1.0 NothingDotMask.qml
+NothingSegBar 1.0 NothingSegBar.qml
+NothingBudsCard 1.0 NothingBudsCard.qml
+NothingGreetingCard 1.0 NothingGreetingCard.qml
+NothingResourcesCard 1.0 NothingResourcesCard.qml
+NothingPlayerCard 1.0 NothingPlayerCard.qml
+MatusBackdrop 1.0 MatusBackdrop.qml
+MatusBackgroundVisualiser 1.0 MatusBackgroundVisualiser.qml

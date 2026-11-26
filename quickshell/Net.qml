@@ -363,7 +363,7 @@ Singleton {
         id: monitor
 
         running: true
-        command: ["nmcli", "monitor"]
+        command: ["setpriv", "--pdeathsig", "TERM", "nmcli", "monitor"]
 
         stdout: SplitParser {
             onRead: settle.restart()

@@ -27,7 +27,7 @@ Item {
     readonly property bool resizing: resizeHandle.resizing
 
     property bool dropHover: false
-    property string wallpaperPath: ""
+    readonly property string wallpaperPath: (typeof WidgetTelemetry !== "undefined") ? WidgetTelemetry.wallpaperPath : ""
 
     readonly property string configuredWallpaper: {
         const bg = (Config.options && Config.options.background && Config.options.background.wallpaperPath)
@@ -44,27 +44,8 @@ Item {
     readonly property string sourceUri: effectivePath !== "" ? ("file://" + encodeURI(effectivePath)) : ""
 
     onActiveChanged: {
-        if (active && !readWallpaper.running) readWallpaper.running = true;
-    }
-
-    Process {
-        id: readWallpaper
-        running: true
-        command: [
-            "sh", "-c",
-            "p=$(awww query 2>/dev/null | sed -n 's/.*currently displaying: image: //p' | head -n1); " +
-            "if [ -n \"$p\" ] && [ -f \"$p\" ]; then printf '%s' \"$p\"; exit 0; fi; " +
-            "cfg=\"${XDG_CONFIG_HOME:-$HOME/.config}/active-theme\"; " +
-            "for f in \"$cfg/current-wallpaper.txt\" \"$HOME/.cache/current_wallpaper\"; do " +
-            "  if [ -f \"$f\" ]; then c=$(head -n1 \"$f\"); [ -f \"$c\" ] && printf '%s' \"$c\" && exit 0; fi; " +
-            "done; " +
-            "if [ -e \"$cfg/current-wallpaper\" ]; then realpath -e -- \"$cfg/current-wallpaper\" 2>/dev/null || true; fi"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const path = String(this.text || "").trim().split("\n")[0];
-                root.wallpaperPath = path.indexOf("/") === 0 ? path : "";
-            }
+        if (active && typeof WidgetTelemetry !== "undefined" && WidgetTelemetry.wallpaperPath === "") {
+            WidgetTelemetry.refreshEnvironment();
         }
     }
 
@@ -108,7 +89,7 @@ Item {
     MultiEffect {
         anchors.fill: shadowSource
         source: shadowSource
-        visible: root.showShadow && root.visible && width > 1 && height > 1
+        visible: root.onDesktop && root.showShadow && root.visible && width > 1 && height > 1
         shadowEnabled: true
         shadowColor: Qt.rgba(0, 0, 0, 0.45)
         shadowBlur: 0.72
@@ -125,8 +106,8 @@ Item {
         layer.enabled: width > 1 && height > 1
         layer.smooth: true
         layer.textureSize: Qt.size(
-            Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)),
-            Math.max(1, Math.round(height * 2 * WidgetStore.qtScale))
+            Math.max(1, Math.round(width * WidgetStore.qtScale)),
+            Math.max(1, Math.round(height * WidgetStore.qtScale))
         )
         layer.effect: OpacityMask {
             maskSource: Item {

@@ -286,8 +286,8 @@ Singleton {
 
     // Reflects Config.options.policies.phone and Config.options.phone.kdeconnectEnabled.
     // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
-    readonly property bool _enabled: Config.options.policies.phone !== 0
-        && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
+    readonly property bool _enabled: Config.options?.policies?.phone !== 0
+        && Config.options?.phone?.kdeconnectEnabled === true
 
     // Public read-only view for toggle models and dialogs that mirror the service state.
     readonly property bool serviceEnabled: root._enabled
@@ -325,16 +325,11 @@ Singleton {
     Process {
         id: checkAvailabilityProc
         running: false
-        command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null"]
+        command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null && [ -f \"$1\" ]", "bash", root._scriptPath]
         onExited: (code, status) => {
             root.available = (code === 0)
             if (root.available) {
                 root.startMonitor()
-            } else {
-                // KDE Connect is the backbone of the entire Phone tab.
-                // If it's missing, warn the user immediately.
-                root.criticalDepMissing("kdeconnect-cli",
-                    Translation.tr("KDE Connect is not installed — phone integration requires it"))
             }
         }
     }

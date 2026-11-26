@@ -16,8 +16,14 @@ Item {
     property bool active: true
     property bool onDesktop: false
     property var notchRoot: null
+    property string tileId: "music"
 
+    readonly property var opts: WidgetStore.cardOptions(root.tileId)
     readonly property bool isStickerMode: root.onDesktop && WidgetStore.musicStyle === "sticker"
+    readonly property bool wordByWord: opts.wordByWord !== false
+    readonly property bool dimPaused: opts.dimPaused !== false
+    readonly property string textScale: String(opts.textScale || "md") // "sm" | "md" | "lg"
+    readonly property string tagMode: String(opts.tagMode || "always")   // "always" | "hover" | "off"
     readonly property var player: MprisController.activePlayer
     readonly property bool hasPlayer: player !== null && player !== undefined
     readonly property bool playing: hasPlayer && player.playbackState === MprisPlaybackState.Playing
@@ -44,6 +50,8 @@ Item {
     onActiveChanged: ensureLyricsActive()
     onTrackTitleChanged: ensureLyricsActive()
 
+    readonly property bool pausedDim: !root.playing && root.dimPaused
+
     // Smooth drift-free Sekai Pop playback clock between 250ms MPRIS polls
     property var clk: LM.clockReset(0, 0)
     property real nowMs: Date.now()
@@ -54,22 +62,22 @@ Item {
         ? Number(Config.options.background.mediaMode.lyricsOffsetMs || 0) : 0
     readonly property string identSig: [trackTitle, trackArtist, trackAlbum].join("\u241f")
 
-    onIdentSigChanged: {
+    onIdentSigChanged: Qt.callLater(() => {
         root.nudgeMs = 0;
         root.clk = LM.clockReset(0, Date.now());
         root.lastPolled = -1;
         root.stalePolls = 0;
         root.poll();
-    }
+    })
 
-    onPlayingChanged: {
+    onPlayingChanged: Qt.callLater(() => {
         const now = Date.now();
         root.clk = LM.clockReset(LM.estimate(root.clk, now, !root.playing), now);
         root.lastPolled = -1;
         root.stalePolls = 0;
         root.nowMs = now;
         root.poll();
-    }
+    })
 
     function poll() {
         const p = root.player;
@@ -117,6 +125,10 @@ Item {
 
     readonly property real clockT: Math.max(0,
         LM.estimate(root.clk, root.nowMs, root.playing) + 0.18 + (root.globalOffsetMs + root.nudgeMs) / 1000)
+    readonly property real playPositionSec: Math.max(0, root.clockT - 0.18 - (root.globalOffsetMs + root.nudgeMs) / 1000)
+    readonly property real trackProgressFrac: root.trackLength > 0
+        ? Math.max(0, Math.min(1, playPositionSec / root.trackLength))
+        : 0
 
     readonly property real rate: LM.songRate(adaptedLines)
     readonly property real lead: 0.45
@@ -228,6 +240,7 @@ Item {
         Image {
             anchors.fill: parent
             source: root.artUrl
+            sourceSize: Qt.size(256, 256)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             opacity: status === Image.Ready ? 0.16 : 0
@@ -245,7 +258,7 @@ Item {
     }
 
     // ---------------------------------------------------------
-    // 2. HEADER ROW (Compact Player Info + Transport Controls)
+    // 2. HEADER ROW (Card Mode only — hidden in OG Sticker mode!)
     // ---------------------------------------------------------
     Item {
         id: headerRow
@@ -259,21 +272,7 @@ Item {
         }
         height: WidgetStore.s(48)
         z: 5
-        opacity: root.isStickerMode ? (cardHover.hovered ? 1.0 : 0.0) : 1.0
-        visible: opacity > 0.01
-
-        Behavior on opacity { NumberAnimation { duration: 160 } }
-
-        // Frosted pill backing only when hovering in desktop Sticker mode
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: -WidgetStore.s(4)
-            visible: root.isStickerMode
-            radius: WidgetStore.s(16)
-            color: Qt.alpha(Theme.m3.surface_container_high ?? "#0e2246", 0.88)
-            border.width: Math.max(1, WidgetStore.s(1))
-            border.color: root.colBorder
-        }
+        visible: !root.isStickerMode
 
         // Album Cover Art
         Rectangle {
@@ -288,6 +287,7 @@ Item {
             Image {
                 anchors.fill: parent
                 source: root.artUrl
+                sourceSize: Qt.size(128, 128)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 visible: source !== "" && status === Image.Ready
@@ -406,7 +406,9 @@ Item {
         clip: !root.isStickerMode
 
         readonly property real midY: height / 2
-        readonly property int wordPx: WidgetStore.si(root.isStickerMode ? 38 : 30)
+        readonly property int scaleBaseSticker: root.textScale === "sm" ? 30 : (root.textScale === "lg" ? 44 : 38)
+        readonly property int scaleBaseCard: root.textScale === "sm" ? 24 : (root.textScale === "lg" ? 34 : 30)
+        readonly property int wordPx: WidgetStore.si(root.isStickerMode ? scaleBaseSticker : scaleBaseCard)
         readonly property real poseScale: root.isStickerMode ? 0.94 : 0.78
         readonly property real maxLineW: root.isStickerMode ? WidgetStore.s(680) : (lyricsStage.width - WidgetStore.s(20))
 
@@ -437,7 +439,8 @@ Item {
                     bgEnd: root.bgEndOf(lineLoader.index)
                     t: root.clockT
                     d: lineLoader.index - root.cursorV
-                    playing: root.playing
+                    playing: !root.pausedDim
+                    lineOnly: !root.wordByWord
                     maxW: lyricsStage.maxLineW
                     px: lyricsStage.wordPx
                     poseScaleY: lyricsStage.poseScale
@@ -476,7 +479,7 @@ Item {
     }
 
     // ---------------------------------------------------------
-    // 4. FOOTER ROW (Seek Progress + Sync Nudge + Tag / Provider)
+    // 4. OG SEKAI POP STICKER HOVER KEYS + TAG & CARD FOOTER
     // ---------------------------------------------------------
     Item {
         id: footerRow
@@ -484,28 +487,91 @@ Item {
             bottom: parent.bottom
             left: parent.left
             right: parent.right
-            bottomMargin: WidgetStore.s(10)
+            bottomMargin: root.isStickerMode ? WidgetStore.s(2) : WidgetStore.s(10)
             leftMargin: WidgetStore.s(16)
             rightMargin: WidgetStore.s(16)
         }
-        height: WidgetStore.s(40)
+        height: root.isStickerMode ? WidgetStore.s(54) : WidgetStore.s(40)
         z: 5
 
-        // Track tag sticker shown at rest in Desktop Sticker mode
+        // OG Sekai Pop hover sticker keys row (no card chrome behind it)
+        Row {
+            id: stickerKeysRow
+            visible: root.isStickerMode && opacity > 0.01
+            opacity: (root.isStickerMode && cardHover.hovered) ? 1.0 : 0.0
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: stickerTagHolder.top
+                bottomMargin: WidgetStore.s(5)
+            }
+            spacing: WidgetStore.s(14)
+
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+            SekaiLyricsKey {
+                visible: root.adaptedLines.length > 0
+                label: "<< earlier"
+                onClicked: root.nudge(100)
+            }
+
+            SekaiLyricsKey {
+                visible: root.adaptedLines.length > 0
+                readonly property real totalS: (root.globalOffsetMs + root.nudgeMs) / 1000
+                label: (totalS >= 0 ? "+" : "") + totalS.toFixed(1) + " s"
+                onClicked: root.nudgeMs = 0
+            }
+
+            SekaiLyricsKey {
+                visible: root.adaptedLines.length > 0
+                label: "later >>"
+                onClicked: root.nudge(-100)
+            }
+
+            SekaiLyricsKey {
+                visible: root.hasPlayer
+                label: root.playing ? "pause" : "play"
+                onClicked: if (root.player) root.player.togglePlaying()
+            }
+
+            SekaiLyricsKey {
+                visible: root.hasPlayer && root.player.canGoNext
+                label: "next"
+                onClicked: if (root.player) root.player.next()
+            }
+
+            SekaiLyricsKey {
+                label: "music"
+                onClicked: root.openFullMusic()
+            }
+        }
+
+        // OG Sekai Pop small track title - artist sticker tag at bottom
         Item {
-            anchors.centerIn: parent
-            width: Math.min(lyricsStage.maxLineW, stickerTagWord.implicitWidth + WidgetStore.s(36))
-            height: WidgetStore.s(28)
-            visible: root.isStickerMode && !cardHover.hovered && root.trackTitle !== ""
+            id: stickerTagHolder
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: parent.bottom
+                bottomMargin: WidgetStore.s(2)
+            }
+            width: Math.min(lyricsStage.maxLineW, stickerTagWord.implicitWidth + WidgetStore.s(30))
+            height: WidgetStore.s(24)
+            visible: root.isStickerMode && root.tagMode !== "off" && opacity > 0.01
+            opacity: {
+                if (!root.isStickerMode || root.tagMode === "off") return 0.0;
+                if (root.tagMode === "hover") return cardHover.hovered ? 0.96 : 0.0;
+                return cardHover.hovered ? 1.0 : 0.78;
+            }
+
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
             Row {
                 anchors.centerIn: parent
-                spacing: WidgetStore.s(7)
+                spacing: WidgetStore.s(6)
 
                 Rectangle {
-                    width: WidgetStore.s(20)
-                    height: WidgetStore.s(20)
-                    radius: WidgetStore.s(6)
+                    width: WidgetStore.s(18)
+                    height: WidgetStore.s(18)
+                    radius: WidgetStore.s(5)
                     anchors.verticalCenter: parent.verticalCenter
                     visible: root.artUrl !== ""
                     clip: true
@@ -513,6 +579,8 @@ Item {
                     Image {
                         anchors.fill: parent
                         source: root.artUrl
+                        sourceSize: Qt.size(64, 64)
+                        asynchronous: true
                         fillMode: Image.PreserveAspectCrop
                     }
                 }
@@ -520,33 +588,32 @@ Item {
                 SekaiLyricsWord {
                     id: stickerTagWord
                     anchors.verticalCenter: parent.verticalCenter
-                    pixelSize: WidgetStore.si(16)
-                    fillColor: "#FFFFFF"
+                    pixelSize: WidgetStore.si(14)
+                    fillColor: cardHover.hovered ? (Theme.m3.primary ?? "#95f0d2") : "#FFFFFF"
                     text: {
-                        const raw = root.trackArtist ? (root.trackTitle + " · " + root.trackArtist) : root.trackTitle;
-                        return raw.length > 44 ? raw.slice(0, 42) + "…" : raw;
+                        if (root.trackTitle === "") return "play music for live lyrics";
+                        const raw = root.trackArtist ? (root.trackTitle + " - " + root.trackArtist) : root.trackTitle;
+                        return raw.length > 52 ? raw.slice(0, 50) + "..." : raw;
                     }
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.isStickerMode
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (MprisController.players && MprisController.players.length > 1) root.cyclePlayer();
+                    else root.openFullMusic();
                 }
             }
         }
 
-        // Full progress + sync nudge bar (always visible in Card mode; shown on hover in Sticker mode)
+        // Full progress + sync nudge bar (Card mode only)
         Item {
             anchors.fill: parent
-            opacity: (!root.isStickerMode || cardHover.hovered) ? 1.0 : 0.0
-            visible: opacity > 0.01
-
-            Behavior on opacity { NumberAnimation { duration: 150 } }
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -WidgetStore.s(6)
-                visible: root.isStickerMode
-                radius: WidgetStore.s(14)
-                color: Qt.alpha(Theme.m3.surface_container_high ?? "#0e2246", 0.88)
-                border.width: Math.max(1, WidgetStore.s(1))
-                border.color: root.colBorder
-            }
+            visible: !root.isStickerMode
+            opacity: !root.isStickerMode ? 1.0 : 0.0
 
             ColumnLayout {
                 anchors.fill: parent
@@ -560,7 +627,7 @@ Item {
                 visible: root.trackLength > 0
 
                 Text {
-                    text: root.fmtTime(LM.estimate(root.clk, root.nowMs, root.playing))
+                    text: root.fmtTime(root.playPositionSec)
                     color: root.colMuted
                     font.family: "JetBrainsMono Nerd Font"
                     font.pixelSize: WidgetStore.si(10)
@@ -579,10 +646,7 @@ Item {
                         color: Qt.alpha(root.colOnSurface, 0.14)
 
                         Rectangle {
-                            readonly property real frac: root.trackLength > 0
-                                ? Math.max(0, Math.min(1, LM.estimate(root.clk, root.nowMs, root.playing) / root.trackLength))
-                                : 0
-                            width: parent.width * frac
+                            width: parent.width * root.trackProgressFrac
                             height: parent.height
                             radius: WidgetStore.s(2)
                             color: root.colPrimary
@@ -687,6 +751,40 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             enabled: parent.enabled
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.clicked()
+        }
+    }
+
+    component SekaiLyricsKey: Item {
+        property string label: ""
+        signal clicked()
+
+        implicitWidth: keyWord.implicitWidth
+        implicitHeight: keyWord.implicitHeight
+        width: implicitWidth
+        height: implicitHeight
+        anchors.verticalCenter: parent.verticalCenter
+
+        scale: skMouse.pressed ? 0.94 : (skMouse.containsMouse ? 1.12 : 1.0)
+        transformOrigin: Item.Center
+
+        Behavior on scale {
+            NumberAnimation { duration: 120; easing.type: Easing.OutBack; easing.overshoot: 2 }
+        }
+
+        SekaiLyricsWord {
+            id: keyWord
+            text: parent.label
+            pixelSize: WidgetStore.si(14)
+            fillColor: skMouse.containsMouse ? (Theme.m3.primary ?? "#95f0d2") : "#FFFFFF"
+        }
+
+        MouseArea {
+            id: skMouse
+            anchors.fill: parent
+            anchors.margins: -WidgetStore.s(5)
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.clicked()
         }

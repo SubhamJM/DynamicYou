@@ -66,8 +66,8 @@ Item {
     }
     readonly property string todayString: "Today • " + Qt.formatDate(new Date(), "ddd d MMM")
 
-    property string avatarSource: ""
-    property string wallpaperPath: ""
+    readonly property string avatarSource: (typeof WidgetTelemetry !== "undefined") ? WidgetTelemetry.avatarUrl : ""
+    readonly property string wallpaperPath: (typeof WidgetTelemetry !== "undefined") ? WidgetTelemetry.wallpaperPath : ""
 
     readonly property string configuredWallpaper: {
         const bg = (Config.options && Config.options.background && Config.options.background.wallpaperPath)
@@ -82,34 +82,6 @@ Item {
     readonly property string effectiveAvatar: customAvatar !== ""
         ? ("file://" + encodeURI(customAvatar))
         : avatarSource
-
-    Process {
-        id: probeUserAssets
-        running: true
-        command: [
-            "sh", "-c",
-            "av=''; for f in \"$HOME/.face\" \"$HOME/.face.icon\" \"/var/lib/AccountsService/icons/$USER\"; do " +
-            "  if [ -f \"$f\" ]; then av=\"file://$f\"; break; fi; " +
-            "done; " +
-            "wp=$(awww query 2>/dev/null | sed -n 's/.*currently displaying: image: //p' | head -n1); " +
-            "if [ -z \"$wp\" ] || [ ! -f \"$wp\" ]; then " +
-            "  cfg=\"${XDG_CONFIG_HOME:-$HOME/.config}/active-theme\"; " +
-            "  for f in \"$cfg/current-wallpaper.txt\" \"$HOME/.cache/current_wallpaper\"; do " +
-            "    if [ -f \"$f\" ]; then c=$(head -n1 \"$f\"); [ -f \"$c\" ] && wp=\"$c\" && break; fi; " +
-            "  done; " +
-            "fi; " +
-            "printf '%s\\n%s' \"$av\" \"$wp\""
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const lines = String(this.text || "").split("\n");
-                const av = (lines[0] || "").trim();
-                const wp = (lines[1] || "").trim();
-                if (av.indexOf("file://") === 0) root.avatarSource = av;
-                if (wp.indexOf("/") === 0) root.wallpaperPath = wp;
-            }
-        }
-    }
 
     function uptimeText() {
         if (typeof Sys === "undefined" || !(Sys.uptime > 0)) return "—";
@@ -151,11 +123,11 @@ Item {
         radius: WidgetStore.s(28)
         color: root.sizeMode === "1x1" ? root.containerBg : root.layer1Bg
 
-        layer.enabled: root.showShadow && root.visible && width > 1 && height > 1
+        layer.enabled: root.onDesktop && root.showShadow && root.visible && width > 1 && height > 1
         layer.smooth: true
         layer.textureSize: Qt.size(
-            Math.max(1, Math.round(width * 2 * WidgetStore.qtScale)),
-            Math.max(1, Math.round(height * 2 * WidgetStore.qtScale))
+            Math.max(1, Math.round(width * WidgetStore.qtScale)),
+            Math.max(1, Math.round(height * WidgetStore.qtScale))
         )
         layer.effect: MultiEffect {
             shadowEnabled: true

@@ -7,10 +7,20 @@ var canvasWidth = 472; // 3 * 152 + 2 * 8
 var cardGridStep = 8;
 var cardGridGuideStep = 24;
 
+var sourceMeta = [
+    { id: "all",       label: "All",            icon: "apps" },
+    { id: "resources", label: "Resources",      icon: "monitoring" },
+    { id: "time",      label: "Time & Weather", icon: "schedule" },
+    { id: "media",     label: "Media",          icon: "music_note" },
+    { id: "system",    label: "System",         icon: "sensors" },
+    { id: "personal",  label: "Personal",       icon: "person" }
+];
+
 var cardDefinitions = [
     {
         id: "time",
         name: "Clock",
+        source: "time",
         icon: "schedule",
         columnSpan: 2,
         rowSpan: 2,
@@ -20,6 +30,7 @@ var cardDefinitions = [
     {
         id: "battery",
         name: "Battery",
+        source: "system",
         icon: "battery_full",
         columnSpan: 1,
         rowSpan: 2,
@@ -29,6 +40,7 @@ var cardDefinitions = [
     {
         id: "cpu",
         name: "CPU",
+        source: "resources",
         icon: "memory",
         columnSpan: 2,
         rowSpan: 1,
@@ -38,6 +50,7 @@ var cardDefinitions = [
     {
         id: "gpu",
         name: "GPU",
+        source: "resources",
         icon: "developer_board",
         columnSpan: 2,
         rowSpan: 1,
@@ -47,6 +60,7 @@ var cardDefinitions = [
     {
         id: "memoryUsed",
         name: "Memory",
+        source: "resources",
         icon: "memory_alt",
         columnSpan: 1,
         rowSpan: 1,
@@ -56,6 +70,7 @@ var cardDefinitions = [
     {
         id: "wifi",
         name: "Wi-Fi",
+        source: "system",
         icon: "wifi",
         columnSpan: 1,
         rowSpan: 1,
@@ -64,7 +79,8 @@ var cardDefinitions = [
     },
     {
         id: "network",
-        name: "Network",
+        name: "Network Traffic",
+        source: "system",
         icon: "swap_vert",
         columnSpan: 3,
         rowSpan: 1,
@@ -73,6 +89,7 @@ var cardDefinitions = [
     {
         id: "storage",
         name: "Disk I/O",
+        source: "resources",
         icon: "hard_drive",
         columnSpan: 3,
         rowSpan: 1,
@@ -80,7 +97,8 @@ var cardDefinitions = [
     },
     {
         id: "storageCapacity",
-        name: "Disk capacity",
+        name: "Disk Usage",
+        source: "resources",
         icon: "data_usage",
         columnSpan: 1,
         rowSpan: 1,
@@ -90,6 +108,7 @@ var cardDefinitions = [
     {
         id: "calendar",
         name: "Calendar",
+        source: "time",
         icon: "calendar_month",
         columnSpan: 1,
         rowSpan: 1,
@@ -97,72 +116,107 @@ var cardDefinitions = [
     },
     {
         id: "weather",
-        name: "Weather",
+        name: "Weather Card",
+        source: "time",
         icon: "cloud",
-        columnSpan: 2,
-        rowSpan: 2,
+        columnSpan: 3,
+        rowSpan: 1,
         monitorModules: [],
         preserveDefaultSurface: true,
-        isM3: false,
-        defaultOptions: { unitMode: "auto", styleMode: "classic", showHourly: true, showRange: true }
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "1x3", "2x3"],
+        defaultOptions: { sizeMode: "1x3", styleMode: "material", unitMode: "auto" }
     },
     {
         id: "music",
         name: "Music & Lyrics",
+        source: "media",
         icon: "music_note",
         columnSpan: 3,
         rowSpan: 2,
         monitorModules: [],
         preserveDefaultSurface: true,
-        isM3: false
+        isM3: true,
+        defaultOptions: { wordByWord: true, dimPaused: true, textScale: "md", tagMode: "always" }
     },
     {
         id: "media",
-        name: "Media",
+        name: "Media Deck",
+        source: "media",
         icon: "play_circle",
         columnSpan: 3,
         rowSpan: 2,
         monitorModules: [],
         preserveDefaultSurface: true,
-        isM3: false,
+        isM3: true,
         defaultOptions: { showDuration: true, showArt: true, showBadge: true }
     },
     {
+        id: "bgVisualiser",
+        name: "Audio Visualiser",
+        source: "media",
+        icon: "graphic_eq",
+        columnSpan: 3,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        defaultOptions: {
+            visStyle: "wave_outlined",
+            colorMode: "inverse",
+            barCount: 60,
+            gain: 0.55,
+            rounding: 6,
+            spacing: 4,
+            heightScale: 0.42,
+            edgeInset: 0,
+            visOpacity: 0.70,
+            fps: 45,
+            alwaysVisible: false
+        }
+    },
+    {
         id: "resources",
-        name: "Resources",
+        name: "Resources Deck",
+        source: "resources",
         icon: "monitor_heart",
         columnSpan: 3,
-        rowSpan: 2,
-        monitorModules: ["cpu", "gpu", "memory"],
+        rowSpan: 1,
+        monitorModules: ["cpu", "gpu", "memory", "disk"],
         preserveDefaultSurface: true,
-        isM3: false,
-        defaultOptions: { showLoadBadge: true, showDetail: true, compactDetail: false }
+        isM3: true,
+        sizeModes: ["1x3", "3x1", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "1x3", styleMode: "material", fillMode: "wave", showBattery: false }
     },
     {
         id: "usercard",
-        name: "User",
+        name: "User Card",
+        source: "personal",
         icon: "person",
-        columnSpan: 1,
+        columnSpan: 2,
         rowSpan: 2,
         monitorModules: [],
         preserveDefaultSurface: true,
-        isM3: false,
-        defaultOptions: { showHost: true, showBadges: true, showBanner: true, customAvatar: "" }
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "2x2", "2x3"],
+        defaultOptions: { sizeMode: "2x2", styleMode: "material", customAvatar: "", customBanner: "" }
     },
     {
         id: "image",
-        name: "Image",
+        name: "Polaroid Frame",
+        source: "personal",
         icon: "image",
         columnSpan: 2,
         rowSpan: 2,
         monitorModules: [],
         preserveDefaultSurface: true,
-        isM3: false,
+        isM3: true,
         defaultOptions: { customPath: "", fitMode: "fill", zoom: 1.0, frameStyle: "polaroid", roundness: 12, opacityLevel: 1.0, showBorder: true, showCaption: true, tilted: true }
     },
     {
         id: "end4Weather",
-        name: "Weather M3",
+        name: "Weather Pill",
+        source: "time",
         icon: "partly_cloudy_day",
         columnSpan: 3,
         rowSpan: 1,
@@ -174,7 +228,8 @@ var cardDefinitions = [
     },
     {
         id: "end4Media",
-        name: "Media M3",
+        name: "Media Pill",
+        source: "media",
         icon: "album",
         columnSpan: 3,
         rowSpan: 1,
@@ -186,7 +241,8 @@ var cardDefinitions = [
     },
     {
         id: "end4Resources",
-        name: "Resources M3",
+        name: "Stat Trio",
+        source: "resources",
         icon: "speed",
         columnSpan: 3,
         rowSpan: 1,
@@ -198,7 +254,8 @@ var cardDefinitions = [
     },
     {
         id: "end4User",
-        name: "User M3",
+        name: "User Hero",
+        source: "personal",
         icon: "account_circle",
         columnSpan: 2,
         rowSpan: 2,
@@ -210,7 +267,8 @@ var cardDefinitions = [
     },
     {
         id: "end4Image",
-        name: "Image M3",
+        name: "Shaped Photo",
+        source: "personal",
         icon: "photo",
         columnSpan: 2,
         rowSpan: 1,
@@ -219,31 +277,102 @@ var cardDefinitions = [
         isM3: true,
         sizeModes: ["1x1", "1x2", "1x3", "2x2", "2x3"],
         defaultOptions: { sizeMode: "1x2", customPath: "", shapeMode: "rounded", fitMode: "fill", opacityLevel: 1.0, showShadow: true }
+    },
+    {
+        id: "github",
+        name: "GitHub",
+        source: "personal",
+        icon: "commit",
+        columnSpan: 3,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x2", "1x3", "2x2"],
+        defaultOptions: { sizeMode: "1x3", user: "", colorMode: "accent", showShadow: true }
+    },
+    {
+        id: "nothingBuds",
+        name: "Buds & Volume",
+        source: "media",
+        icon: "earbuds",
+        columnSpan: 1,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2"],
+        defaultOptions: { sizeMode: "1x1", accentMode: "glyph", showShadow: true }
+    },
+    {
+        id: "nothingGreeting",
+        name: "Dot Clock",
+        source: "time",
+        icon: "waving_hand",
+        columnSpan: 2,
+        rowSpan: 1,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x2", "1x3", "2x2"],
+        defaultOptions: { sizeMode: "1x2", use24h: true, blinkColon: true, showWeatherMeta: true, customName: "", accentMode: "glyph", showShadow: true }
+    },
+    {
+        id: "nothingResources",
+        name: "Dot-Matrix Stats",
+        source: "resources",
+        icon: "memory",
+        columnSpan: 2,
+        rowSpan: 1,
+        monitorModules: ["cpu", "memory", "gpu", "disk"],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x1", "1x2", "1x3", "2x2"],
+        defaultOptions: { sizeMode: "1x2", singleMetric: "cpu", accentMode: "glyph", showShadow: true }
+    },
+    {
+        id: "nothingPlayer",
+        name: "Vinyl Player",
+        source: "media",
+        icon: "play_circle",
+        columnSpan: 2,
+        rowSpan: 2,
+        monitorModules: [],
+        preserveDefaultSurface: true,
+        isM3: true,
+        sizeModes: ["1x2", "1x3", "2x2"],
+        defaultOptions: { sizeMode: "2x2", spinArt: true, dotMatrixArt: true, accentMode: "glyph", showShadow: true }
     }
 ];
 
 var defaultAnchors = {
-    time:            { column: 0, row: 0 },
-    battery:         { column: 2, row: 0 },
-    cpu:             { column: 0, row: 2 },
-    memoryUsed:      { column: 2, row: 2 },
-    gpu:             { column: 0, row: 3 },
-    calendar:        { column: 2, row: 3 },
-    network:         { column: 0, row: 4 },
-    storage:         { column: 0, row: 5 },
-    wifi:            { column: 0, row: 6 },
-    weather:         { column: 1, row: 6 },
-    storageCapacity: { column: 0, row: 7 },
-    music:           { column: 0, row: 8 },
-    media:           { column: 0, row: 10 },
-    resources:       { column: 0, row: 12 },
-    usercard:        { column: 0, row: 14 },
-    image:           { column: 1, row: 14 },
-    end4Weather:     { column: 0, row: 16 },
-    end4Media:       { column: 0, row: 17 },
-    end4Resources:   { column: 0, row: 18 },
-    end4User:        { column: 0, row: 19 },
-    end4Image:       { column: 0, row: 21 }
+    time:             { column: 0, row: 0 },
+    battery:          { column: 2, row: 0 },
+    cpu:              { column: 0, row: 2 },
+    memoryUsed:       { column: 2, row: 2 },
+    gpu:              { column: 0, row: 3 },
+    calendar:         { column: 2, row: 3 },
+    network:          { column: 0, row: 4 },
+    storage:          { column: 0, row: 5 },
+    wifi:             { column: 0, row: 6 },
+    weather:          { column: 1, row: 6 },
+    storageCapacity:  { column: 0, row: 7 },
+    music:            { column: 0, row: 8 },
+    media:            { column: 0, row: 10 },
+    resources:        { column: 0, row: 12 },
+    usercard:         { column: 0, row: 14 },
+    image:            { column: 1, row: 14 },
+    end4Weather:      { column: 0, row: 16 },
+    end4Media:        { column: 0, row: 17 },
+    end4Resources:    { column: 0, row: 18 },
+    end4User:         { column: 0, row: 19 },
+    end4Image:        { column: 0, row: 21 },
+    github:           { column: 0, row: 22 },
+    nothingBuds:      { column: 0, row: 23 },
+    nothingGreeting:  { column: 1, row: 23 },
+    nothingResources: { column: 0, row: 24 },
+    nothingPlayer:    { column: 0, row: 25 },
+    bgVisualiser:     { column: 0, row: 27 }
 };
 
 function cloneDefinition(definition) {
@@ -315,6 +444,33 @@ function heightFor(id) { return sizeFor(id).height; }
 function defaultAnchorFor(id) {
     var anchor = defaultAnchors[id];
     return anchor ? { column: anchor.column, row: anchor.row } : { column: 0, row: 0 };
+}
+
+function sources() {
+    return sourceMeta.map(function(s) {
+        return {
+            id: s.id,
+            label: s.label,
+            icon: s.icon,
+            count: s.id === "all"
+                ? cardDefinitions.length
+                : cardDefinitions.filter(function(d) { return d.source === s.id; }).length
+        };
+    });
+}
+
+function sourceLabel(sourceId) {
+    for (var i = 0; i < sourceMeta.length; i += 1) {
+        if (sourceMeta[i].id === sourceId) return sourceMeta[i].label;
+    }
+    return "Other";
+}
+
+function definitionsForSource(sourceId) {
+    if (!sourceId || sourceId === "all") return all();
+    return cardDefinitions.filter(function(d) {
+        return d.source === sourceId;
+    }).map(cloneDefinition);
 }
 
 function sidebarDefinitions(activeIds) {

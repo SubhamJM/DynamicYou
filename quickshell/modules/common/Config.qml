@@ -2720,12 +2720,12 @@ Singleton {
                 property int wallpapers: 0 // 0: No | 1: Yes
                 property int translator: 1 // 0: No | 1: Default (illogical-impulse) | 2: Expressive (reworked)
                 property int player: 0 // 0: No | 1: Yes
-                property int phone: 1 // 0: No | 1: Yes — Phone tab (future KDE Connect + scrcpy external)
+                property int phone: 0 // 0: No | 1: Yes — Phone tab (future KDE Connect + scrcpy external)
                 property int anki: 0 // 0: No | 1: Yes — Anki tab (scripts/anki, installs its engine on first use)
             }
 
             property JsonObject phone: JsonObject {
-                property bool kdeconnectEnabled: true
+                property bool kdeconnectEnabled: false
                 // Shell actions offered to the phone through KDE Connect's Run Command plugin
                 // (mirror, recording, media, lock...). Written into kdeconnect's own config.
                 property bool remoteCommands: true

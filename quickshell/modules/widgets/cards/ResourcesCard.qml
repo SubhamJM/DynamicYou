@@ -1,18 +1,36 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Services.UPower
 import "../../../"
-import "../../../services"
 import "../../"
 import "../"
 
+// Matushell ResourcesWidget ported 1:1 to Dynamic You:
+// GPU liquidband.frag.qsb animated wave + Submerged inverse-contrast text layer + Material Shape fill mode
+// Styles: "material" | "glass" | "blur" (ditherglass.frag.qsb)
+// Fill modes: "wave" | "linear" | "shape"
+// Sizes: "1x3" (4 cards strip) | "3x1" (vertical column) | "2x2" / "2x3" (grid)
 Item {
     id: root
 
     property bool active: true
-    readonly property var opts: WidgetStore.cardOptions("resources")
-    readonly property bool showLoadBadge: opts.showLoadBadge !== false
-    readonly property bool showDetail: opts.showDetail !== false
-    readonly property bool compactDetail: opts.compactDetail === true
+    property bool interactive: true
+    property bool onDesktop: false
+    property string tileId: "resources"
+
+    readonly property var opts: WidgetStore.cardOptions(root.tileId)
+    readonly property string sizeMode: String(opts.sizeMode || "1x3")
+    readonly property string cardStyle: {
+        const s = String(opts.styleMode || "material");
+        return (s === "glass" || s === "blur") ? s : "material";
+    }
+    readonly property string fillMode: String(opts.fillMode || "wave")       // "wave" | "linear" | "shape"
+    readonly property bool showBattery: opts.showBattery === true
+
+    readonly property bool isWaveMode: fillMode === "wave"
+    readonly property bool isShapeMode: fillMode === "shape"
+    readonly property bool isGlass: cardStyle === "glass"
+    readonly property bool isMaterial: cardStyle === "material"
 
     onActiveChanged: {
         if (typeof Sys !== "undefined") Sys.hold("resources", root.active, 1500);
@@ -27,226 +45,286 @@ Item {
         if (typeof WidgetTelemetry !== "undefined") WidgetTelemetry.hold("resources", false);
     }
 
-    readonly property bool hasCpu: typeof Sys !== "undefined"
-    readonly property bool hasTelemetry: typeof WidgetTelemetry !== "undefined"
-
-    readonly property real cpuLevel: hasCpu ? Math.max(0, Math.min(1, Sys.cpu)) : 0
-    readonly property string cpuPctText: hasCpu ? Math.round(cpuLevel * 100) + "%" : "—"
-    readonly property string cpuDetail: {
-        if (!hasCpu) return "Unavailable";
-        const ghz = Sys.cpuMhz > 0 ? (Sys.cpuMhz / 1000).toFixed(1) + " GHz" : "Active";
-        if (Sys.temp > 0) return Math.round(Sys.temp) + "°C · " + ghz;
-        return ghz;
+    property real phase: 0
+    FrameAnimation {
+        running: root.active && root.isWaveMode
+        onTriggered: root.phase += 0.04 * frameTime * 60
     }
 
-    readonly property bool hasGpu: hasTelemetry && WidgetTelemetry.hasGpu
-    readonly property real gpuPct: hasGpu && WidgetTelemetry.gpuPercent >= 0 ? WidgetTelemetry.gpuPercent : -1
-    readonly property string gpuPctText: gpuPct >= 0 ? Math.round(gpuPct) + "%" : "—"
-    readonly property string gpuDetail: {
-        if (!hasGpu) return "No discrete GPU";
-        if (WidgetTelemetry.gpuVramTotalMb > 0 && WidgetTelemetry.gpuVramUsedMb >= 0) {
-            const usedGb = (WidgetTelemetry.gpuVramUsedMb / 1024).toFixed(1);
-            const totalGb = Math.round(WidgetTelemetry.gpuVramTotalMb / 1024);
-            const tempStr = WidgetTelemetry.gpuTemp > 0 ? (Math.round(WidgetTelemetry.gpuTemp) + "°C · ") : "";
-            return tempStr + usedGb + "/" + totalGb + "G";
+    readonly property bool hasSys: typeof Sys !== "undefined"
+    readonly property real cpuPct: hasSys ? Math.max(0, Math.min(100, (Sys.cpu || 0) * 100)) : 0
+    readonly property real ramPct: hasSys ? Math.max(0, Math.min(100, (Sys.ram || 0) * 100)) : 0
+    readonly property real diskPct: hasSys ? Math.max(0, Math.min(100, (Sys.disk || 0) * 100)) : 0
+
+    readonly property bool hasGpu: (typeof WidgetTelemetry !== "undefined") && WidgetTelemetry.hasGpu
+    readonly property real gpuPct: hasGpu && WidgetTelemetry.gpuPercent >= 0 ? Math.max(0, Math.min(100, WidgetTelemetry.gpuPercent)) : 0
+
+    readonly property var batDev: (typeof UPower !== "undefined") ? UPower.displayDevice : null
+    readonly property real batPct: (batDev && batDev.ready) ? Math.max(0, Math.min(100, (batDev.percentage || 0) * 100)) : 100
+
+    readonly property string cpuHeader: (hasSys && Sys.temp > 0) ? (Math.round(Sys.temp) + "°C") : "CPU"
+    readonly property string cpuSub: {
+        if (!hasSys) return "Processor";
+        return Sys.cpuMhz > 0 ? ((Sys.cpuMhz / 1000).toFixed(1) + " GHz") : "Processor";
+    }
+
+    readonly property string ramHeader: hasSys && Sys.ramUsedGb > 0 ? (Sys.ramUsedGb.toFixed(1) + "G") : "MEM"
+    readonly property string ramSub: hasSys && Sys.ramTotalGb > 0
+        ? (Sys.ramUsedGb.toFixed(1) + " / " + Math.round(Sys.ramTotalGb) + " GB")
+        : "Memory"
+
+    readonly property string gpuHeader: (hasGpu && WidgetTelemetry.gpuTemp > 0) ? (Math.round(WidgetTelemetry.gpuTemp) + "°") : (hasGpu ? "GPU" : "N/A")
+    readonly property string gpuSub: hasGpu
+        ? String(WidgetTelemetry.gpuName || "Graphics").replace(/^(NVIDIA\s+GeForce|NVIDIA|AMD\s+Radeon|AMD|Intel(\(R\))?)\s+/i, "")
+        : "Integrated"
+
+    readonly property string diskHeader: hasSys && Sys.diskTotalGb > 0
+        ? (Sys.diskTotalGb >= 900 ? (Sys.diskTotalGb / 1024).toFixed(1) + "T" : Math.round(Sys.diskTotalGb) + "G")
+        : "DISK"
+    readonly property string diskSub: hasSys && Sys.diskTotalGb > 0
+        ? (Math.round(Sys.diskUsedGb) + " / " + Math.round(Sys.diskTotalGb) + " GB")
+        : "Storage"
+
+    readonly property var cardItems: {
+        const list = [
+            {
+                title: "CPU", header: root.cpuHeader, sub: root.cpuSub, icon: "memory",
+                shape: "gem", pct: root.cpuPct, warn: root.cpuPct >= 90 || (hasSys && Sys.temp >= 85),
+                accent: Theme.m3.primary ?? Theme.accent,
+                accentOn: Theme.m3.on_primary ?? "#101014",
+                container: Theme.m3.primary_container ?? Theme.colors.card_bg,
+                containerOn: Theme.m3.on_primary_container ?? Theme.colors.text_primary
+            },
+            {
+                title: "RAM", header: root.ramHeader, sub: root.ramSub, icon: "memory_alt",
+                shape: "cookie4", pct: root.ramPct, warn: root.ramPct >= 90,
+                accent: Theme.m3.secondary ?? "#67e8f9",
+                accentOn: Theme.m3.on_secondary ?? "#030a16",
+                container: Theme.m3.secondary_container ?? Theme.colors.card_bg,
+                containerOn: Theme.m3.on_secondary_container ?? Theme.colors.text_primary
+            },
+            {
+                title: "GPU", header: root.gpuHeader, sub: root.gpuSub, icon: "developer_board",
+                shape: "pentagon", pct: root.gpuPct, warn: root.gpuPct >= 92,
+                accent: Theme.m3.tertiary ?? "#f472b6",
+                accentOn: Theme.m3.on_tertiary ?? "#101014",
+                container: Theme.m3.tertiary_container ?? Theme.colors.card_bg,
+                containerOn: Theme.m3.on_tertiary_container ?? Theme.colors.text_primary
+            },
+            {
+                title: "Disk", header: root.diskHeader, sub: root.diskSub, icon: "storage",
+                shape: "cookie6", pct: root.diskPct, warn: root.diskPct >= 92,
+                accent: Theme.m3.tertiary ?? "#fbbf24",
+                accentOn: Theme.m3.on_tertiary ?? "#101014",
+                container: Theme.m3.surface_container_high ?? Theme.colors.card_bg,
+                containerOn: Theme.m3.on_surface ?? Theme.colors.text_primary
+            }
+        ];
+        if (root.showBattery) {
+            list.push({
+                title: "Battery", header: Math.round(root.batPct) + "%", sub: "Power", icon: "battery_full",
+                shape: "pill", pct: root.batPct, warn: root.batPct <= 15,
+                accent: Theme.m3.primary ?? Theme.accent,
+                accentOn: Theme.m3.on_primary ?? "#101014",
+                container: Theme.m3.primary_container ?? Theme.colors.card_bg,
+                containerOn: Theme.m3.on_primary_container ?? Theme.colors.text_primary
+            });
         }
-        return String(WidgetTelemetry.gpuName || "GPU").replace(/^(NVIDIA|AMD|Intel)\s+/i, "");
+        return list;
     }
 
-    readonly property real ramLevel: hasCpu ? Math.max(0, Math.min(1, Sys.ram)) : 0
-    readonly property string ramPctText: hasCpu ? Math.round(ramLevel * 100) + "%" : "—"
-    readonly property string ramDetail: hasCpu && Sys.ramTotalGb > 0
-        ? Sys.ramUsedGb.toFixed(1) + " / " + Sys.ramTotalGb.toFixed(0) + " GB"
-        : "—"
+    readonly property int gridCols: root.sizeMode === "3x1" ? 1 : ((root.sizeMode === "2x2" || root.sizeMode === "2x3") ? 2 : cardItems.length)
+    readonly property int gridRows: Math.ceil(cardItems.length / Math.max(1, gridCols))
 
-    readonly property real diskLevel: hasCpu ? Math.max(0, Math.min(1, Sys.disk)) : 0
-    readonly property string diskPctText: hasCpu ? Math.round(diskLevel * 100) + "%" : "—"
-    readonly property string diskDetail: hasCpu && Sys.diskTotalGb > 0
-        ? Math.round(Sys.diskUsedGb) + " / " + Math.round(Sys.diskTotalGb) + " GB"
-        : "—"
-
-    readonly property string loadText: hasCpu && Sys.load1 >= 0
-        ? "LOAD " + Number(Sys.load1).toFixed(2)
-        : "LIVE"
-
-    readonly property color accent: Theme.m3.primary ?? Theme.accent
-    readonly property color onAccent: Theme.m3.on_primary ?? "#101014"
-    readonly property color fg: Theme.m3.on_surface ?? Theme.colors.text_primary
-    readonly property color muted: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-
-    SekaiPill {
+    GridLayout {
         anchors.fill: parent
-        cornerRadius: WidgetStore.s(22)
-        borderWidth: WidgetStore.s(2.5)
-        ringWidth: WidgetStore.s(3)
-        shadowDx: WidgetStore.s(3)
-        shadowDy: WidgetStore.s(4)
-        fillColor: Theme.m3.surface_container ?? Theme.colors.card_bg
-        ringColor: Qt.alpha(root.accent, 0.24)
+        columns: root.gridCols
+        rows: root.gridRows
+        columnSpacing: WidgetStore.s(10)
+        rowSpacing: WidgetStore.s(10)
 
-        // Subtle Sekai backdrop circle
-        Rectangle {
-            width: WidgetStore.s(220)
-            height: width
-            radius: width / 2
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.rightMargin: -WidgetStore.s(50)
-            anchors.bottomMargin: -WidgetStore.s(50)
-            color: Qt.alpha(root.accent, 0.08)
-        }
+        Repeater {
+            model: root.cardItems
 
-        ColumnLayout {
-            anchors {
-                fill: parent
-                leftMargin: WidgetStore.s(12)
-                rightMargin: WidgetStore.s(12)
-                topMargin: WidgetStore.s(11)
-                bottomMargin: WidgetStore.s(12)
-            }
-            spacing: WidgetStore.s(9)
+            delegate: Item {
+                id: card
+                required property var modelData
 
-            // Top bar: tilted RESOURCES badge + LOAD pill
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: WidgetStore.s(8)
-
-                SekaiPill {
-                    Layout.preferredWidth: resBadgeRow.implicitWidth + WidgetStore.s(18)
-                    Layout.preferredHeight: WidgetStore.s(24)
-                    cornerRadius: WidgetStore.s(8)
-                    borderWidth: WidgetStore.s(2)
-                    ringWidth: WidgetStore.s(1.5)
-                    shadowDy: WidgetStore.s(2)
-                    rotation: -1.5
-                    fillColor: root.accent
-
-                    Row {
-                        id: resBadgeRow
-                        anchors.centerIn: parent
-                        spacing: WidgetStore.s(5)
-
-                        MaterialSymbol {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "monitoring"
-                            iconSize: WidgetStore.si(13)
-                            fill: 1
-                            color: root.onAccent
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "RESOURCES"
-                            color: root.onAccent
-                            font.family: "Google Sans Flex"
-                            font.pixelSize: WidgetStore.si(10)
-                            font.weight: Font.ExtraBold
-                            font.letterSpacing: 0.8
-                            font.hintingPreference: Font.PreferVerticalHinting
-                            renderType: Text.NativeRendering
-                        }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                SekaiPill {
-                    visible: root.showLoadBadge
-                    Layout.preferredWidth: loadRow.implicitWidth + WidgetStore.s(16)
-                    Layout.preferredHeight: WidgetStore.s(22)
-                    cornerRadius: WidgetStore.s(8)
-                    borderWidth: WidgetStore.s(1.8)
-                    ringWidth: WidgetStore.s(1.5)
-                    shadowDy: WidgetStore.s(2)
-                    fillColor: Theme.m3.surface_container_highest ?? Theme.colors.card_bg
-                    ringColor: Qt.alpha(root.accent, 0.22)
-
-                    Row {
-                        id: loadRow
-                        anchors.centerIn: parent
-                        spacing: WidgetStore.s(5)
-
-                        Rectangle {
-                            width: WidgetStore.s(6)
-                            height: width
-                            radius: width / 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Theme.m3.secondary ?? "#4ade80"
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.loadText
-                            color: root.fg
-                            font.family: "Google Sans Flex"
-                            font.pixelSize: WidgetStore.si(9)
-                            font.weight: Font.ExtraBold
-                            font.letterSpacing: 0.7
-                            font.features: { "tnum": 1 }
-                            font.hintingPreference: Font.PreferVerticalHinting
-                            renderType: Text.NativeRendering
-                        }
-                    }
-                }
-            }
-
-            // 2x2 Grid of Sekai ResourceMeters
-            GridLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                columns: 2
-                rows: 2
-                columnSpacing: WidgetStore.s(9)
-                rowSpacing: WidgetStore.s(9)
 
-                ResourceMeter {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    label: "CPU"
-                    detail: root.showDetail ? root.cpuDetail : ""
-                    valueText: root.cpuPctText
-                    level: root.cpuLevel
-                    iconName: "memory"
-                    accentColor: Theme.m3.primary ?? Theme.accent
-                    textColor: root.fg
-                    mutedColor: root.muted
+                readonly property real targetFill: Math.max(0.05, Math.min(0.98, Number(modelData.pct || 0) / 100.0))
+                property real fillLevel: targetFill
+                Behavior on fillLevel { NumberAnimation { duration: 420; easing.type: Easing.OutCubic } }
+
+                readonly property real cornerRad: WidgetStore.s(24)
+                readonly property color waveColor: modelData.warn ? (Theme.m3.error ?? "#ffb4ab") : modelData.accent
+                readonly property color onWaveColor: modelData.warn ? (Theme.m3.on_error ?? "#101014") : modelData.accentOn
+                readonly property color cardContainer: modelData.warn ? (Theme.m3.error_container ?? "#7f1d1d") : modelData.container
+                readonly property color dryInk: root.isMaterial
+                    ? (modelData.warn ? (Theme.m3.on_error_container ?? "#ffdada") : modelData.containerOn)
+                    : (Theme.m3.on_surface ?? Theme.colors.text_primary)
+                readonly property color dryBadgeBg: root.isMaterial ? waveColor : Qt.alpha(waveColor, 0.22)
+                readonly property color dryBadgeFg: root.isMaterial ? onWaveColor : waveColor
+
+                // Backdrop: Material / Glass / Blur
+                MatusBackdrop {
+                    anchors.fill: parent
+                    style: root.cardStyle
+                    cornerRadius: card.cornerRad
+                    materialColor: card.cardContainer
                 }
 
-                ResourceMeter {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    label: "GPU"
-                    detail: root.showDetail ? (root.compactDetail ? String(WidgetTelemetry.gpuName || "GPU").replace(/^(NVIDIA|AMD|Intel)\s+/i, "") : root.gpuDetail) : ""
-                    valueText: root.gpuPctText
-                    level: root.gpuPct >= 0 ? root.gpuPct / 100.0 : 0
-                    iconName: "developer_board"
-                    accentColor: Theme.m3.tertiary ?? "#ff9e7d"
-                    textColor: root.fg
-                    mutedColor: root.muted
+                // Shape Fill Mode: Morphing bottom-left ExpressiveShape blob
+                Item {
+                    visible: root.isShapeMode
+                    anchors.fill: parent
+                    clip: true
+
+                    ExpressiveShape {
+                        width: Math.round(WidgetStore.s(64) + WidgetStore.s(84) * card.fillLevel)
+                        height: width
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        anchors.leftMargin: -WidgetStore.s(18)
+                        anchors.bottomMargin: -WidgetStore.s(18)
+                        shape: card.modelData.shape
+                        color: Qt.alpha(card.waveColor, 0.24 + 0.44 * card.fillLevel)
+                    }
                 }
 
-                ResourceMeter {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    label: "RAM"
-                    detail: root.showDetail ? root.ramDetail : ""
-                    valueText: root.ramPctText
-                    level: root.ramLevel
-                    iconName: "memory_alt"
-                    accentColor: Theme.m3.secondary ?? "#67e8f9"
-                    textColor: root.fg
-                    mutedColor: root.muted
+                // Wave & Linear Fill Mode: Matushell liquidband.frag.qsb ShaderEffect
+                ShaderEffect {
+                    visible: !root.isShapeMode
+                    anchors.fill: parent
+                    blending: true
+
+                    property real itemWidth: Math.max(1, width)
+                    property real itemHeight: Math.max(1, height)
+                    property real fill: card.fillLevel
+                    property real phase: root.phase
+                    property real amplitude: root.isWaveMode ? WidgetStore.s(3.8) : 0.0
+                    property real cornerRadius: card.cornerRad
+                    property color colorWave: card.waveColor
+
+                    fragmentShader: Qt.resolvedUrl("shaders/liquidband.frag.qsb")
                 }
 
-                ResourceMeter {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    label: "DISK"
-                    detail: root.showDetail ? root.diskDetail : ""
-                    valueText: root.diskPctText
-                    level: root.diskLevel
-                    iconName: "hard_drive"
-                    accentColor: Theme.m3.primary_fixed_dim ?? "#84b9ff"
-                    textColor: root.fg
-                    mutedColor: root.muted
+                // Reusable inner typography tree (instantiated twice: dry top layer + submerged inverse clip layer)
+                component CardInnerContent: Item {
+                    property color textColor: card.dryInk
+                    property color badgeBg: card.dryBadgeBg
+                    property color badgeFg: card.dryBadgeFg
+                    property real subOpacity: 0.72
+
+                    anchors.fill: parent
+                    anchors.margins: WidgetStore.s(12)
+
+                    RowLayout {
+                        anchors { left: parent.left; right: parent.right; top: parent.top }
+                        spacing: WidgetStore.s(5)
+
+                        Item {
+                            id: iconBadge
+                            Layout.preferredWidth: WidgetStore.s(24)
+                            Layout.preferredHeight: WidgetStore.s(24)
+
+                            ExpressiveShape {
+                                anchors.fill: parent
+                                shape: card.modelData.shape
+                                color: parent.parent.parent.badgeBg
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: card.modelData.icon
+                                iconSize: WidgetStore.si(13)
+                                fill: 1
+                                color: parent.parent.parent.badgeFg
+                            }
+                        }
+
+                        Text {
+                            text: card.modelData.title
+                            color: parent.parent.textColor
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: WidgetStore.si(11)
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideRight
+                            text: card.modelData.header
+                            color: parent.parent.textColor
+                            opacity: 0.78
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: WidgetStore.si(9.5)
+                            font.weight: Font.Medium
+                            renderType: Text.NativeRendering
+                        }
+                    }
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: subLine.top
+                        anchors.bottomMargin: WidgetStore.s(1)
+                        text: Math.round(card.modelData.pct) + "%"
+                        color: parent.textColor
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: WidgetStore.si(root.gridCols >= 4 ? 22 : 26)
+                        font.weight: Font.DemiBold
+                        renderType: Text.NativeRendering
+                    }
+
+                    Text {
+                        id: subLine
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        text: card.modelData.sub
+                        color: parent.textColor
+                        opacity: parent.subOpacity
+                        font.family: "Google Sans Flex"
+                        font.pixelSize: WidgetStore.si(9.5)
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
+                        renderType: Text.NativeRendering
+                    }
+                }
+
+                // Dry top layer
+                CardInnerContent {
+                    textColor: card.dryInk
+                    badgeBg: card.dryBadgeBg
+                    badgeFg: card.dryBadgeFg
+                    subOpacity: 0.68
+                }
+
+                // Submerged inverse-contrast clip layer matched cleanly to Matushell
+                Item {
+                    id: liquidClip
+                    visible: !root.isShapeMode
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    clip: true
+                    height: Math.round(card.height * card.fillLevel)
+
+                    Item {
+                        y: liquidClip.height - card.height
+                        width: card.width
+                        height: card.height
+
+                        CardInnerContent {
+                            textColor: card.onWaveColor
+                            badgeBg: Qt.alpha(card.onWaveColor, 0.24)
+                            badgeFg: card.onWaveColor
+                            subOpacity: 0.85
+                        }
+                    }
                 }
             }
         }

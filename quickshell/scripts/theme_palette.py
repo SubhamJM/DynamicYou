@@ -13,14 +13,18 @@ def blend(a, b, amount):
 
 def palette(c):
     bg, card, hover, accent, text = (c[k] for k in ('bg', 'card_bg', 'hover_bg', 'accent', 'text_primary'))
-    secondary = c.get('text_secondary', accent)
+    subtext = c.get('text_secondary', '#9aa3b2')
+    secondary = c.get('secondary_accent', accent)
+    tertiary = c.get('tertiary_accent', secondary)
     border = c.get('border', hover)
     on_accent = '#101014' if sum(int(accent[i:i + 2], 16) * w for i, w in ((1, .2126), (3, .7152), (5, .0722))) > 132 else '#ffffff'
-    return dict(primary=accent, on_primary=on_accent, primary_container=blend(card, accent, .25), on_primary_container=text,
-                secondary=secondary, on_secondary=bg, secondary_container=blend(card, secondary, .20), on_secondary_container=text,
-                tertiary=accent, on_tertiary=on_accent, tertiary_container=blend(hover, accent, .18), on_tertiary_container=text,
-                surface=bg, on_surface=text, surface_variant=card, on_surface_variant=secondary,
-                surface_dim=bg, surface_bright=hover, surface_container_lowest=blend(bg, '#000000', .13),
+    on_sec = '#101014' if sum(int(secondary[i:i + 2], 16) * w for i, w in ((1, .2126), (3, .7152), (5, .0722))) > 132 else '#ffffff'
+    on_tert = '#101014' if sum(int(tertiary[i:i + 2], 16) * w for i, w in ((1, .2126), (3, .7152), (5, .0722))) > 132 else '#ffffff'
+    return dict(primary=accent, on_primary=on_accent, primary_container=blend(card, accent, .18), on_primary_container=text,
+                secondary=secondary, on_secondary=on_sec, secondary_container=blend(card, secondary, .14), on_secondary_container=text,
+                tertiary=tertiary, on_tertiary=on_tert, tertiary_container=blend(hover, tertiary, .14), on_tertiary_container=text,
+                surface=bg, on_surface=text, surface_variant=card, on_surface_variant=subtext,
+                surface_dim=bg, surface_bright=hover, surface_container_lowest=blend(bg, '#000000', .22),
                 surface_container_low=card, surface_container=blend(card, hover, .45),
                 surface_container_high=hover, surface_container_highest=blend(hover, text, .08),
                 outline=border, outline_variant=blend(bg, border, .65), inverse_surface=text,
