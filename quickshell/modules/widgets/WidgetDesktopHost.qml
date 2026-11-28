@@ -128,9 +128,8 @@ Variants {
             Region { item: win.cardDesktopIds.length > 23 ? win.slotItemFor(23) : null }
             Region { item: win.cardDesktopIds.length > 24 ? win.slotItemFor(24) : null }
             Region { item: win.cardDesktopIds.length > 25 ? win.slotItemFor(25) : null }
-            Region { item: (win.menuTileId !== "" || win.desktopMenuOpen) ? menuScrim : null }
+            Region { item: win.menuTileId !== "" ? menuScrim : null }
             Region { item: win.menuTileId !== "" ? contextMenu : null }
-            Region { item: win.desktopMenuOpen ? desktopMenu : null }
         }
 
         Connections {
@@ -154,6 +153,9 @@ Variants {
                 win.desktopMenuX = px > 0 ? px : desktopCanvas.width * 0.5;
                 win.desktopMenuY = py > 0 ? py : desktopCanvas.height * 0.45;
                 win.desktopMenuOpen = true;
+            }
+            function onDesktopMenuCloseRequested() {
+                win.desktopMenuOpen = false;
             }
         }
 
@@ -437,11 +439,11 @@ Variants {
                 }
             }
 
-            // Dismiss scrim for right-click menus on desktop
+            // Dismiss scrim for widget options menu on desktop
             MouseArea {
                 id: menuScrim
                 anchors.fill: parent
-                visible: win.menuTileId !== "" || win.desktopMenuOpen
+                visible: win.menuTileId !== ""
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 z: 90
                 onClicked: (mouse) => {
@@ -452,210 +454,29 @@ Variants {
                         win.desktopMenuOpen = true;
                     } else {
                         win.menuTileId = "";
-                        win.desktopMenuOpen = false;
                     }
                 }
             }
 
-            // Screen right-click desktop menu in clean end-4pc Material 3 grouped card style
-            Item {
-                id: desktopMenu
-                visible: win.desktopMenuOpen
-                width: WidgetStore.s(288)
-                height: dmCol.implicitHeight + WidgetStore.s(16)
-                x: Math.max(WidgetStore.s(12), Math.min(Math.max(WidgetStore.s(12), desktopCanvas.width - width - WidgetStore.s(12)), win.desktopMenuX))
-                y: Math.max(win.topInset + WidgetStore.s(8), Math.min(Math.max(win.topInset + WidgetStore.s(8), desktopCanvas.height - height - WidgetStore.s(12)), win.desktopMenuY))
-                z: 100
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: WidgetStore.s(24)
-                    color: Theme.m3.surface_container_highest ?? Theme.colors.card_bg
-                    opacity: 0.94
-
-                    layer.enabled: desktopMenu.visible && width > 1 && height > 1
-                    layer.smooth: true
-                    layer.textureSize: Qt.size(
-                        Math.max(1, Math.round(width * WidgetStore.qtScale)),
-                        Math.max(1, Math.round(height * WidgetStore.qtScale))
-                    )
-                    layer.effect: MultiEffect {
-                        shadowEnabled: true
-                        shadowColor: Qt.rgba(0, 0, 0, 0.50)
-                        shadowBlur: 0.78
-                        shadowVerticalOffset: WidgetStore.s(6)
-                        autoPaddingEnabled: true
-                    }
-                }
-
-                ColumnLayout {
-                    id: dmCol
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        margins: WidgetStore.s(8)
-                    }
-                    spacing: WidgetStore.s(3)
-
-                    // Row 1: Edit Widgets (opens Widget Picker shelf)
-                    M3DesktopMenuRow {
-                        isFirst: true
-                        isLast: false
-                        icon: "dashboard_customize"
-                        label: WidgetStore.sidebarOpen ? "Close Widget Picker" : "Edit Widgets"
-                        badgeText: win.desktopIds.length > 0 ? (win.desktopIds.length + " pinned") : ""
-                        showChevron: true
-                        onTriggered: {
-                            win.desktopMenuOpen = false;
-                            WidgetStore.toggleSidebar();
-                        }
-                    }
-
-                    // Row 2: Snap to Grid toggle
-                    M3DesktopMenuRow {
-                        isFirst: false
-                        isLast: false
-                        icon: "grid_4x4"
-                        label: "Snap to Grid"
-                        showSwitch: true
-                        switchChecked: WidgetStore.gridSnapEnabled
-                        onTriggered: WidgetStore.toggleGridSnap()
-                    }
-
-                    // Pinned Widget Options quick chips (when pinned cards exist)
-                    Rectangle {
-                        visible: win.desktopIds.length > 0
-                        Layout.fillWidth: true
-                        implicitHeight: pinnedOptsCol.implicitHeight + WidgetStore.s(16)
-                        topLeftRadius: WidgetStore.s(6)
-                        topRightRadius: WidgetStore.s(6)
-                        bottomLeftRadius: WidgetStore.s(6)
-                        bottomRightRadius: WidgetStore.s(6)
-                        color: Theme.m3.surface_container_high ?? Theme.colors.hover_bg
-
-                        ColumnLayout {
-                            id: pinnedOptsCol
-                            anchors {
-                                left: parent.left
-                                right: parent.right
-                                top: parent.top
-                                leftMargin: WidgetStore.s(12)
-                                rightMargin: WidgetStore.s(12)
-                                topMargin: WidgetStore.s(8)
-                            }
-                            spacing: WidgetStore.s(6)
-
-                            Text {
-                                text: "Widget options"
-                                color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                                font.family: "Google Sans Flex"
-                                font.pixelSize: WidgetStore.si(10.5)
-                                font.weight: Font.DemiBold
-                                renderType: Text.NativeRendering
-                            }
-
-                            Flow {
-                                Layout.fillWidth: true
-                                spacing: WidgetStore.s(5)
-
-                                Repeater {
-                                    model: win.desktopIds
-
-                                    Rectangle {
-                                        required property string modelData
-                                        readonly property var wDef: Catalog.definitionFor(modelData)
-                                        width: wChipInner.implicitWidth + WidgetStore.s(14)
-                                        height: WidgetStore.s(26)
-                                        radius: height / 2
-                                        color: chipMouse.containsMouse
-                                            ? (Theme.m3.primary ?? Theme.accent)
-                                            : (Theme.m3.secondary_container ?? Theme.colors.hover_bg)
-
-                                        Row {
-                                            id: wChipInner
-                                            anchors.centerIn: parent
-                                            spacing: WidgetStore.s(4)
-                                            MaterialSymbol {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: wDef ? wDef.icon : "tune"
-                                                iconSize: WidgetStore.si(13)
-                                                fill: 1
-                                                color: chipMouse.containsMouse
-                                                    ? (Theme.m3.on_primary ?? "#101014")
-                                                    : (Theme.m3.on_secondary_container ?? Theme.colors.text_primary)
-                                            }
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: wDef ? wDef.name : modelData
-                                                color: chipMouse.containsMouse
-                                                    ? (Theme.m3.on_primary ?? "#101014")
-                                                    : (Theme.m3.on_secondary_container ?? Theme.colors.text_primary)
-                                                font.family: "Google Sans Flex"
-                                                font.pixelSize: WidgetStore.si(10.5)
-                                                font.weight: Font.DemiBold
-                                                renderType: Text.NativeRendering
-                                            }
-                                        }
-
-                                        MouseArea {
-                                            id: chipMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                win.desktopMenuOpen = false;
-                                                win.menuX = win.desktopMenuX;
-                                                win.menuY = win.desktopMenuY;
-                                                win.menuTileId = modelData;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Row 3: Wallpaper & Style
-                    M3DesktopMenuRow {
-                        isFirst: false
-                        isLast: false
-                        icon: "wallpaper"
-                        label: "Wallpaper & style"
-                        showChevron: true
-                        onTriggered: {
-                            win.desktopMenuOpen = false;
-                            if (win.notchRoot && typeof win.notchRoot.switchMode === "function")
-                                win.notchRoot.switchMode("wallpaper", false);
-                        }
-                    }
-
-                    // Row 4: Settings
-                    M3DesktopMenuRow {
-                        isFirst: false
-                        isLast: win.desktopIds.length === 0
-                        icon: "settings"
-                        label: "Settings"
-                        showChevron: true
-                        onTriggered: {
-                            win.desktopMenuOpen = false;
-                            if (win.notchRoot && typeof win.notchRoot.openSettings === "function")
-                                win.notchRoot.openSettings("");
-                        }
-                    }
-
-                    // Row 5: Return all widgets (when widgets are pinned)
-                    M3DesktopMenuRow {
-                        visible: win.desktopIds.length > 0
-                        isFirst: false
-                        isLast: true
-                        icon: "move_down"
-                        label: "Return all widgets"
-                        danger: true
-                        onTriggered: {
-                            win.desktopMenuOpen = false;
-                            WidgetStore.returnAllToSidebar();
-                        }
+            // Floating end-4pc style desktop context menu on Overlay layer
+            Loader {
+                id: desktopMenuLoader
+                active: win.desktopMenuOpen
+                sourceComponent: DesktopContextMenu {
+                    hostScreen: win.modelData
+                    notchRoot: win.notchRoot
+                    anchorX: win.desktopMenuX
+                    anchorY: win.desktopMenuY
+                    topInset: win.topInset
+                    desktopIds: win.desktopIds
+                    onMenuDismissed: win.desktopMenuOpen = false
+                    onWidgetConfigureRequested: (tileId) => {
+                        win.desktopMenuOpen = false;
+                        const idx = win.desktopIds.indexOf(tileId);
+                        const s = idx !== -1 ? win.slotItemFor(idx) : null;
+                        win.menuX = s ? (s.x + s.width / 2) : win.desktopMenuX;
+                        win.menuY = s ? (s.y + s.height / 2) : win.desktopMenuY;
+                        win.menuTileId = tileId;
                     }
                 }
             }
@@ -673,102 +494,6 @@ Variants {
                 z: 100
                 onClosed: win.menuTileId = ""
             }
-        }
-    }
-
-    component M3DesktopMenuRow: Rectangle {
-        property bool isFirst: false
-        property bool isLast: false
-        property string icon: ""
-        property string label: ""
-        property string badgeText: ""
-        property bool showChevron: false
-        property bool showSwitch: false
-        property bool switchChecked: false
-        property bool danger: false
-        signal triggered()
-
-        Layout.fillWidth: true
-        Layout.preferredHeight: visible ? WidgetStore.s(44) : 0
-        topLeftRadius: isFirst ? WidgetStore.s(18) : WidgetStore.s(6)
-        topRightRadius: isFirst ? WidgetStore.s(18) : WidgetStore.s(6)
-        bottomLeftRadius: isLast ? WidgetStore.s(18) : WidgetStore.s(6)
-        bottomRightRadius: isLast ? WidgetStore.s(18) : WidgetStore.s(6)
-        color: dmRowMouse.containsMouse
-            ? (danger
-                ? Qt.alpha(Theme.m3.error_container ?? "#7f1d1d", 0.72)
-                : Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.16))
-            : (Theme.m3.surface_container_high ?? Theme.colors.hover_bg)
-
-        RowLayout {
-            anchors {
-                fill: parent
-                leftMargin: WidgetStore.s(14)
-                rightMargin: WidgetStore.s(12)
-            }
-            spacing: WidgetStore.s(10)
-
-            MaterialSymbol {
-                text: icon
-                iconSize: WidgetStore.si(18)
-                color: danger
-                    ? (Theme.m3.error ?? "#ffb4ab")
-                    : (dmRowMouse.containsMouse ? (Theme.m3.primary ?? Theme.accent) : (Theme.m3.on_surface ?? Theme.colors.text_primary))
-            }
-
-            Text {
-                Layout.fillWidth: true
-                text: label
-                color: danger
-                    ? (Theme.m3.error ?? "#ffb4ab")
-                    : (Theme.m3.on_surface ?? Theme.colors.text_primary)
-                font.family: "Google Sans Flex"
-                font.pixelSize: WidgetStore.si(12.5)
-                font.weight: Font.Medium
-                font.hintingPreference: Font.PreferVerticalHinting
-                renderType: Text.NativeRendering
-                elide: Text.ElideRight
-            }
-
-            Text {
-                visible: badgeText !== ""
-                text: badgeText
-                color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                opacity: 0.75
-                font.family: "Google Sans Flex"
-                font.pixelSize: WidgetStore.si(10.5)
-                renderType: Text.NativeRendering
-            }
-
-            Rectangle {
-                visible: showSwitch
-                Layout.preferredWidth: WidgetStore.s(30)
-                Layout.preferredHeight: WidgetStore.s(17)
-                radius: height / 2
-                color: switchChecked ? (Theme.m3.primary ?? Theme.accent) : Qt.alpha(Theme.m3.on_surface ?? "#ffffff", 0.25)
-                Rectangle {
-                    width: WidgetStore.s(11); height: width; radius: width / 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    x: switchChecked ? (parent.width - width - WidgetStore.s(3)) : WidgetStore.s(3)
-                    color: switchChecked ? (Theme.m3.on_primary ?? "#101014") : "#ffffff"
-                }
-            }
-
-            MaterialSymbol {
-                visible: showChevron
-                text: "chevron_right"
-                iconSize: WidgetStore.si(16)
-                color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                opacity: 0.55
-            }
-        }
-
-        MouseArea {
-            id: dmRowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: triggered()
         }
     }
 }

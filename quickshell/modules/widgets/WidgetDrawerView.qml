@@ -7,7 +7,7 @@ import "WidgetCatalog.js" as Catalog
 import "WidgetDesktopLayout.js" as DesktopLayout
 import "WidgetState.js" as State
 
-// Borderless Material 3 / Matushell-style categorized Widget Shelf without inner black cutout boxes
+// Sharp Material 3 Widget Gallery with mipmapped 1:1 widget stages and clean metadata footers
 Item {
     id: root
 
@@ -17,6 +17,16 @@ Item {
     property string searchQuery: ""
     property var notchRoot: null
     property var sidebarContainsFn: null
+
+    readonly property real px1: WidgetStore.uiScale
+
+    function snapPx(v) {
+        return Math.round(Number(v) * WidgetStore.qtScale) * WidgetStore.uiScale;
+    }
+
+    function floorPx(v) {
+        return Math.floor(Number(v) * WidgetStore.qtScale) * WidgetStore.uiScale;
+    }
 
     readonly property var categorySections: {
         const order = ["resources", "time", "media", "system", "personal"];
@@ -44,10 +54,19 @@ Item {
             groups.push({
                 id: cid,
                 label: Catalog.sourceLabel(cid),
+                icon: sourceIcon(cid),
                 items: items
             });
         }
         return groups;
+    }
+
+    function sourceIcon(cid) {
+        const srcs = Catalog.sources();
+        for (let i = 0; i < srcs.length; i++) {
+            if (srcs[i].id === cid) return srcs[i].icon;
+        }
+        return "widgets";
     }
 
     property string draggingTileId: ""
@@ -80,10 +99,10 @@ Item {
     function openContextMenu(tileId, winPtX, winPtY) {
         const localPt = root.mapFromItem(null, winPtX, winPtY);
         const pad = WidgetStore.s(8);
-        const menuW = WidgetStore.s(206);
+        const menuW = WidgetStore.s(210);
         const menuH = contextMenu.height > 0 ? contextMenu.height : WidgetStore.s(130);
-        menuX = Math.max(pad, Math.min(Math.max(pad, root.width - menuW - pad), localPt.x - menuW / 2));
-        menuY = Math.max(pad, Math.min(Math.max(pad, root.height - menuH - pad), localPt.y + WidgetStore.s(4)));
+        menuX = root.snapPx(Math.max(pad, Math.min(Math.max(pad, root.width - menuW - pad), localPt.x - menuW / 2)));
+        menuY = root.snapPx(Math.max(pad, Math.min(Math.max(pad, root.height - menuH - pad), localPt.y + WidgetStore.s(4))));
         menuTileId = tileId;
     }
 
@@ -98,7 +117,7 @@ Item {
             text: "search_off"
             iconSize: WidgetStore.si(28)
             color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-            opacity: 0.6
+            opacity: 0.65
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -116,15 +135,15 @@ Item {
         anchors.fill: parent
         clip: true
         contentWidth: width
-        contentHeight: sectionsCol.implicitHeight + WidgetStore.s(10)
+        contentHeight: sectionsCol.implicitHeight + WidgetStore.s(12)
         interactive: root.draggingTileId === ""
         boundsBehavior: Flickable.StopAtBounds
         flickDeceleration: 3000
 
         Column {
             id: sectionsCol
-            width: scrollView.width - WidgetStore.s(8)
-            spacing: WidgetStore.s(18)
+            width: root.floorPx(scrollView.width - WidgetStore.s(12))
+            spacing: WidgetStore.s(20)
 
             Repeater {
                 model: root.categorySections
@@ -135,10 +154,16 @@ Item {
                     width: sectionsCol.width
                     spacing: WidgetStore.s(10)
 
-                    // Category Section Header
+                    // Refined Category Section Header
                     RowLayout {
                         width: parent.width
                         spacing: WidgetStore.s(8)
+
+                        MaterialSymbol {
+                            text: sectionCol.modelData.icon || "widgets"
+                            iconSize: WidgetStore.si(14)
+                            color: Theme.m3.primary ?? Theme.accent
+                        }
 
                         Text {
                             text: sectionCol.modelData.label
@@ -150,29 +175,38 @@ Item {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: cntTxt.implicitWidth + WidgetStore.s(10)
-                            Layout.preferredHeight: WidgetStore.s(16)
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: root.px1
+                            color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.25)
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: root.snapPx(cntTxt.implicitWidth + WidgetStore.s(12))
+                            Layout.preferredHeight: WidgetStore.s(18)
                             radius: height / 2
-                            color: Theme.m3.surface_container_high ?? Theme.colors.card_bg
+                            color: Theme.m3.surface_container ?? Theme.colors.card_bg
+                            border.width: root.px1
+                            border.color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.30)
+
                             Text {
                                 id: cntTxt
                                 anchors.centerIn: parent
                                 text: String(sectionCol.modelData.items.length)
                                 color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
                                 font.family: "Google Sans Flex"
-                                font.pixelSize: WidgetStore.si(9.5)
+                                font.pixelSize: WidgetStore.si(10)
                                 font.weight: Font.Bold
                                 renderType: Text.NativeRendering
                             }
                         }
-
-                        Item { Layout.fillWidth: true }
                     }
 
-                    // Responsive Flow Grid (wide 3-col cards span full width; compact cards pack cleanly 2-up!)
+                    // Responsive Flow Grid (wide 3-col cards span full width; compact cards pack 2-up on aligned integer pixels)
                     Flow {
+                        id: cardsFlow
                         width: parent.width
-                        spacing: WidgetStore.s(10)
+                        readonly property real gridGap: root.snapPx(WidgetStore.s(10))
+                        spacing: gridGap
 
                         Repeater {
                             model: sectionCol.modelData.items
@@ -191,56 +225,61 @@ Item {
                                 readonly property bool wideSpan: cardDim.width >= WidgetStore.s(380)
                                 readonly property real slotW: wideSpan
                                     ? sectionCol.width
-                                    : Math.floor((sectionCol.width - WidgetStore.s(10)) / 2)
-                                readonly property real stagePadX: WidgetStore.s(10)
-                                readonly property real stagePadTop: WidgetStore.s(10)
-                                readonly property real footerH: WidgetStore.s(26)
+                                    : root.floorPx((sectionCol.width - cardsFlow.gridGap - root.px1) / 2)
+                                readonly property real stagePadX: WidgetStore.s(12)
+                                readonly property real stagePadY: WidgetStore.s(12)
+                                readonly property real footerH: WidgetStore.s(34)
+
+                                readonly property real stageW: slotW - stagePadX * 2
                                 readonly property real stageMaxH: wideSpan
-                                    ? (cardDim.height > cardDim.width * 0.55 ? WidgetStore.s(146) : WidgetStore.s(108))
-                                    : WidgetStore.s(114)
+                                    ? (cardDim.height > cardDim.width * 0.55 ? WidgetStore.s(206) : WidgetStore.s(144))
+                                    : WidgetStore.s(134)
 
                                 readonly property real fit: Math.min(
-                                    (slotW - stagePadX * 2) / Math.max(1, cardDim.width),
+                                    stageW / Math.max(1, cardDim.width),
                                     stageMaxH / Math.max(1, cardDim.height),
-                                    wideSpan ? 0.85 : 0.66
+                                    wideSpan ? 0.98 : 0.86
                                 )
-                                readonly property real shownW: cardDim.width * fit
-                                readonly property real shownH: cardDim.height * fit
+                                readonly property real shownW: root.snapPx(cardDim.width * fit)
+                                readonly property real shownH: root.snapPx(cardDim.height * fit)
+                                readonly property real stageWellH: wideSpan
+                                    ? root.snapPx(Math.max(WidgetStore.s(76), shownH + stagePadY * 2))
+                                    : WidgetStore.s(154)
 
                                 width: slotW
-                                height: wideSpan
-                                    ? (stagePadTop + Math.max(WidgetStore.s(74), shownH) + WidgetStore.s(8) + footerH + WidgetStore.s(8))
-                                    : WidgetStore.s(156)
-                                radius: WidgetStore.s(20)
+                                height: stageWellH + footerH
+                                radius: WidgetStore.s(18)
+                                clip: true
                                 opacity: isDragged ? 0.35 : 1.0
                                 color: placed
-                                    ? Qt.alpha(Theme.m3.primary_container ?? Theme.colors.card_bg, slotMouse.containsMouse ? 0.52 : 0.34)
+                                    ? Qt.alpha(Theme.m3.primary_container ?? Theme.colors.card_bg, slotMouse.containsMouse ? 0.28 : 0.18)
                                     : (slotMouse.containsMouse
                                         ? (Theme.m3.surface_container_high ?? Theme.colors.hover_bg)
                                         : (Theme.m3.surface_container ?? Theme.colors.card_bg))
-                                border.width: 0
+                                border.width: root.px1
+                                border.color: placed
+                                    ? Qt.alpha(Theme.m3.primary ?? Theme.accent, slotMouse.containsMouse ? 0.78 : 0.55)
+                                    : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", slotMouse.containsMouse ? 0.52 : 0.26)
 
                                 Behavior on opacity { NumberAnimation { duration: 150 } }
                                 Behavior on color { ColorAnimation { duration: 140 } }
+                                Behavior on border.color { ColorAnimation { duration: 140 } }
 
-                                // Direct Seamless Live Widget Preview (no dark inner cutout boxes)
+                                // Clean Showcase Stage (no inner dark box bezel; crisp mipmapped 1:1 widget texture)
                                 Item {
-                                    id: previewStage
+                                    id: previewWell
                                     anchors {
                                         top: parent.top
                                         left: parent.left
                                         right: parent.right
-                                        topMargin: cardSlot.stagePadTop
-                                        leftMargin: cardSlot.stagePadX
-                                        rightMargin: cardSlot.stagePadX
                                     }
-                                    height: Math.max(WidgetStore.s(74), cardSlot.shownH)
+                                    height: cardSlot.stageWellH
 
                                     Item {
                                         width: cardSlot.shownW
                                         height: cardSlot.shownH
-                                        x: (previewStage.width - width) / 2
-                                        y: (previewStage.height - height) / 2
+                                        x: root.snapPx((previewWell.width - width) / 2)
+                                        y: root.snapPx((previewWell.height - height) / 2)
                                         enabled: false
 
                                         WidgetCardContent {
@@ -248,63 +287,52 @@ Item {
                                             height: cardSlot.cardDim.height
                                             scale: cardSlot.fit
                                             transformOrigin: Item.TopLeft
+                                            // Render live widget into a native 1:1 mipmapped FBO texture so NativeRendering glyphs & hairlines downsample crisply without jagged blur
+                                            layer.enabled: root.active && !cardSlot.isDragged && cardSlot.fit < 0.99
+                                            layer.smooth: true
+                                            layer.mipmap: true
+                                            layer.textureSize: Qt.size(
+                                                Math.max(1, Math.round(cardSlot.cardDim.width * WidgetStore.qtScale)),
+                                                Math.max(1, Math.round(cardSlot.cardDim.height * WidgetStore.qtScale))
+                                            )
                                             tileId: cardSlot.tileId
                                             active: root.active && !cardSlot.isDragged
                                             interactive: false
                                             notchRoot: root.notchRoot
                                         }
                                     }
+                                }
 
-                                    // Subtle floating Pinned / Pin chip
+                                // Tonal Footer Strip separated by 1px hairline
+                                Rectangle {
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        bottom: parent.bottom
+                                        leftMargin: root.px1
+                                        rightMargin: root.px1
+                                        bottomMargin: root.px1
+                                    }
+                                    height: cardSlot.footerH - root.px1
+                                    bottomLeftRadius: Math.max(0, cardSlot.radius - root.px1)
+                                    bottomRightRadius: Math.max(0, cardSlot.radius - root.px1)
+                                    color: Qt.alpha(Theme.m3.surface_container_highest ?? "#262630", cardSlot.placed ? 0.36 : 0.28)
+
                                     Rectangle {
-                                        visible: cardSlot.placed || slotMouse.containsMouse
-                                        anchors { top: parent.top; right: parent.right }
-                                        height: WidgetStore.s(20)
-                                        width: badgeRow.implicitWidth + WidgetStore.s(12)
-                                        radius: height / 2
-                                        color: cardSlot.placed
-                                            ? (Theme.m3.primary ?? Theme.accent)
-                                            : (Theme.m3.surface_container_highest ?? Theme.colors.hover_bg)
-
-                                        Row {
-                                            id: badgeRow
-                                            anchors.centerIn: parent
-                                            spacing: WidgetStore.s(3)
-
-                                            MaterialSymbol {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: cardSlot.placed ? "check" : "add"
-                                                iconSize: WidgetStore.si(12)
-                                                fill: 1
-                                                color: cardSlot.placed
-                                                    ? (Theme.m3.on_primary ?? "#101014")
-                                                    : (Theme.m3.on_surface ?? Theme.colors.text_primary)
-                                            }
-
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: cardSlot.placed ? "On Desktop" : "Pin"
-                                                color: cardSlot.placed
-                                                    ? (Theme.m3.on_primary ?? "#101014")
-                                                    : (Theme.m3.on_surface ?? Theme.colors.text_primary)
-                                                font.family: "Google Sans Flex"
-                                                font.pixelSize: WidgetStore.si(9)
-                                                font.weight: Font.Bold
-                                                renderType: Text.NativeRendering
-                                            }
-                                        }
+                                        anchors { top: parent.top; left: parent.left; right: parent.right }
+                                        height: root.px1
+                                        color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.22)
                                     }
                                 }
 
-                                // Clean Card Footer
+                                // Clean Bottom Metadata & Action Bar (never overlaps widget preview!)
                                 RowLayout {
                                     anchors {
                                         left: parent.left
                                         right: parent.right
                                         bottom: parent.bottom
                                         leftMargin: WidgetStore.s(12)
-                                        rightMargin: WidgetStore.s(12)
-                                        bottomMargin: WidgetStore.s(8)
+                                        rightMargin: WidgetStore.s(10)
                                     }
                                     height: cardSlot.footerH
                                     spacing: WidgetStore.s(6)
@@ -319,6 +347,7 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         text: cardSlot.title
                                         color: Theme.m3.on_surface ?? Theme.colors.text_primary
                                         font.family: "Google Sans Flex"
@@ -328,11 +357,13 @@ Item {
                                         renderType: Text.NativeRendering
                                     }
 
+                                    // Grid Size Pill
                                     Rectangle {
-                                        Layout.preferredWidth: dimTxt.implicitWidth + WidgetStore.s(10)
+                                        visible: cardSlot.wideSpan || (!cardSlot.placed && !slotMouse.containsMouse)
+                                        Layout.preferredWidth: root.snapPx(dimTxt.implicitWidth + WidgetStore.s(10))
                                         Layout.preferredHeight: WidgetStore.s(18)
                                         radius: height / 2
-                                        color: Qt.alpha(Theme.m3.on_surface ?? "#ffffff", 0.08)
+                                        color: Qt.alpha(Theme.m3.on_surface ?? "#ffffff", 0.07)
 
                                         Text {
                                             id: dimTxt
@@ -346,6 +377,45 @@ Item {
                                             font.pixelSize: WidgetStore.si(9.5)
                                             font.weight: Font.Medium
                                             renderType: Text.NativeRendering
+                                        }
+                                    }
+
+                                    // Crisp Pinned / Pin Status Chip cleanly in the footer
+                                    Rectangle {
+                                        visible: cardSlot.placed || slotMouse.containsMouse
+                                        Layout.preferredWidth: root.snapPx(badgeRow.implicitWidth + WidgetStore.s(12))
+                                        Layout.preferredHeight: WidgetStore.s(20)
+                                        radius: height / 2
+                                        color: cardSlot.placed
+                                            ? (Theme.m3.primary ?? Theme.accent)
+                                            : (Theme.m3.primary_container ?? (Theme.m3.surface_container_highest ?? Theme.colors.hover_bg))
+
+                                        Row {
+                                            id: badgeRow
+                                            anchors.centerIn: parent
+                                            spacing: WidgetStore.s(3)
+
+                                            MaterialSymbol {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: cardSlot.placed ? "check" : "add"
+                                                iconSize: WidgetStore.si(12)
+                                                fill: 1
+                                                color: cardSlot.placed
+                                                    ? (Theme.m3.on_primary ?? "#101014")
+                                                    : (Theme.m3.on_primary_container ?? (Theme.m3.on_surface ?? "#ffffff"))
+                                            }
+
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: cardSlot.placed ? (cardSlot.wideSpan ? "Pinned" : "On") : "Add"
+                                                color: cardSlot.placed
+                                                    ? (Theme.m3.on_primary ?? "#101014")
+                                                    : (Theme.m3.on_primary_container ?? (Theme.m3.on_surface ?? "#ffffff"))
+                                                font.family: "Google Sans Flex"
+                                                font.pixelSize: WidgetStore.si(9.5)
+                                                font.weight: Font.Bold
+                                                renderType: Text.NativeRendering
+                                            }
                                         }
                                     }
                                 }
@@ -480,7 +550,7 @@ Item {
         width: WidgetStore.s(3)
         height: Math.max(WidgetStore.s(36), (scrollView.height / Math.max(1, scrollView.contentHeight)) * parent.height)
         radius: WidgetStore.s(2)
-        color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.50)
+        color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.55)
     }
 
     MouseArea {
@@ -490,17 +560,19 @@ Item {
         onClicked: root.menuTileId = ""
     }
 
-    // Borderless M3 Inline Context Menu
+    // Crisp M3 Inline Context Menu
     Rectangle {
         id: contextMenu
         visible: root.menuTileId !== ""
         x: root.menuX
         y: root.menuY
-        width: WidgetStore.s(206)
+        width: WidgetStore.s(210)
         height: menuCol.implicitHeight + WidgetStore.s(14)
         z: 200
         radius: WidgetStore.s(16)
         color: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
+        border.width: root.px1
+        border.color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.45)
 
         Column {
             id: menuCol

@@ -16,7 +16,12 @@ PanelWindow {
     readonly property real edgeGap: WidgetStore.s(14)
     readonly property real topGap: WidgetStore.s(54)
     readonly property real bottomGap: WidgetStore.s(14)
-    readonly property real sidebarWidth: Math.min(WidgetStore.s(488), Math.max(WidgetStore.s(380), width * 0.36))
+    readonly property real px1: WidgetStore.uiScale
+    readonly property real sidebarWidth: snapPx(Math.min(WidgetStore.s(548), Math.max(WidgetStore.s(420), width * 0.40)))
+
+    function snapPx(v) {
+        return Math.round(Number(v) * WidgetStore.qtScale) * WidgetStore.uiScale;
+    }
 
     property bool panelPresented: false
     property bool presentationOpen: false
@@ -45,7 +50,7 @@ PanelWindow {
         }
         revealAnim.from = revealProgress;
         revealAnim.to = target;
-        revealAnim.duration = Math.round((presentationOpen ? 300 : 230) * Math.abs(target - revealProgress));
+        revealAnim.duration = Math.round((presentationOpen ? 290 : 220) * Math.abs(target - revealProgress));
         revealAnim.easing.bezierCurve = presentationOpen
             ? [0.16, 1.0, 0.3, 1.0, 1, 1]
             : [0.25, 0.85, 0.35, 1.0, 1, 1];
@@ -165,13 +170,13 @@ PanelWindow {
             onClicked: WidgetStore.closeSidebar()
         }
 
-        // Borderless M3 / Matushell-style Floating Side Drawer
+        // Crisp Material 3 Floating Widget Gallery Drawer
         Item {
             id: sheetFrame
-            x: root.onLeft ? root.edgeGap : Math.max(root.edgeGap, root.width - width - root.edgeGap)
-            y: root.topGap
+            x: root.snapPx(root.onLeft ? root.edgeGap : Math.max(root.edgeGap, root.width - width - root.edgeGap))
+            y: root.snapPx(root.topGap)
             width: root.sidebarWidth
-            height: Math.max(WidgetStore.s(360), root.height - root.topGap - root.bottomGap)
+            height: root.snapPx(Math.max(WidgetStore.s(360), root.height - root.topGap - root.bottomGap))
             opacity: Math.max(0, Math.min(1, root.revealProgress * 1.6))
 
             transform: Translate {
@@ -182,8 +187,10 @@ PanelWindow {
             Rectangle {
                 id: sheetSurface
                 anchors.fill: parent
-                radius: WidgetStore.s(26)
+                radius: WidgetStore.s(24)
                 color: Theme.m3.surface_container_low ?? Theme.colors.bg
+                border.width: root.px1
+                border.color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.45)
                 clip: true
 
                 MouseArea {
@@ -210,26 +217,28 @@ PanelWindow {
                         Rectangle {
                             Layout.preferredWidth: WidgetStore.s(36)
                             Layout.preferredHeight: WidgetStore.s(36)
-                            radius: WidgetStore.s(12)
+                            radius: WidgetStore.s(11)
                             color: Theme.m3.primary_container ?? Theme.colors.card_bg
+                            border.width: root.px1
+                            border.color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.28)
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "widgets"
                                 iconSize: WidgetStore.si(18)
                                 fill: 1
-                                color: Theme.m3.primary ?? Theme.accent
+                                color: Theme.m3.on_primary_container ?? (Theme.m3.primary ?? Theme.accent)
                             }
                         }
 
                         Column {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            spacing: WidgetStore.s(1)
+                            spacing: WidgetStore.s(2)
 
                             Text {
                                 width: parent.width
-                                text: "Widgets"
+                                text: "Widget Gallery"
                                 color: Theme.m3.on_surface ?? Theme.colors.text_primary
                                 font.family: "Google Sans Flex"
                                 font.pixelSize: WidgetStore.si(16)
@@ -238,14 +247,28 @@ PanelWindow {
                                 renderType: Text.NativeRendering
                             }
 
-                            Text {
-                                width: parent.width
-                                text: WidgetStore.desktopCardIds.length + " on desktop · " + WidgetStore.cardIds.length + " available"
-                                color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                                font.family: "Google Sans Flex"
-                                font.pixelSize: WidgetStore.si(10.5)
-                                elide: Text.ElideRight
-                                renderType: Text.NativeRendering
+                            Row {
+                                spacing: WidgetStore.s(6)
+
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: WidgetStore.s(6)
+                                    height: WidgetStore.s(6)
+                                    radius: width / 2
+                                    color: WidgetStore.desktopCardIds.length > 0
+                                        ? (Theme.m3.primary ?? Theme.accent)
+                                        : Qt.alpha(Theme.m3.on_surface_variant ?? "#9999aa", 0.5)
+                                }
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: WidgetStore.desktopCardIds.length + " pinned · " + WidgetStore.cardIds.length + " widgets"
+                                    color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
+                                    font.family: "Google Sans Flex"
+                                    font.pixelSize: WidgetStore.si(11)
+                                    font.weight: Font.Medium
+                                    renderType: Text.NativeRendering
+                                }
                             }
                         }
 
@@ -274,12 +297,18 @@ PanelWindow {
                         }
                     }
 
-                    // Search Pill
+                    // Crisp Search Pill
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: WidgetStore.s(36)
                         radius: height / 2
                         color: Theme.m3.surface_container ?? Theme.colors.card_bg
+                        border.width: root.px1
+                        border.color: searchBox.activeFocus
+                            ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.72)
+                            : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.32)
+
+                        Behavior on border.color { ColorAnimation { duration: 140 } }
 
                         MouseArea {
                             anchors.fill: parent
@@ -310,6 +339,8 @@ PanelWindow {
                                 color: Theme.m3.on_surface ?? Theme.colors.text_primary
                                 font.family: "Google Sans Flex"
                                 font.pixelSize: WidgetStore.si(12)
+                                font.weight: Font.Medium
+                                renderType: TextInput.NativeRendering
                                 clip: true
                                 verticalAlignment: TextInput.AlignVCenter
                                 onTextChanged: root.searchQuery = text.trim()
@@ -322,6 +353,7 @@ PanelWindow {
                                     color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
                                     opacity: 0.72
                                     font: parent.font
+                                    renderType: Text.NativeRendering
                                 }
                             }
 
@@ -364,7 +396,7 @@ PanelWindow {
                         Row {
                             id: filterRow
                             height: parent.height
-                            spacing: WidgetStore.s(5)
+                            spacing: WidgetStore.s(6)
 
                             Repeater {
                                 model: Catalog.sources()
@@ -373,26 +405,32 @@ PanelWindow {
                                     required property var modelData
                                     readonly property bool sel: root.activeSource === modelData.id
 
-                                    height: WidgetStore.s(26)
-                                    width: pillRow.implicitWidth + WidgetStore.s(14)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: WidgetStore.s(28)
+                                    width: root.snapPx(pillRow.implicitWidth + WidgetStore.s(18))
                                     radius: height / 2
                                     color: sel
                                         ? (Theme.m3.primary ?? Theme.accent)
                                         : (pillMouse.containsMouse
                                             ? (Theme.m3.surface_container_high ?? Theme.colors.hover_bg)
                                             : (Theme.m3.surface_container ?? Theme.colors.card_bg))
+                                    border.width: root.px1
+                                    border.color: sel
+                                        ? (Theme.m3.primary ?? Theme.accent)
+                                        : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", pillMouse.containsMouse ? 0.55 : 0.28)
 
                                     Behavior on color { ColorAnimation { duration: 120 } }
+                                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
                                     Row {
                                         id: pillRow
                                         anchors.centerIn: parent
-                                        spacing: WidgetStore.s(4)
+                                        spacing: WidgetStore.s(5)
 
                                         MaterialSymbol {
                                             anchors.verticalCenter: parent.verticalCenter
                                             text: modelData.icon
-                                            iconSize: WidgetStore.si(12)
+                                            iconSize: WidgetStore.si(13)
                                             fill: sel ? 1 : 0
                                             color: sel
                                                 ? (Theme.m3.on_primary ?? "#101014")
@@ -406,7 +444,7 @@ PanelWindow {
                                                 ? (Theme.m3.on_primary ?? "#101014")
                                                 : (Theme.m3.on_surface ?? Theme.colors.text_primary)
                                             font.family: "Google Sans Flex"
-                                            font.pixelSize: WidgetStore.si(10)
+                                            font.pixelSize: WidgetStore.si(11)
                                             font.weight: sel ? Font.Bold : Font.Medium
                                             renderType: Text.NativeRendering
                                         }
@@ -425,6 +463,13 @@ PanelWindow {
                                 }
                             }
                         }
+                    }
+
+                    // Hairline divider separating chrome from gallery
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.px1
+                        color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.26)
                     }
 
                     // Lazy Categorized Vertical Widget Gallery (unmounted cleanly when drawer closes)
@@ -464,6 +509,14 @@ PanelWindow {
                 : (hbMouse.containsMouse
                     ? (Theme.m3.surface_container_highest ?? Theme.colors.hover_bg)
                     : (Theme.m3.surface_container ?? Theme.colors.card_bg)))
+        border.width: root.px1
+        border.color: danger
+            ? Qt.alpha(Theme.m3.error ?? "#ffb4ab", 0.35)
+            : (activeState
+                ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.45)
+                : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", hbMouse.containsMouse ? 0.50 : 0.28))
+
+        Behavior on color { ColorAnimation { duration: 120 } }
 
         MaterialSymbol {
             anchors.centerIn: parent
@@ -473,7 +526,7 @@ PanelWindow {
             color: danger
                 ? (Theme.m3.on_error_container ?? "#ffdada")
                 : (activeState
-                    ? (Theme.m3.primary ?? Theme.accent)
+                    ? (Theme.m3.on_primary_container ?? (Theme.m3.primary ?? Theme.accent))
                     : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary))
         }
 

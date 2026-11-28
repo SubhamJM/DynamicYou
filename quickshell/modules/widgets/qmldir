@@ -8,3 +8,4 @@ WidgetDesktopHost 1.0 WidgetDesktopHost.qml
 WidgetDrawerView 1.0 WidgetDrawerView.qml
 WidgetCardContent 1.0 WidgetCardContent.qml
 WidgetOptionsPanel 1.0 WidgetOptionsPanel.qml
+DesktopContextMenu 1.0 DesktopContextMenu.qml

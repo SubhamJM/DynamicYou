@@ -47,6 +47,7 @@ Singleton {
     signal layoutResetRequested()
     signal menuRequested(string cardId)
     signal desktopMenuRequested(real xPos, real yPos)
+    signal desktopMenuCloseRequested()
 
     FileView {
         id: storeFile
@@ -174,8 +175,17 @@ Singleton {
     }
 
     function openDesktopMenu(xPos, yPos) {
+        if (Number(xPos) <= -900) {
+            root.desktopMenuCloseRequested();
+            return "CLOSED";
+        }
         root.desktopMenuRequested(Number(xPos) || 0, Number(yPos) || 0);
         return "OK";
+    }
+
+    function closeDesktopMenu() {
+        root.desktopMenuCloseRequested();
+        return "CLOSED";
     }
 
     Process {

@@ -32,7 +32,7 @@ APPS = {
     "gtk": "GTK application colors",
     "starship": "the current Starship prompt palette",
     "qt6ct": "a selectable qt6ct palette",
-    "kde": "a selectable KDE color scheme",
+    "kde": "KDE application colors and matching Papirus folder icons",
     "vesktop": "a selectable Vesktop theme",
     "vscode": "VS Code / VSCodium Matugen color caches",
 }
@@ -260,11 +260,15 @@ def install_deps(selected, browser):
             "kitty yazi playerctl brightnessctl pamixer cava upower networkmanager iw bluez bluez-utils "
             "pipewire pipewire-pulse wireplumber power-profiles-daemon gnome-keyring libsecret dnsmasq iptables "
             "dbus jq socat libnotify python python-dbus python-gobject python-pillow qrencode "
-            "noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inter-font fastfetch fish").split()
+            "papirus-icon-theme noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inter-font fastfetch fish").split()
     if runtime_version("qs") < (0, 3, 2):
         core.append("quickshell")
     if selected["starship"]:
         core.append("starship")
+    if selected["kde"]:
+        core.append("plasma-integration")
+    if selected["qt6ct"]:
+        core.append("qt6ct")
     if not browser and not any(shutil.which(name) for name in ("zen-browser", "helium-browser", "firefox")):
         core.append("firefox")
     needed = [pkg for pkg in core if not package_installed(pkg) or

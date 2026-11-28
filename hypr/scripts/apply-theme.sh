@@ -29,6 +29,12 @@ if [[ -d "$THEMES_DIR/$TARGET_THEME" ]]; then
     ln -sf "$THEMES_DIR/$TARGET_THEME/starship-colors.toml" "$ACTIVE_DIR/starship-colors.toml"
     python3 "$CONFIG_DIR/quickshell/scripts/theme_palette.py" \
         "$THEMES_DIR/$TARGET_THEME/quickshell-colors.json" "$ACTIVE_DIR/material.json" || exit 1
+    if ! python3 "$CONFIG_DIR/hypr/scripts/apply-kde-theme.py"; then
+        printf 'Could not update the KDE theme.\n' >&2
+    fi
+    if ! python3 "$CONFIG_DIR/hypr/scripts/apply-zen-theme.py"; then
+        printf 'Could not update the Zen theme.\n' >&2
+    fi
 
     if [[ -f "$THEMES_DIR/$TARGET_THEME/gtk-colors.css" ]]; then
         mkdir -p "$CONFIG_DIR/gtk-3.0" "$CONFIG_DIR/gtk-4.0"

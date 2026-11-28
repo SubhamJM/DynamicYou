@@ -1,6 +1,8 @@
 hl.on("hyprland.start", function()
     hl.exec_cmd([=[command -v dbus-update-activation-environment >/dev/null && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE]=])
     hl.exec_cmd([=[bash "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/init-wallpaper.sh"]=])
+    hl.exec_cmd([=[python3 "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/apply-kde-theme.py"]=])
+    hl.exec_cmd([=[python3 "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/apply-zen-theme.py"]=])
     hl.exec_cmd([=[env MALLOC_ARENA_MAX=2 MALLOC_TRIM_THRESHOLD_=131072 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/scripts/launch-quickshell.py" -n]=])
     hl.exec_cmd("systemctl --user start hyprpolkitagent")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
