@@ -32,14 +32,12 @@ Item {
         anchors.fill: parent
         spacing: 12
 
-        // Left: Stopwatch Ring Card
+        // Left: Borderless Stopwatch Ring Card
         Rectangle {
             Layout.preferredWidth: 336
             Layout.fillHeight: true
-            radius: 18
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 20
+            color: Theme.surfaceHigh
 
             Item {
                 id: dial
@@ -193,14 +191,12 @@ Item {
             }
         }
 
-        // Right: Laps Card
+        // Right: Borderless Laps Card
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: 18
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 20
+            color: Theme.surfaceHigh
 
             CalText {
                 id: lapHead
@@ -267,9 +263,7 @@ Item {
                     width: ListView.view.width
                     height: 44
                     radius: 12
-                    color: Qt.alpha(Theme.text, 0.055)
-                    border.width: 1
-                    border.color: Qt.alpha(Theme.text, 0.06)
+                    color: Theme.surfaceHighest
 
                     CalText {
                         x: 14

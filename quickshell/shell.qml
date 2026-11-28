@@ -31,6 +31,7 @@ ShellRoot {
     id: root
 
     LiveWallpaperController { id: liveWallpaperController }
+    ScreenSnip { id: screenSnip }
 
     readonly property alias hotspot: hotspotController
     readonly property alias notepadStore: notesData
@@ -62,26 +63,32 @@ ShellRoot {
     property string recAudioSourceId: ""
     property string recAudioSourceName: "Default Microphone"
 
-    // Fullscreen auto-hide & top-edge hover reveal state (true fullscreen mode 2 only, not maximized mode 1)
-    property bool isWindowFullscreen: false
+    // Fullscreen auto-hide state (true fullscreen mode 2 only, reactive via HyprlandData)
+    readonly property bool isWindowFullscreen: HyprlandData.windowListLoaded
+        ? HyprlandData.monitorHasTrueFullscreenWindow(
+            Hyprland.focusedMonitor?.name ?? (panel.screen ? String(panel.screen.name) : "")
+        )
+        : false
     property bool fullscreenHoverRevealed: false
     property bool fullscreenCheckPending: false
 
     onIsWindowFullscreenChanged: {
-        if (!root.isWindowFullscreen) {
-            root.fullscreenHoverRevealed = false;
+        root.fullscreenHoverRevealed = false;
+        if (root.isWindowFullscreen) {
+            root.isWorkspacePeeking = false;
+            root.isNotifPopupActive = false;
+            root.settingsOpen = false;
+            if (typeof WidgetStore !== "undefined") {
+                WidgetStore.closeSidebar();
+                WidgetStore.closeDesktopMenu();
+            }
+            if (root.activeMode !== "idle") root.collapseToIdle();
         }
     }
 
-    readonly property bool notchHidden: {
-        if (!root.isWindowFullscreen) return false;
-        if (root.activeMode !== "idle" && root.activeMode !== "hover") return false;
-        if (root.fullscreenHoverRevealed) return false;
-        if (root.isNotifPopupActive) return false;
-        if (root.isScreenshotIslandActive) return false;
-        if (root.isWorkspacePeeking) return false;
-        return true;
-    }
+    readonly property bool notchHidden: root.isWindowFullscreen
+        && root.activeMode === "idle"
+        && !root.isScreenshotIslandActive
 
     Timer {
         id: screenRecordTimer
@@ -722,6 +729,10 @@ for f, mtime in files_with_mtime:
                 root.wifiMod.activeTab = "wifi";
                 root.wifiMod.refreshStatus();
             }
+        } else if (activeMode === "bluetooth") {
+            if (root.btMod && typeof root.btMod.refreshStatus === "function") {
+                root.btMod.refreshStatus();
+            }
         }
 
         if (activeMode === "launcher") {
@@ -921,50 +932,10 @@ for f, mtime in files_with_mtime:
         }
     }
 
-    Timer {
-        id: fullscreenCheckDebounce
-        interval: 60
-        repeat: false
-        onTriggered: {
-            if (!checkFullscreenProc.running) {
-                checkFullscreenProc.running = true;
-            } else {
-                root.fullscreenCheckPending = true;
-            }
-        }
-    }
-
     function triggerFullscreenCheck() {
-        fullscreenCheckDebounce.restart();
-    }
-
-    Process {
-        id: checkFullscreenProc
-        running: false
-        command: ["sh", Quickshell.env("HOME") + "/.config/quickshell/scripts/check_fullscreen.sh"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var isFull = (this.text.trim() === "1");
-                root.isWindowFullscreen = isFull;
-                if (!isFull) {
-                    root.fullscreenHoverRevealed = false;
-                }
-                if (root.fullscreenCheckPending) {
-                    root.fullscreenCheckPending = false;
-                    checkFullscreenProc.running = true;
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: fullscreenPollTimer
-        interval: 30000 // Fallback poll; Hyprland events handle real-time changes
-        running: true
-        repeat: true
-        triggeredOnStart: false
-        onTriggered: {
-            root.triggerFullscreenCheck();
+        if (typeof HyprlandData !== "undefined") {
+            HyprlandData.updateMonitors();
+            HyprlandData.updateWindowList();
         }
     }
 
@@ -974,7 +945,11 @@ for f, mtime in files_with_mtime:
             var evName = (typeof event === "object" && event !== null) ? event.name : event;
             var evData = (typeof event === "object" && event !== null) ? (event.data || "") : "";
 
-            if (evName === "fullscreen" || evName === "workspace" || evName === "focusedmon" || evName === "workspacev2" || evName === "activewindow" || evName === "openwindow" || evName === "closewindow") {
+            if (evName === "fullscreen" || evName === "workspace" || evName === "focusedmon"
+                || evName === "workspacev2" || evName === "activewindow" || evName === "activewindowv2"
+                || evName === "activespecial" || evName === "activespecialv2"
+                || evName === "openwindow" || evName === "closewindow"
+                || evName === "movewindow" || evName === "movewindowv2") {
                 root.triggerFullscreenCheck();
             }
 
@@ -1282,7 +1257,10 @@ for f, mtime in files_with_mtime:
                  + " overviewOpen=" + (typeof GlobalStates !== "undefined" ? GlobalStates.overviewOpen : "null")
                  + " realResults=" + (sm && sm.searchWidget ? sm.searchWidget.realResultCount : "null")
                  + " arCount=" + (ar ? ar.count : "null")
-                 + " arIndex=" + (ar ? ar.currentIndex : "null");
+                 + " arIndex=" + (ar ? ar.currentIndex : "null")
+                 + " isFs=" + root.isWindowFullscreen
+                 + " nh=" + root.notchHidden
+                 + " hw=" + HyprlandData.monitorHasWindow(Hyprland.focusedMonitor?.name ?? "");
         }
         function activate(): string {
             if (root.activeMode === "clipboard" && root.clipMod && typeof root.clipMod.activateSelected === "function") {
@@ -1442,6 +1420,10 @@ for f, mtime in files_with_mtime:
             root.triggerScreenshotHub(filePath);
             return "OK";
         }
+        function showSnip(filePath: string, outputName: string): string {
+            screenSnip.open(filePath, outputName);
+            return "OK";
+        }
         function toggleDnd(): string {
             root.dndEnabled = !root.dndEnabled;
             return root.dndEnabled ? "DND Enabled" : "DND Disabled";
@@ -1480,16 +1462,17 @@ for f, mtime in files_with_mtime:
         }
     }
 
-    // Permanent top reservation for Hyprland window tiling (32px)
+    // Permanent top reservation for Hyprland window tiling (cleared completely during fullscreen)
     PanelWindow {
         id: reservationPanel
+        visible: !root.isWindowFullscreen
         anchors {
             top: true
             left: true
             right: true
         }
-        implicitHeight: NotchConfig.baseExclusiveZone
-        exclusiveZone: NotchConfig.baseExclusiveZone
+        implicitHeight: root.isWindowFullscreen ? 0 : NotchConfig.baseExclusiveZone
+        exclusiveZone: root.isWindowFullscreen ? 0 : NotchConfig.baseExclusiveZone
         color: "transparent"
         WlrLayershell.namespace: "notch-reserve"
         mask: Region {}
@@ -1510,6 +1493,7 @@ for f, mtime in files_with_mtime:
     // Main Notch Panel
     PanelWindow {
         id: panel
+        visible: !(root.notchHidden && !notchContainer.visible && !floatingRightBubbles.visible && !mediaBubble.visible)
         anchors {
             top: true
             bottom: true
@@ -1520,6 +1504,8 @@ for f, mtime in files_with_mtime:
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "quickshell"
+
+        Item { id: emptyMaskItem; width: 0; height: 0 }
 
         Item {
             id: fullMaskArea
@@ -1554,7 +1540,7 @@ for f, mtime in files_with_mtime:
                     return fullMaskArea;
                 }
                 if (root.notchHidden) {
-                    return topHoverSensorArea;
+                    return emptyMaskItem;
                 }
                 if (root.activeMode === "hover") {
                     return hoverMaskArea;
@@ -1563,11 +1549,11 @@ for f, mtime in files_with_mtime:
             }
 
             Region {
-                item: (root.isScreenRecording && recordingBubble.visible) ? recordingBubble : null
+                item: (!root.notchHidden && root.isScreenRecording && recordingBubble.visible) ? recordingBubble : null
             }
 
             Region {
-                item: mediaBubble.mediaActive ? mediaBubble : null
+                item: (!root.notchHidden && mediaBubble.mediaActive) ? mediaBubble : null
             }
         }
 
@@ -1577,30 +1563,18 @@ for f, mtime in files_with_mtime:
             ? WlrKeyboardFocus.Exclusive
             : WlrKeyboardFocus.None
 
-        // Top hover sensor mouse trigger for fullscreen mode
+        // Top hover sensor disabled in fullscreen so shell disappears completely
         MouseArea {
             id: topHoverSensorMouse
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.max(notch.width + (root.cornerCurveRadius * 2) + 160, 520)
             height: 4
-            hoverEnabled: true
+            hoverEnabled: false
             acceptedButtons: Qt.NoButton
             cursorShape: Qt.ArrowCursor
             z: 2
-            enabled: root.isWindowFullscreen
-
-            onEntered: {
-                fullscreenHideTimer.stop();
-                if (root.isWindowFullscreen) {
-                    root.fullscreenHoverRevealed = true;
-                }
-            }
-            onExited: {
-                if (root.isWindowFullscreen && (root.activeMode === "idle" || root.activeMode === "hover")) {
-                    fullscreenHideTimer.restart();
-                }
-            }
+            enabled: false
         }
 
         Timer {
@@ -1645,7 +1619,7 @@ for f, mtime in files_with_mtime:
             width: notch.width + (root.cornerCurveRadius * 2)
             height: notch.height
 
-            y: root.notchHidden ? (-notchContainer.height - root.cornerCurveRadius - 8) : 0
+            y: root.notchHidden ? (-notchContainer.height - root.cornerCurveRadius - 32) : 0
             opacity: root.notchHidden ? 0.0 : 1.0
             visible: opacity > 0.001
 
@@ -1994,7 +1968,7 @@ for f, mtime in files_with_mtime:
                                 }
                             } else if (root.loadedExpandedMode === "theme") {
                                 item.notch = root;
-                            } else if (root.loadedExpandedMode === "wifi") {
+                            } else if (root.loadedExpandedMode === "wifi" || root.loadedExpandedMode === "bluetooth") {
                                 if (typeof item.refreshStatus === "function") item.refreshStatus();
                             } else if (root.loadedExpandedMode === "utility") {
                                 if (root.requestedUtilitySection !== "") item.activeSection = root.requestedUtilitySection;
@@ -2084,6 +2058,10 @@ for f, mtime in files_with_mtime:
             anchors.top: parent.top
             anchors.topMargin: root.notchHidden ? -50 : 4
             spacing: 6
+            opacity: root.notchHidden ? 0.0 : 1.0
+            visible: opacity > 0.001
+
+            Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
             Behavior on anchors.topMargin {
                 NumberAnimation {
@@ -2693,6 +2671,11 @@ for f, mtime in files_with_mtime:
                 }
             }
         }
+    }
+
+    WindowBackdrop {
+        id: windowBackdrop
+        notchRoot: root
     }
 
     WidgetDesktopHost {

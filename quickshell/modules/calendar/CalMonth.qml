@@ -260,7 +260,7 @@ Item {
                         width: month.cell
                         height: month.cell
 
-                        // Clean Matushell circular pill (today = filled accent, selected = tonal outline)
+                        // Clean circular pill (today = filled accent, selected = soft tonal)
                         Rectangle {
                             anchors.centerIn: parent
                             width: month.cell - 5
@@ -269,10 +269,8 @@ Item {
                             color: dayCell.modelData.today
                                 ? Theme.accent
                                 : (dayCell.isSelected
-                                    ? Qt.alpha(Theme.accent, 0.18)
+                                    ? Qt.alpha(Theme.accent, 0.22)
                                     : (dayMouse.containsMouse ? Qt.alpha(Theme.text, 0.08) : "transparent"))
-                            border.width: dayCell.isSelected && !dayCell.modelData.today ? 1 : 0
-                            border.color: Qt.alpha(Theme.accent, 0.55)
                             scale: dayMouse.pressed ? 0.92 : 1.0
 
                             Behavior on color { ColorAnimation { duration: 110 } }

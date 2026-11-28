@@ -54,121 +54,105 @@ FocusScope {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
+        anchors.margins: 16
+        anchors.topMargin: 10
         spacing: 12
 
-        // Matushell Header Bar: Back Pill + Segmented Tab Pill Switcher
-        RowLayout {
+        // Clean Inline Material 3 Tab Strip with sliding indicator
+        Item {
+            id: tabBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            spacing: 10
+            Layout.preferredHeight: 42
 
-            Rectangle {
-                Layout.preferredWidth: 36
-                Layout.preferredHeight: 36
-                radius: 18
-                color: backM.pressed ? Qt.alpha(Theme.text, 0.16) : (backM.containsMouse ? Qt.alpha(Theme.text, 0.10) : Qt.alpha(Theme.text, 0.06))
-                border.width: 1
-                border.color: Qt.alpha(Theme.text, 0.07)
+            readonly property real segW: width / Math.max(1, calRoot.tabs.length)
+            property real currentLabelW: 64
 
-                Behavior on color { ColorAnimation { duration: 120 } }
+            Row {
+                id: tabRow
+                anchors.fill: parent
 
-                CalIcon {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    font.pixelSize: 17
-                    filled: backM.containsMouse
-                    color: backM.containsMouse ? Theme.text : Qt.alpha(Theme.text, 0.78)
-                }
+                Repeater {
+                    model: calRoot.tabs
 
-                MouseArea {
-                    id: backM
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (typeof root !== "undefined") root.collapseToIdle();
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        readonly property bool active: calRoot.tab === modelData.key
+
+                        width: tabBar.segW
+                        height: tabBar.height
+
+                        onActiveChanged: if (active) tabBar.currentLabelW = tabContent.implicitWidth
+                        Component.onCompleted: if (active) tabBar.currentLabelW = tabContent.implicitWidth
+
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.bottomMargin: 2
+                            radius: 10
+                            color: tabM.pressed
+                                ? Qt.alpha(active ? Theme.accent : Theme.text, 0.12)
+                                : (tabM.containsMouse ? Qt.alpha(active ? Theme.accent : Theme.text, 0.06) : "transparent")
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                        }
+
+                        Row {
+                            id: tabContent
+                            anchors.centerIn: parent
+                            anchors.verticalCenterOffset: -1
+                            spacing: 7
+
+                            CalIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.icon
+                                font.pixelSize: 18
+                                filled: active
+                                color: active ? Theme.accent : (tabM.containsMouse ? Theme.text : Theme.subtext)
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+
+                            CalText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                font.pixelSize: 13
+                                weightAxis: active ? 480 : 420
+                                color: active ? Theme.accent : (tabM.containsMouse ? Theme.text : Theme.subtext)
+                                text: modelData.label
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                            }
+                        }
+
+                        MouseArea {
+                            id: tabM
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: calRoot.showTab(modelData.key)
+                        }
                     }
                 }
             }
 
             Rectangle {
-                id: tabBarBg
-                Layout.fillWidth: true
-                Layout.preferredHeight: 36
-                radius: 18
-                color: Qt.alpha(Theme.text, 0.06)
-                border.width: 1
-                border.color: Qt.alpha(Theme.text, 0.07)
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 1
+                color: Qt.alpha(Theme.text, 0.10)
+            }
 
-                readonly property real segW: (width - 6) / Math.max(1, calRoot.tabs.length)
+            Rectangle {
+                id: tabIndicator
+                readonly property real indW: Math.max(28, tabBar.currentLabelW)
+                anchors.bottom: parent.bottom
+                height: 3
+                width: indW
+                x: calRoot.tabIndex * tabBar.segW + (tabBar.segW - indW) / 2
+                topLeftRadius: 3
+                topRightRadius: 3
+                color: Theme.accent
 
-                // Sliding Accent Pill Indicator
-                Rectangle {
-                    x: 3 + calRoot.tabIndex * tabBarBg.segW
-                    y: 3
-                    width: tabBarBg.segW
-                    height: parent.height - 6
-                    radius: 15
-                    color: Theme.accent
-
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: 210
-                            easing.type: Easing.OutCubic
-                        }
-                    }
+                Behavior on x {
+                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                 }
-
-                Row {
-                    anchors.fill: parent
-                    anchors.margins: 3
-
-                    Repeater {
-                        model: calRoot.tabs
-
-                        delegate: Item {
-                            required property var modelData
-                            required property int index
-                            readonly property bool active: calRoot.tab === modelData.key
-
-                            width: tabBarBg.segW
-                            height: tabBarBg.height - 6
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                CalIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: modelData.icon
-                                    font.pixelSize: 16
-                                    filled: active
-                                    color: active ? Theme.onAccent : (tabM.containsMouse ? Theme.text : Theme.subtext)
-
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
-
-                                CalText {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    font.pixelSize: 12
-                                    weightAxis: active ? 660 : 540
-                                    color: active ? Theme.onAccent : (tabM.containsMouse ? Theme.text : Theme.subtext)
-                                    text: modelData.label
-
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                }
-                            }
-
-                            MouseArea {
-                                id: tabM
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: calRoot.showTab(modelData.key)
-                            }
-                        }
-                    }
+                Behavior on width {
+                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                 }
             }
         }

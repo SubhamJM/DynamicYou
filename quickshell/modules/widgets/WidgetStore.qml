@@ -94,7 +94,7 @@ Singleton {
 
     function syncTelemetryHold() {
         WidgetTelemetry.hold("sidebar", root.sidebarOpen);
-        WidgetTelemetry.hold("desktop", root.desktopCardIds.length > 0);
+        WidgetTelemetry.hold("desktop", false);
     }
 
     Component.onCompleted: {

@@ -4,6 +4,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import "../../"
+import qs.services
 import "../"
 import "./cards"
 import "WidgetCatalog.js" as Catalog
@@ -83,8 +84,31 @@ Variants {
         }
 
         readonly property bool desktopRightClickEnabled: (typeof Prefs === "undefined") || Prefs.desktopMenu !== false
-        readonly property bool hostActive: !(win.notchRoot && win.notchRoot.isWindowFullscreen && !win.notchRoot.fullscreenHoverRevealed && !WidgetStore.sidebarOpen && win.menuTileId === "" && !win.desktopMenuOpen)
-        visible: desktopRightClickEnabled || win.desktopIds.length > 0 || win.ownsExternalGhost || win.desktopMenuOpen || win.menuTileId !== ""
+        readonly property bool isFullscreen: !!(win.notchRoot && win.notchRoot.isWindowFullscreen)
+        readonly property bool workspaceHasWindow: (typeof HyprlandData !== "undefined" && HyprlandData.windowListLoaded)
+            ? HyprlandData.monitorHasWindow(win.screenKey)
+            : false
+        readonly property bool hostActive: !isFullscreen
+            && (!workspaceHasWindow || WidgetStore.sidebarOpen || win.menuTileId !== "" || win.desktopMenuOpen)
+        readonly property bool shouldPollTelemetry: visible && hostActive && win.desktopIds.length > 0
+
+        onShouldPollTelemetryChanged: {
+            WidgetTelemetry.hold("desktop:" + win.screenKey, win.shouldPollTelemetry);
+        }
+        Component.onCompleted: {
+            WidgetTelemetry.hold("desktop:" + win.screenKey, win.shouldPollTelemetry);
+        }
+        Component.onDestruction: {
+            WidgetTelemetry.hold("desktop:" + win.screenKey, false);
+        }
+        onIsFullscreenChanged: {
+            if (isFullscreen) {
+                win.menuTileId = "";
+                win.desktopMenuOpen = false;
+            }
+        }
+
+        visible: !isFullscreen && (desktopRightClickEnabled || win.desktopIds.length > 0 || win.ownsExternalGhost || win.desktopMenuOpen || win.menuTileId !== "")
         screen: modelData
         WlrLayershell.layer: (win.menuTileId !== "" || WidgetStore.desktopKeyboardFocus) ? WlrLayer.Top : WlrLayer.Bottom
         WlrLayershell.namespace: "quickshell-desktop-widgets"

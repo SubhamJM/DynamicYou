@@ -402,7 +402,7 @@ Item {
                     text: root.discovering || root.scanAdapter || !root.scanAttempted
                         ? BtUi.I18n.tr("Put your device in pairing mode to find it here.")
                         : BtUi.I18n.tr("Put your device in pairing mode, then scan again.")
-                    color: BtUi.Theme.outlineStrong
+                    color: BtUi.Theme.alpha(BtUi.Theme.text, 0.50)
                     font.family: BtUi.Theme.fontFamily
                     font.pixelSize: BtUi.Theme.fs(10)
                     font.variableAxes: BtUi.Theme.axes(BtUi.Theme.fs(10), 420, 0)
@@ -670,7 +670,7 @@ Item {
                         height: parent.height
                         radius: BtUi.Theme.dp(999)
                         color: busy 
-                            ? BtUi.Theme.withBlur(BtUi.Theme.outlineStrong) 
+                            ? BtUi.Theme.alpha(BtUi.Theme.text, 0.14)
                             : (devItem.isConnected 
                                 ? (primaryArea.containsMouse ? Qt.darker(BtUi.Theme.accent, 1.15) : BtUi.Theme.accent) 
                                 : (primaryArea.containsMouse ? BtUi.Theme.accentHover : BtUi.Theme.accent))
@@ -691,7 +691,7 @@ Item {
 
                                 return devItem.isConnected ? BtUi.I18n.tr("Disconnect") : BtUi.I18n.tr("Connect");
                             }
-                            color: primaryBtn.busy ? BtUi.Theme.subtext : (BtUi.Theme.fgPrimary ?? "#000000")
+                            color: primaryBtn.busy ? BtUi.Theme.subtext : BtUi.Theme.cOnPrimary
                             font.family: BtUi.Theme.fontFamily
                             font.bold: true
                             font.pixelSize: BtUi.Theme.fs(12)
@@ -835,7 +835,7 @@ Item {
                                 visible: devItem.modelData.trusted
                                 name: "check"
                                 size: BtUi.Theme.dp(12)
-                                color: BtUi.Theme.on_primary ?? "#000000"
+                                color: BtUi.Theme.cOnPrimary
                             }
 
                             MouseArea {
@@ -888,7 +888,7 @@ Item {
                                 visible: devItem.modelData.wakeAllowed
                                 name: "check"
                                 size: BtUi.Theme.dp(12)
-                                color: BtUi.Theme.on_primary ?? "#000000"
+                                color: BtUi.Theme.cOnPrimary
                             }
 
                             MouseArea {

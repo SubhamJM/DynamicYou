@@ -130,15 +130,13 @@ Item {
         anchors.fill: parent
         spacing: 12
 
-        // Left: Main Countdown Dial Card
+        // Left: Borderless Main Countdown Dial Card
         Rectangle {
             id: dialCard
             Layout.preferredWidth: 304
             Layout.fillHeight: true
-            radius: 18
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 20
+            color: Theme.surfaceHigh
 
             CalText {
                 x: 18
@@ -218,9 +216,7 @@ Item {
                         width: presetLabel.implicitWidth + 14
                         height: 26
                         radius: 13
-                        color: active ? Qt.alpha(Theme.accent, 0.18) : (pMouse.containsMouse ? Qt.alpha(Theme.text, 0.10) : Qt.alpha(Theme.text, 0.06))
-                        border.width: 1
-                        border.color: active ? Qt.alpha(Theme.accent, 0.55) : Qt.alpha(Theme.text, 0.06)
+                        color: active ? Theme.primaryContainer : (pMouse.containsMouse ? Qt.alpha(Theme.text, 0.10) : Theme.surfaceHighest)
 
                         Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -334,10 +330,8 @@ Item {
 
                 width: parent.width
                 height: pomo.tuning ? parent.height : 170
-                radius: 18
-                color: pomo.tinted ? Qt.alpha(Theme.accent, 0.11) : Qt.alpha(Theme.text, 0.055)
-                border.width: 1
-                border.color: pomo.tinted ? Qt.alpha(Theme.accent, 0.30) : Qt.alpha(Theme.text, 0.07)
+                radius: 20
+                color: pomo.tinted ? Theme.primaryContainer : Theme.surfaceHigh
 
                 Behavior on height { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 160 } }
@@ -492,9 +486,7 @@ Item {
                                     width: optTxt.implicitWidth + 18
                                     height: 26
                                     radius: 13
-                                    color: modelData.active ? Qt.alpha(Theme.accent, 0.18) : Qt.alpha(Theme.text, 0.06)
-                                    border.width: 1
-                                    border.color: modelData.active ? Qt.alpha(Theme.accent, 0.55) : Qt.alpha(Theme.text, 0.06)
+                                    color: modelData.active ? Theme.primaryContainer : Theme.surfaceHighest
 
                                     CalText {
                                         id: optTxt
@@ -617,10 +609,8 @@ Item {
                 width: parent.width
                 visible: opacity > 0
                 opacity: 1 - Math.min(1, pomo.t * 2.5)
-                radius: 18
-                color: Qt.alpha(Theme.text, 0.055)
-                border.width: 1
-                border.color: Qt.alpha(Theme.text, 0.07)
+                radius: 20
+                color: Theme.surfaceHigh
 
                 RowLayout {
                     id: listHead
@@ -692,9 +682,7 @@ Item {
                                 width: timerCol.width
                                 height: 50
                                 radius: 14
-                                color: isFocus ? Qt.alpha(Theme.accent, 0.14) : Qt.alpha(Theme.text, 0.055)
-                                border.width: 1
-                                border.color: isFocus ? Qt.alpha(Theme.accent, 0.35) : Qt.alpha(Theme.text, 0.06)
+                                color: isFocus ? Theme.primaryContainer : Theme.surfaceHighest
 
                                 MouseArea {
                                     anchors.fill: parent

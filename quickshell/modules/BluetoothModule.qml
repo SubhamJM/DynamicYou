@@ -11,13 +11,25 @@ FocusScope {
     property string activeTab: "bluetooth"
     property alias expandedKey: panel.expandedKey
     readonly property bool resizingRows: panel.resizingRows > 0
-    readonly property int calculatedHeight: Math.min(680, Math.max(220, header.height + scroller.anchors.topMargin + panel.implicitHeight + 24))
+    readonly property int calculatedHeight: Math.min(680, Math.max(220,
+        header.height + scroller.anchors.topMargin + panel.implicitHeight + 36))
 
     function refreshStatus() {
+        scroller.contentY = 0;
         Lucid.Bt.refresh();
     }
 
     function navigate(method, args = []) {
+        if (typeof root !== "undefined") {
+            if (method === "collapse" && typeof root.collapseToIdle === "function") {
+                root.collapseToIdle();
+                return;
+            }
+            if (method === "switchMode" && typeof root.switchMode === "function" && args.length > 0) {
+                root.switchMode(String(args[0]), false);
+                return;
+            }
+        }
         Quickshell.execDetached(["quickshell", "ipc", "--id", Quickshell.instanceId, "call", "notch", method].concat(args));
     }
 
@@ -63,7 +75,7 @@ FocusScope {
 
             width: scroller.width
             height: implicitHeight
-            active: bt.visible && bt.enabled && (typeof root === "undefined" || root.activeMode === "bluetooth")
+            active: typeof root === "undefined" || root.activeMode === "bluetooth"
             onCloseRequested: bt.navigate("collapse")
         }
     }

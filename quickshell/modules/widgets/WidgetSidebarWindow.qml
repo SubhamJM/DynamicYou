@@ -7,21 +7,36 @@ import "../../"
 import "../"
 import "WidgetCatalog.js" as Catalog
 
+// Calm, architectural iNiR-inspired Floating Horizontal Bottom Widget Shelf
 PanelWindow {
     id: root
 
     property var notchRoot: null
     readonly property bool requestedOpen: WidgetStore.sidebarOpen
-    readonly property bool onLeft: WidgetStore.sidebarSide === "left"
-    readonly property real edgeGap: WidgetStore.s(14)
-    readonly property real topGap: WidgetStore.s(54)
-    readonly property real bottomGap: WidgetStore.s(14)
-    readonly property real px1: WidgetStore.uiScale
-    readonly property real sidebarWidth: snapPx(Math.min(WidgetStore.s(548), Math.max(WidgetStore.s(420), width * 0.40)))
 
-    function snapPx(v) {
-        return Math.round(Number(v) * WidgetStore.qtScale) * WidgetStore.uiScale;
-    }
+    // iNiR architectural design tokens mapped directly from Theme.m3
+    readonly property color colLayer1: Theme.m3.surface_container_low ?? "#15151a"
+    readonly property color colLayer2: Theme.m3.surface_container ?? "#1c1c22"
+    readonly property color colLayer3: Theme.m3.surface_container_high ?? "#26262e"
+    readonly property color colLayerHover: Qt.alpha(Theme.m3.on_surface ?? "#ffffff", 0.08)
+    readonly property color colBorder: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.72)
+    readonly property color colBorderSubtle: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.38)
+    readonly property color colBorderFocus: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.75)
+    readonly property color colSelection: Qt.alpha(Theme.m3.primary_container ?? Theme.primaryContainer, 0.48)
+    readonly property color colText: Theme.m3.on_surface ?? Theme.text
+    readonly property color colTextMuted: Qt.alpha(Theme.m3.on_surface_variant ?? Theme.subtext, 0.80)
+    readonly property color colPrimary: Theme.m3.primary ?? Theme.accent
+    readonly property color colDanger: Theme.m3.error ?? Theme.error
+    readonly property color colDangerHover: Qt.alpha(Theme.m3.error_container ?? "#7f1d1d", 0.45)
+
+    readonly property int radLarge: 12
+    readonly property int radNormal: 8
+    readonly property int radSmall: 6
+    readonly property string uiFont: "Noto Sans"
+
+    readonly property real edgeMargin: 16
+    readonly property real shelfWidth: Math.round(Math.min(1260, Math.max(680, width - edgeMargin * 2)))
+    readonly property real shelfHeight: 274
 
     property bool panelPresented: false
     property bool presentationOpen: false
@@ -50,7 +65,7 @@ PanelWindow {
         }
         revealAnim.from = revealProgress;
         revealAnim.to = target;
-        revealAnim.duration = Math.round((presentationOpen ? 290 : 220) * Math.abs(target - revealProgress));
+        revealAnim.duration = Math.round((presentationOpen ? 260 : 190) * Math.abs(target - revealProgress));
         revealAnim.easing.bezierCurve = presentationOpen
             ? [0.16, 1.0, 0.3, 1.0, 1, 1]
             : [0.25, 0.85, 0.35, 1.0, 1, 1];
@@ -70,6 +85,9 @@ PanelWindow {
 
     function beginClosing() {
         if (WidgetDragSession.active) WidgetDragSession.cancel();
+        if (drawerLoader.item && typeof drawerLoader.item.closeContextMenu === "function") {
+            drawerLoader.item.closeContextMenu();
+        }
         presentationOpen = false;
         animateReveal();
     }
@@ -83,12 +101,11 @@ PanelWindow {
 
     function containsWindowPoint(winX, winY) {
         if (!panelPresented || revealProgress <= 0.02) return false;
-        const leftEdge = sheetFrame.x + sheetTranslate.x;
-        const topEdge = sheetFrame.y;
-        return winX >= leftEdge
-            && winX <= leftEdge + sheetFrame.width
+        const topEdge = shelfFrame.y + shelfTranslate.y;
+        return winX >= shelfFrame.x
+            && winX <= shelfFrame.x + shelfFrame.width
             && winY >= topEdge
-            && winY <= topEdge + sheetFrame.height;
+            && winY <= topEdge + shelfFrame.height;
     }
 
     function scrollDrawer(fraction) {
@@ -152,7 +169,9 @@ PanelWindow {
         focus: root.requestedOpen
 
         Keys.onEscapePressed: {
-            if (root.searchQuery !== "") {
+            if (drawerLoader.item && drawerLoader.item.menuTileId !== "") {
+                drawerLoader.item.closeContextMenu();
+            } else if (root.searchQuery !== "") {
                 root.searchQuery = "";
                 searchBox.text = "";
             } else if (WidgetDragSession.active) {
@@ -161,331 +180,270 @@ PanelWindow {
                 WidgetStore.closeSidebar();
             }
         }
-        Keys.onUpPressed: { if (drawerLoader.item) drawerLoader.item.scrollBy(-WidgetStore.s(180)); }
-        Keys.onDownPressed: { if (drawerLoader.item) drawerLoader.item.scrollBy(WidgetStore.s(180)); }
+        Keys.onLeftPressed: { if (drawerLoader.item) drawerLoader.item.scrollBy(-240); }
+        Keys.onRightPressed: { if (drawerLoader.item) drawerLoader.item.scrollBy(240); }
 
+        // Click outside shelf dismisses it (or closes open tile menu first)
         MouseArea {
             anchors.fill: parent
             enabled: root.requestedOpen && !WidgetDragSession.active
-            onClicked: WidgetStore.closeSidebar()
+            onClicked: {
+                if (drawerLoader.item && drawerLoader.item.menuTileId !== "") {
+                    drawerLoader.item.closeContextMenu();
+                } else {
+                    WidgetStore.closeSidebar();
+                }
+            }
         }
 
-        // Crisp Material 3 Floating Widget Gallery Drawer
+        // Bottom-Centered Floating iNiR Shelf Frame
         Item {
-            id: sheetFrame
-            x: root.snapPx(root.onLeft ? root.edgeGap : Math.max(root.edgeGap, root.width - width - root.edgeGap))
-            y: root.snapPx(root.topGap)
-            width: root.sidebarWidth
-            height: root.snapPx(Math.max(WidgetStore.s(360), root.height - root.topGap - root.bottomGap))
+            id: shelfFrame
+            x: Math.round((root.width - width) / 2)
+            y: Math.round(root.height - height - 16)
+            width: root.shelfWidth
+            height: root.shelfHeight
             opacity: Math.max(0, Math.min(1, root.revealProgress * 1.6))
 
             transform: Translate {
-                id: sheetTranslate
-                x: (root.sidebarWidth + root.edgeGap + WidgetStore.s(28)) * (root.onLeft ? -1 : 1) * (1.0 - root.revealProgress)
+                id: shelfTranslate
+                y: Math.round((root.shelfHeight + 28) * (1.0 - root.revealProgress))
             }
 
             Rectangle {
-                id: sheetSurface
+                id: shelfSurface
                 anchors.fill: parent
-                radius: WidgetStore.s(24)
-                color: Theme.m3.surface_container_low ?? Theme.colors.bg
-                border.width: root.px1
-                border.color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.45)
-                clip: true
+                radius: root.radLarge
+                color: root.colLayer1
+                border.width: 1
+                border.color: root.colBorder
 
+                // Prevent click-through to desktop backdrop
                 MouseArea {
                     anchors.fill: parent
-                    z: 0
+                    acceptedButtons: Qt.AllButtons
                 }
 
                 ColumnLayout {
-                    anchors {
-                        fill: parent
-                        leftMargin: WidgetStore.s(16)
-                        rightMargin: WidgetStore.s(16)
-                        topMargin: WidgetStore.s(16)
-                        bottomMargin: WidgetStore.s(14)
-                    }
-                    spacing: WidgetStore.s(12)
-                    z: 2
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 10
 
-                    // Top Header Bar
+                    // --- Top Head Bar: Category Tabs + Search Pill + Grid/Clear/Close ---
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: WidgetStore.s(10)
+                        Layout.preferredHeight: 36
+                        spacing: 8
 
-                        Rectangle {
-                            Layout.preferredWidth: WidgetStore.s(36)
-                            Layout.preferredHeight: WidgetStore.s(36)
-                            radius: WidgetStore.s(11)
-                            color: Theme.m3.primary_container ?? Theme.colors.card_bg
-                            border.width: root.px1
-                            border.color: Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.28)
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "widgets"
-                                iconSize: WidgetStore.si(18)
-                                fill: 1
-                                color: Theme.m3.on_primary_container ?? (Theme.m3.primary ?? Theme.accent)
-                            }
-                        }
-
-                        Column {
+                        // Category Filter Tabs
+                        Flickable {
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            spacing: WidgetStore.s(2)
-
-                            Text {
-                                width: parent.width
-                                text: "Widget Gallery"
-                                color: Theme.m3.on_surface ?? Theme.colors.text_primary
-                                font.family: "Google Sans Flex"
-                                font.pixelSize: WidgetStore.si(16)
-                                font.weight: Font.Bold
-                                elide: Text.ElideRight
-                                renderType: Text.NativeRendering
-                            }
+                            Layout.preferredHeight: 34
+                            contentWidth: tabsRow.implicitWidth
+                            contentHeight: 34
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
 
                             Row {
-                                spacing: WidgetStore.s(6)
+                                id: tabsRow
+                                height: 34
+                                spacing: 4
 
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: WidgetStore.s(6)
-                                    height: WidgetStore.s(6)
-                                    radius: width / 2
-                                    color: WidgetStore.desktopCardIds.length > 0
-                                        ? (Theme.m3.primary ?? Theme.accent)
-                                        : Qt.alpha(Theme.m3.on_surface_variant ?? "#9999aa", 0.5)
-                                }
+                                Repeater {
+                                    model: Catalog.sources()
 
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: WidgetStore.desktopCardIds.length + " pinned · " + WidgetStore.cardIds.length + " widgets"
-                                    color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                                    font.family: "Google Sans Flex"
-                                    font.pixelSize: WidgetStore.si(11)
-                                    font.weight: Font.Medium
-                                    renderType: Text.NativeRendering
-                                }
-                            }
-                        }
+                                    delegate: Rectangle {
+                                        id: tabChip
+                                        required property var modelData
+                                        readonly property bool selected: root.activeSource === modelData.id
 
-                        DeckHeaderButton {
-                            icon: root.onLeft ? "dock_to_left" : "dock_to_right"
-                            activeState: false
-                            onTriggered: WidgetStore.toggleSidebarSide()
-                        }
+                                        height: 34
+                                        width: tabInner.implicitWidth + 20
+                                        radius: root.radSmall
+                                        color: selected
+                                            ? root.colSelection
+                                            : (tabMa.containsMouse ? root.colLayerHover : "transparent")
+                                        border.width: 1
+                                        border.color: selected
+                                            ? root.colBorderFocus
+                                            : (tabMa.containsMouse ? root.colBorderSubtle : "transparent")
 
-                        DeckHeaderButton {
-                            icon: "grid_on"
-                            activeState: WidgetStore.gridSnapEnabled
-                            onTriggered: WidgetStore.toggleGridSnap()
-                        }
+                                        Behavior on color { ColorAnimation { duration: 100 } }
 
-                        DeckHeaderButton {
-                            visible: WidgetStore.desktopCardIds.length > 0
-                            icon: "layers_clear"
-                            danger: true
-                            onTriggered: WidgetStore.returnAllToSidebar()
-                        }
+                                        Row {
+                                            id: tabInner
+                                            anchors.centerIn: parent
+                                            spacing: 6
 
-                        DeckHeaderButton {
-                            icon: "close"
-                            onTriggered: WidgetStore.closeSidebar()
-                        }
-                    }
+                                            MaterialSymbol {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: tabChip.modelData.icon
+                                                iconSize: 16
+                                                fill: tabChip.selected ? 1 : 0
+                                                color: tabChip.selected ? root.colPrimary : root.colTextMuted
+                                            }
 
-                    // Crisp Search Pill
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: WidgetStore.s(36)
-                        radius: height / 2
-                        color: Theme.m3.surface_container ?? Theme.colors.card_bg
-                        border.width: root.px1
-                        border.color: searchBox.activeFocus
-                            ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.72)
-                            : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.32)
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: tabChip.modelData.label
+                                                color: tabChip.selected ? root.colText : root.colTextMuted
+                                                font.family: root.uiFont
+                                                font.pixelSize: 13
+                                                font.weight: tabChip.selected ? Font.DemiBold : Font.Medium
+                                                renderType: Text.QtRendering
+                                            }
+                                        }
 
-                        Behavior on border.color { ColorAnimation { duration: 140 } }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.IBeamCursor
-                            onClicked: searchBox.forceActiveFocus()
-                        }
-
-                        RowLayout {
-                            anchors {
-                                fill: parent
-                                leftMargin: WidgetStore.s(12)
-                                rightMargin: WidgetStore.s(10)
-                            }
-                            spacing: WidgetStore.s(8)
-
-                            MaterialSymbol {
-                                text: "search"
-                                iconSize: WidgetStore.si(16)
-                                color: searchBox.activeFocus
-                                    ? (Theme.m3.primary ?? Theme.accent)
-                                    : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary)
-                            }
-
-                            TextInput {
-                                id: searchBox
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                color: Theme.m3.on_surface ?? Theme.colors.text_primary
-                                font.family: "Google Sans Flex"
-                                font.pixelSize: WidgetStore.si(12)
-                                font.weight: Font.Medium
-                                renderType: TextInput.NativeRendering
-                                clip: true
-                                verticalAlignment: TextInput.AlignVCenter
-                                onTextChanged: root.searchQuery = text.trim()
-
-                                Text {
-                                    visible: parent.text === ""
-                                    anchors.fill: parent
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: "Search widgets…"
-                                    color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                                    opacity: 0.72
-                                    font: parent.font
-                                    renderType: Text.NativeRendering
-                                }
-                            }
-
-                            Rectangle {
-                                visible: searchBox.text !== ""
-                                Layout.preferredWidth: WidgetStore.s(20)
-                                Layout.preferredHeight: WidgetStore.s(20)
-                                radius: width / 2
-                                color: Theme.m3.surface_container_highest ?? Theme.colors.hover_bg
-
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "close"
-                                    iconSize: WidgetStore.si(12)
-                                    color: Theme.m3.on_surface_variant ?? Theme.colors.text_secondary
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        searchBox.text = "";
-                                        root.searchQuery = "";
+                                        MouseArea {
+                                            id: tabMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: root.activeSource = tabChip.modelData.id
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // Category Filter Pills
-                    Flickable {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: WidgetStore.s(30)
-                        clip: true
-                        flickableDirection: Flickable.HorizontalFlick
-                        contentWidth: filterRow.implicitWidth
-                        contentHeight: height
-                        boundsBehavior: Flickable.StopAtBounds
+                        // Search Pill
+                        Rectangle {
+                            Layout.preferredWidth: 215
+                            Layout.preferredHeight: 34
+                            radius: root.radSmall
+                            color: root.colLayer2
+                            border.width: 1
+                            border.color: searchBox.activeFocus ? root.colBorderFocus : root.colBorderSubtle
 
-                        Row {
-                            id: filterRow
-                            height: parent.height
-                            spacing: WidgetStore.s(6)
+                            RowLayout {
+                                anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                                spacing: 7
 
-                            Repeater {
-                                model: Catalog.sources()
+                                MaterialSymbol {
+                                    text: "search"
+                                    iconSize: 16
+                                    color: searchBox.activeFocus ? root.colPrimary : root.colTextMuted
+                                }
 
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    readonly property bool sel: root.activeSource === modelData.id
+                                TextInput {
+                                    id: searchBox
+                                    Layout.fillWidth: true
+                                    color: root.colText
+                                    selectionColor: root.colSelection
+                                    font.family: root.uiFont
+                                    font.pixelSize: 13
+                                    font.weight: Font.Normal
+                                    clip: true
+                                    renderType: Text.QtRendering
+                                    onTextChanged: root.searchQuery = text
 
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    height: WidgetStore.s(28)
-                                    width: root.snapPx(pillRow.implicitWidth + WidgetStore.s(18))
-                                    radius: height / 2
-                                    color: sel
-                                        ? (Theme.m3.primary ?? Theme.accent)
-                                        : (pillMouse.containsMouse
-                                            ? (Theme.m3.surface_container_high ?? Theme.colors.hover_bg)
-                                            : (Theme.m3.surface_container ?? Theme.colors.card_bg))
-                                    border.width: root.px1
-                                    border.color: sel
-                                        ? (Theme.m3.primary ?? Theme.accent)
-                                        : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", pillMouse.containsMouse ? 0.55 : 0.28)
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        visible: searchBox.text === ""
+                                        text: "Search widgets…"
+                                        color: root.colTextMuted
+                                        font.family: root.uiFont
+                                        font.pixelSize: 13
+                                        renderType: Text.QtRendering
+                                    }
+                                }
 
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    Behavior on border.color { ColorAnimation { duration: 120 } }
+                                Rectangle {
+                                    visible: searchBox.text !== ""
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 20
+                                    radius: 4
+                                    color: clrMa.containsMouse ? root.colLayerHover : "transparent"
 
-                                    Row {
-                                        id: pillRow
+                                    MaterialSymbol {
                                         anchors.centerIn: parent
-                                        spacing: WidgetStore.s(5)
-
-                                        MaterialSymbol {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData.icon
-                                            iconSize: WidgetStore.si(13)
-                                            fill: sel ? 1 : 0
-                                            color: sel
-                                                ? (Theme.m3.on_primary ?? "#101014")
-                                                : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary)
-                                        }
-
-                                        Text {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData.label
-                                            color: sel
-                                                ? (Theme.m3.on_primary ?? "#101014")
-                                                : (Theme.m3.on_surface ?? Theme.colors.text_primary)
-                                            font.family: "Google Sans Flex"
-                                            font.pixelSize: WidgetStore.si(11)
-                                            font.weight: sel ? Font.Bold : Font.Medium
-                                            renderType: Text.NativeRendering
-                                        }
+                                        text: "close"
+                                        iconSize: 14
+                                        color: root.colTextMuted
                                     }
 
                                     MouseArea {
-                                        id: pillMouse
+                                        id: clrMa
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            root.activeSource = modelData.id;
-                                            if (drawerLoader.item) drawerLoader.item.scrollToFraction(0);
+                                            searchBox.text = "";
+                                            searchBox.forceActiveFocus();
                                         }
                                     }
                                 }
                             }
                         }
+
+                        // Pinned Counter Pill
+                        Rectangle {
+                            Layout.preferredHeight: 34
+                            Layout.preferredWidth: countTxt.implicitWidth + 18
+                            radius: root.radSmall
+                            color: root.colLayer2
+                            border.width: 1
+                            border.color: root.colBorderSubtle
+
+                            Text {
+                                id: countTxt
+                                anchors.centerIn: parent
+                                text: WidgetStore.desktopCardIds.length + " pinned"
+                                color: WidgetStore.desktopCardIds.length > 0 ? root.colPrimary : root.colTextMuted
+                                font.family: root.uiFont
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                renderType: Text.QtRendering
+                            }
+                        }
+
+                        // Grid Snap Toggle Button
+                        InirIconButton {
+                            icon: "grid_4x4"
+                            active: WidgetStore.gridSnapEnabled
+                            tooltipText: "Snap to grid"
+                            onClicked: WidgetStore.toggleGridSnap()
+                        }
+
+                        // Return All Widgets Button
+                        InirIconButton {
+                            visible: WidgetStore.desktopCardIds.length > 0
+                            icon: "layers_clear"
+                            danger: true
+                            tooltipText: "Return all"
+                            onClicked: WidgetStore.returnAllToSidebar()
+                        }
+
+                        // Close Button
+                        InirIconButton {
+                            icon: "close"
+                            tooltipText: "Close"
+                            onClicked: WidgetStore.closeSidebar()
+                        }
                     }
 
-                    // Hairline divider separating chrome from gallery
+                    // Hairline Divider
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: root.px1
-                        color: Qt.alpha(Theme.m3.outline_variant ?? "#49454f", 0.26)
+                        Layout.preferredHeight: 1
+                        color: root.colBorderSubtle
                     }
 
-                    // Lazy Categorized Vertical Widget Gallery (unmounted cleanly when drawer closes)
+                    // Horizontal Showcase Strip
                     Loader {
                         id: drawerLoader
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        active: root.panelPresented || WidgetDragSession.presentationActive
-                        asynchronous: false
-                        sourceComponent: WidgetDrawerView {
-                            screenName: root.screen ? String(root.screen.name) : root.retainedScreenName
-                            active: root.panelPresented
-                            sourceFilter: root.activeSource
-                            searchQuery: root.searchQuery
-                            notchRoot: root.notchRoot
-                            sidebarContainsFn: function(wx, wy) { return root.containsWindowPoint(wx, wy); }
+                        active: root.panelPresented
+                        source: "WidgetDrawerView.qml"
+                        onLoaded: {
+                            item.screenName = Qt.binding(() => root.screen ? String(root.screen.name) : "");
+                            item.active = Qt.binding(() => root.panelPresented);
+                            item.sourceFilter = Qt.binding(() => root.activeSource);
+                            item.searchQuery = Qt.binding(() => root.searchQuery);
+                            item.notchRoot = Qt.binding(() => root.notchRoot);
+                            item.sidebarContainsFn = (wx, wy) => root.containsWindowPoint(wx, wy);
+                            item.overlayHost = interactionItem;
                         }
                     }
                 }
@@ -493,49 +451,49 @@ PanelWindow {
         }
     }
 
-    component DeckHeaderButton: Rectangle {
+    component InirIconButton: Rectangle {
+        id: btn
         property string icon: ""
-        property bool activeState: false
+        property string tooltipText: ""
+        property bool active: false
         property bool danger: false
-        signal triggered()
+        signal clicked()
 
-        Layout.preferredWidth: WidgetStore.s(32)
-        Layout.preferredHeight: WidgetStore.s(32)
-        radius: width / 2
-        color: danger
-            ? Qt.alpha(Theme.m3.error_container ?? "#7f1d1d", hbMouse.containsMouse ? 0.85 : 0.55)
-            : (activeState
-                ? (Theme.m3.primary_container ?? Theme.accent)
-                : (hbMouse.containsMouse
-                    ? (Theme.m3.surface_container_highest ?? Theme.colors.hover_bg)
-                    : (Theme.m3.surface_container ?? Theme.colors.card_bg)))
-        border.width: root.px1
-        border.color: danger
-            ? Qt.alpha(Theme.m3.error ?? "#ffb4ab", 0.35)
-            : (activeState
-                ? Qt.alpha(Theme.m3.primary ?? Theme.accent, 0.45)
-                : Qt.alpha(Theme.m3.outline_variant ?? "#49454f", hbMouse.containsMouse ? 0.50 : 0.28))
+        Layout.preferredWidth: 34
+        Layout.preferredHeight: 34
+        radius: root.radSmall
+        color: {
+            if (active) return root.colSelection;
+            if (btnMa.containsMouse) return danger ? root.colDangerHover : root.colLayerHover;
+            return root.colLayer2;
+        }
+        border.width: 1
+        border.color: {
+            if (active) return root.colBorderFocus;
+            if (btnMa.containsMouse) return danger ? root.colDanger : root.colBorder;
+            return root.colBorderSubtle;
+        }
 
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: 100 } }
 
         MaterialSymbol {
             anchors.centerIn: parent
-            text: icon
-            iconSize: WidgetStore.si(16)
-            fill: activeState ? 1 : 0
-            color: danger
-                ? (Theme.m3.on_error_container ?? "#ffdada")
-                : (activeState
-                    ? (Theme.m3.on_primary_container ?? (Theme.m3.primary ?? Theme.accent))
-                    : (Theme.m3.on_surface_variant ?? Theme.colors.text_secondary))
+            text: btn.icon
+            iconSize: 18
+            fill: btn.active ? 1 : 0
+            color: {
+                if (btn.active) return root.colPrimary;
+                if (btn.danger && btnMa.containsMouse) return root.colDanger;
+                return btnMa.containsMouse ? root.colText : root.colTextMuted;
+            }
         }
 
         MouseArea {
-            id: hbMouse
+            id: btnMa
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: triggered()
+            onClicked: btn.clicked()
         }
     }
 }

@@ -47,14 +47,12 @@ Item {
             Layout.fillHeight: true
             spacing: 12
 
-            // Left: Clean Matushell Clock Hero Card
+            // Left: Clean Borderless Clock Hero Card
             Rectangle {
                 Layout.preferredWidth: 244
                 Layout.fillHeight: true
-                radius: 18
-                color: Qt.alpha(Theme.accent, 0.09)
-                border.width: 1
-                border.color: Qt.alpha(Theme.accent, 0.20)
+                radius: 20
+                color: Theme.primaryContainer
                 clip: true
 
                 Column {
@@ -160,14 +158,12 @@ Item {
                 }
             }
 
-            // Right: Weather Card
+            // Right: Borderless Weather Card
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                radius: 18
-                color: Qt.alpha(Theme.text, 0.055)
-                border.width: 1
-                border.color: Qt.alpha(Theme.text, 0.07)
+                radius: 20
+                color: Theme.surfaceHigh
 
                 Column {
                     visible: page.wx === null
@@ -399,14 +395,12 @@ Item {
             }
         }
 
-        // Bottom: Next Reminder Pill Card
+        // Bottom: Next Reminder Card
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 58
-            radius: 16
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 18
+            color: Theme.surfaceHigh
 
             RowLayout {
                 anchors.fill: parent

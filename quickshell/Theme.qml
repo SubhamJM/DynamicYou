@@ -295,12 +295,12 @@ QtObject {
     readonly property color subtextDim: theme.colors.text_muted
     readonly property color primary: theme.colors.accent
     readonly property color fgPrimary: theme.onAccent
-    readonly property color primaryContainer: theme.colors.accent_secondary
-    readonly property color fgPrimaryContainer: theme.colors.text_primary
+    readonly property color primaryContainer: theme.m3.primary_container || theme.colors.card_bg
+    readonly property color fgPrimaryContainer: theme.m3.on_primary_container || theme.colors.text_primary
     readonly property color secondary: theme.colors.accent
     readonly property color fgSecondary: theme.onAccent
-    readonly property color secondaryContainer: theme.colors.card_bg
-    readonly property color fgSecondaryContainer: theme.colors.text_primary
+    readonly property color secondaryContainer: theme.m3.secondary_container || theme.colors.card_bg
+    readonly property color fgSecondaryContainer: theme.m3.on_secondary_container || theme.colors.text_primary
     readonly property color tertiary: theme.colors.accent
     readonly property color tertiaryContainer: theme.colors.hover_bg
     readonly property color fgTertiaryContainer: theme.colors.text_primary

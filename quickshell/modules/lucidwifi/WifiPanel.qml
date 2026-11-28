@@ -300,7 +300,7 @@ Item {
                         anchors.leftMargin: WifiUi.Theme.dp(10)
                         anchors.verticalCenter: parent.verticalCenter
                         text: WifiUi.I18n.tr("Enter password...")
-                        color: WifiUi.Theme.outlineStrong
+                        color: WifiUi.Theme.alpha(WifiUi.Theme.text, 0.50)
                         font.family: WifiUi.Theme.fontFamily
                         font.pixelSize: WifiUi.Theme.fs(11)
                         font.variableAxes: WifiUi.Theme.axes(WifiUi.Theme.fs(11), 420, 0)
@@ -341,7 +341,7 @@ Item {
                         height: parent.height
                         radius: WifiUi.Theme.dp(999)
                         color: netItem.isConnecting 
-                            ? WifiUi.Theme.withBlur(WifiUi.Theme.outlineStrong) 
+                            ? WifiUi.Theme.alpha(WifiUi.Theme.text, 0.14)
                             : (netItem.isConnected 
                                 ? (connectArea.containsMouse ? Qt.darker(WifiUi.Theme.accent, 1.15) : WifiUi.Theme.accent) 
                                 : (connectArea.containsMouse ? WifiUi.Theme.accentHover : WifiUi.Theme.accent))
@@ -350,7 +350,7 @@ Item {
                         Text {
                             anchors.centerIn: parent
                             text: netItem.isConnecting ? WifiUi.I18n.tr("Connecting...") : (netItem.isConnected ? WifiUi.I18n.tr("Disconnect") : WifiUi.I18n.tr("Connect"))
-                            color: netItem.isConnecting ? WifiUi.Theme.subtext : (netItem.isConnected ? (WifiUi.Theme.on_primary ?? "#000000") : WifiUi.Theme.bgOpaque)
+                            color: netItem.isConnecting ? WifiUi.Theme.subtext : WifiUi.Theme.cOnPrimary
                             font.family: WifiUi.Theme.fontFamily
                             font.bold: true
                             font.pixelSize: WifiUi.Theme.fs(12)
@@ -475,7 +475,7 @@ Item {
                             name: "qr_code"
                             size: WifiUi.Theme.dp(18)
                             fill: netItem.sharing ? 1 : 0
-                            color: netItem.sharing ? (WifiUi.Theme.on_primary ?? "#000000") : WifiUi.Theme.text
+                            color: netItem.sharing ? WifiUi.Theme.cOnPrimary : WifiUi.Theme.text
                         }
 
                         MouseArea {
@@ -550,7 +550,7 @@ Item {
                             visible: autoBox.checked
                             name: "check"
                             size: WifiUi.Theme.dp(12)
-                            color: WifiUi.Theme.on_primary ?? "#000000"
+                            color: WifiUi.Theme.cOnPrimary
                         }
 
                         MouseArea {
@@ -1331,7 +1331,7 @@ Item {
                             anchors.leftMargin: WifiUi.Theme.dp(10)
                             anchors.verticalCenter: parent.verticalCenter
                             text: WifiUi.I18n.tr("Network name (SSID)")
-                            color: WifiUi.Theme.outlineStrong
+                            color: WifiUi.Theme.alpha(WifiUi.Theme.text, 0.50)
                             font.family: WifiUi.Theme.fontFamily
                             font.pixelSize: WifiUi.Theme.fs(11)
                             font.variableAxes: WifiUi.Theme.axes(WifiUi.Theme.fs(11), 420, 0)
@@ -1370,7 +1370,7 @@ Item {
                             anchors.leftMargin: WifiUi.Theme.dp(10)
                             anchors.verticalCenter: parent.verticalCenter
                             text: WifiUi.I18n.tr("Password (leave blank if open)")
-                            color: WifiUi.Theme.outlineStrong
+                            color: WifiUi.Theme.alpha(WifiUi.Theme.text, 0.50)
                             font.family: WifiUi.Theme.fontFamily
                             font.pixelSize: WifiUi.Theme.fs(11)
                             font.variableAxes: WifiUi.Theme.axes(WifiUi.Theme.fs(11), 420, 0)
@@ -1420,7 +1420,7 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: WifiUi.I18n.tr("Connect")
-                                color: WifiUi.Theme.bg
+                                color: WifiUi.Theme.cOnPrimary
                                 font.family: WifiUi.Theme.fontFamily
                                 font.bold: true
                                 font.pixelSize: WifiUi.Theme.fs(11)

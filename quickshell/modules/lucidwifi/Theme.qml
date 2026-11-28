@@ -667,6 +667,7 @@ Singleton {
         id: paletteFile
 
         path: root.palettePath
+        blockLoading: true
         watchChanges: true
         onFileChanged: root._beginRecolour()
         // the adapter below lands an event loop turn after this singleton is

@@ -22,6 +22,7 @@ Controls.Button {
         radius: 10
         color: Theme.alpha(control.scanning ? Theme.accent : Theme.text,
             control.down ? 0.16 : control.hovered || control.scanning || control.visualFocus ? 0.10 : 0.055)
+        Behavior on color { ColorAnimation { duration: 120 } }
     }
 
     contentItem: RowLayout {

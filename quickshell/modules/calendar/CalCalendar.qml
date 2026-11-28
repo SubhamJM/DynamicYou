@@ -164,8 +164,8 @@ Item {
             selectedTextColor: Theme.text
             font.family: "Google Sans Flex"
             font.pixelSize: 13
-            font.weight: Font.DemiBold
-            font.variableAxes: ({ "wght": 620 })
+            font.weight: Font.Normal
+            font.variableAxes: ({ "wght": 450 })
             font.features: ({ "tnum": 1 })
             renderType: Text.QtRendering
 
@@ -203,15 +203,13 @@ Item {
         anchors.fill: parent
         spacing: 12
 
-        // Left: Month Card
+        // Left: Borderless Month Card
         Rectangle {
             id: monthCard
             Layout.preferredWidth: 304
             Layout.fillHeight: true
-            radius: 18
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 20
+            color: Theme.surfaceHigh
 
             CalMonth {
                 id: month
@@ -228,14 +226,12 @@ Item {
             }
         }
 
-        // Right: Day Agenda & Reminder Composer Card
+        // Right: Borderless Day Agenda & Reminder Composer Card
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: 18
-            color: Qt.alpha(Theme.text, 0.055)
-            border.width: 1
-            border.color: Qt.alpha(Theme.text, 0.07)
+            radius: 20
+            color: Theme.surfaceHigh
 
             Item {
                 anchors.fill: parent
@@ -288,9 +284,7 @@ Item {
                                 width: itemsCol.width
                                 height: 48
                                 radius: 12
-                                color: Qt.alpha(Theme.text, 0.055)
-                                border.width: 1
-                                border.color: Qt.alpha(Theme.text, 0.06)
+                                color: Theme.surfaceHighest
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -362,32 +356,23 @@ Item {
                     }
                 }
 
-                // Empty day state (outside Flickable so it centers inside visible list bounds)
+                // Clean Empty day state
                 Column {
                     visible: page.dayItems.length === 0
                     anchors.horizontalCenter: list.horizontalCenter
                     anchors.verticalCenter: list.verticalCenter
                     spacing: 8
 
-                    Rectangle {
+                    CalIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 44
-                        height: 44
-                        radius: 14
-                        color: Qt.alpha(Theme.accent, 0.10)
-
-                        CalIcon {
-                            anchors.centerIn: parent
-                            text: "event_available"
-                            font.pixelSize: 22
-                            color: Qt.alpha(Theme.accent, 0.85)
-                        }
+                        text: "event_available"
+                        font.pixelSize: 30
+                        color: Qt.alpha(Theme.text, 0.36)
                     }
 
                     CalText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         font.pixelSize: 13
-                        weightAxis: 520
                         color: Theme.subtext
                         text: I18n.tr("A free day")
                     }
@@ -400,18 +385,15 @@ Item {
                     width: parent.width
                     spacing: 10
 
-                    // Clean Matushell pill text input
+                    // Clean borderless pill text input
                     Rectangle {
                         id: inputPill
                         width: parent.width
                         height: 38
                         radius: 19
-                        color: nameInput.activeFocus ? Qt.alpha(Theme.text, 0.09) : Qt.alpha(Theme.text, 0.06)
-                        border.width: 1
-                        border.color: nameInput.activeFocus ? Qt.alpha(Theme.accent, 0.45) : Qt.alpha(Theme.text, 0.07)
+                        color: nameInput.activeFocus ? Qt.alpha(Theme.text, 0.10) : Theme.surfaceHighest
 
                         Behavior on color { ColorAnimation { duration: 120 } }
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
 
                         RowLayout {
                             anchors.fill: parent
@@ -445,7 +427,7 @@ Item {
                                     verticalAlignment: TextInput.AlignVCenter
                                     font.family: "Google Sans Flex"
                                     font.pixelSize: 13
-                                    font.weight: Font.Medium
+                                    font.weight: Font.Normal
                                     renderType: Text.QtRendering
                                     color: Theme.text
                                     selectionColor: Theme.accent
@@ -525,9 +507,7 @@ Item {
                             Layout.preferredHeight: 34
                             Layout.preferredWidth: timeRow.implicitWidth + 20
                             radius: 17
-                            color: Qt.alpha(Theme.text, 0.06)
-                            border.width: 1
-                            border.color: Qt.alpha(Theme.text, 0.07)
+                            color: Theme.surfaceHighest
 
                             Row {
                                 id: timeRow

@@ -96,10 +96,8 @@ Item {
 
                     width: (grid.width - grid.spacing * 2) / 3
                     height: 128
-                    radius: 16
-                    color: card.night ? Qt.alpha(Theme.text, 0.055) : Qt.alpha(Theme.accent, 0.11)
-                    border.width: 1
-                    border.color: card.night ? Qt.alpha(Theme.text, 0.07) : Qt.alpha(Theme.accent, 0.22)
+                    radius: 18
+                    color: card.night ? Theme.surfaceHigh : Theme.primaryContainer
 
                     // Minimal circular analog dial
                     Rectangle {
@@ -111,9 +109,7 @@ Item {
                         width: 42
                         height: 42
                         radius: 21
-                        color: Qt.alpha(card.night ? Theme.text : Theme.accent, 0.10)
-                        border.width: 1
-                        border.color: Qt.alpha(card.night ? Theme.text : Theme.accent, 0.22)
+                        color: Qt.alpha(card.night ? Theme.text : Theme.accent, 0.14)
 
                         Rectangle {
                             x: dialCircle.width / 2 - 1
@@ -258,19 +254,16 @@ Item {
         }
     }
 
-    // Bottom Matushell Search Pill
+    // Bottom Borderless Search Pill
     Rectangle {
         id: adder
         anchors.bottom: parent.bottom
         width: parent.width
         height: 40
         radius: 20
-        color: addInput.activeFocus ? Qt.alpha(Theme.text, 0.09) : Qt.alpha(Theme.text, 0.06)
-        border.width: 1
-        border.color: addInput.activeFocus ? Qt.alpha(Theme.accent, 0.45) : Qt.alpha(Theme.text, 0.07)
+        color: addInput.activeFocus ? Qt.alpha(Theme.text, 0.10) : Theme.surfaceHigh
 
         Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
 
         RowLayout {
             anchors.fill: parent
@@ -304,7 +297,7 @@ Item {
                     verticalAlignment: TextInput.AlignVCenter
                     font.family: "Google Sans Flex"
                     font.pixelSize: 13
-                    font.weight: Font.Medium
+                    font.weight: Font.Normal
                     renderType: Text.QtRendering
                     color: Theme.text
                     selectionColor: Theme.accent
@@ -354,9 +347,7 @@ Item {
         width: parent.width
         height: suggCol.implicitHeight + 12
         radius: 16
-        color: Theme.colors.card_bg || "#181a20"
-        border.width: 1
-        border.color: Qt.alpha(Theme.text, 0.10)
+        color: Theme.surfaceHighest
         z: 10
 
         Column {

@@ -127,6 +127,44 @@ Singleton {
         });
     }
 
+    function monitorHasTrueFullscreenWindow(monitorName) {
+        if (!monitorName) return false;
+        const monitor = root.monitors.find(candidate => candidate?.name === monitorName);
+        if (!monitor) return false;
+        const activeId = Number(monitor.activeWorkspace?.id ?? NaN);
+        const specialName = String(monitor.specialWorkspace?.name ?? "");
+
+        for (let i = 0; i < root.windowList.length; i++) {
+            const w = root.windowList[i];
+            if (!w || w.hidden) continue;
+            const onMonitor = (specialName !== "" && w.workspace?.name === specialName)
+                || (isFinite(activeId) && root.sameWorkspace(Number(w.workspace?.id ?? NaN), activeId));
+            if (onMonitor && (w.fullscreen === 2 || w.fullscreenClient === 2)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function monitorHasWindow(monitorName) {
+        if (!monitorName) return false;
+        const monitor = root.monitors.find(candidate => candidate?.name === monitorName);
+        if (!monitor) return root.windowList.length > 0;
+        const activeId = Number(monitor.activeWorkspace?.id ?? NaN);
+        const specialName = String(monitor.specialWorkspace?.name ?? "");
+        if (specialName !== "" && root.windowList.some(w => !w.hidden && w.workspace?.name === specialName)) {
+            return true;
+        }
+        if (isFinite(activeId)) {
+            if (root.windowList.some(w => !w.hidden && root.sameWorkspace(Number(w.workspace?.id ?? NaN), activeId))) {
+                return true;
+            }
+            const ws = root.workspaceById ? root.workspaceById[activeId] : null;
+            if (ws && Number(ws.windows || 0) > 0) return true;
+        }
+        return false;
+    }
+
     // Internals
 
     property bool _windowListNeedsUpdate: false
@@ -309,6 +347,7 @@ Singleton {
                 case "movewindowv2":
                     root.updateWindowList();
                     root.updateWorkspaces();
+                    root.updateMonitors();
                     break;
 
                 case "changefloatingmode":
@@ -316,6 +355,7 @@ Singleton {
                 case "urgent":
                 case "minimize":
                     root.updateWindowList();
+                    root.updateWorkspaces();
                     break;
 
                 case "createworkspace":

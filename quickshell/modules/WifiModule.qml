@@ -11,14 +11,28 @@ FocusScope {
 
     property string activeTab: "wifi"
     readonly property bool resizingRows: panel.resizingRows > 0
-    readonly property int calculatedHeight: Math.min(680, Math.max(220, header.height + tabs.height
-        + tabs.anchors.topMargin + scroller.anchors.topMargin + scroller.contentHeight + 24))
+    readonly property real pageContentHeight: wifi.activeTab === "hotspot"
+        ? (hotspotPage.item ? hotspotPage.item.implicitHeight : 320)
+        : panel.implicitHeight
+    readonly property int calculatedHeight: Math.min(680, Math.max(220,
+        header.height + 8 + tabs.height + 8 + pageContentHeight + 36))
 
     function refreshStatus() {
+        scroller.contentY = 0;
         panel.refreshActiveNetwork();
     }
 
     function navigate(method, args = []) {
+        if (typeof root !== "undefined") {
+            if (method === "collapse" && typeof root.collapseToIdle === "function") {
+                root.collapseToIdle();
+                return;
+            }
+            if (method === "switchMode" && typeof root.switchMode === "function" && args.length > 0) {
+                root.switchMode(String(args[0]), false);
+                return;
+            }
+        }
         Quickshell.execDetached(["quickshell", "ipc", "--id", Quickshell.instanceId, "call", "notch", method].concat(args));
     }
 
@@ -90,7 +104,7 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             text: tab.modelData.icon
                             iconSize: 15
-                            color: tab.selected ? Theme.fgPrimaryContainer : Theme.subtext
+                            color: tab.selected ? Theme.accent : Theme.subtext
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -129,8 +143,7 @@ FocusScope {
             width: scroller.width
             height: implicitHeight
             visible: wifi.activeTab === "wifi"
-            active: wifi.visible && wifi.enabled && (typeof root === "undefined" || root.activeMode === "wifi")
-                && visible
+            active: visible && (typeof root === "undefined" || root.activeMode === "wifi")
         }
 
         Loader {

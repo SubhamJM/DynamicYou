@@ -55,8 +55,8 @@ PanelWindow {
     property var themesModel: []
     property string openSubmenuKind: "" // "" | "wallpaper" | "widgets"
     property real submenuAnchorY: 0
-    readonly property int menuWidth: 312
-    readonly property int submenuWidth: 268
+    readonly property int menuWidth: 344
+    readonly property int submenuWidth: 296
     property real revealProgress: 0
 
     function applyWallpaper(path) {
@@ -323,7 +323,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 // --- 1. Crisp iNiR-Framed Wallpaper Carousel ---
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 122
+                    Layout.preferredHeight: 134
                     radius: menuWindow.radNormal
                     color: menuWindow.colLayer2
                     border.width: 1
@@ -361,7 +361,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                                 text: "Loading wallpapers…"
                                 color: menuWindow.colTextMuted
                                 font.family: menuWindow.uiFont
-                                font.pixelSize: 11
+                                font.pixelSize: 13
                                 renderType: Text.QtRendering
                             }
                         }
@@ -663,7 +663,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                         text: "Theme preset"
                         color: menuWindow.colTextMuted
                         font.family: menuWindow.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
                         renderType: Text.QtRendering
                     }
@@ -672,7 +672,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                         text: Theme.currentThemeName || ""
                         color: menuWindow.colPrimary
                         font.family: menuWindow.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
                         renderType: Text.QtRendering
                     }
@@ -682,8 +682,8 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 GridLayout {
                     Layout.fillWidth: true
                     columns: 3
-                    rowSpacing: 5
-                    columnSpacing: 5
+                    rowSpacing: 6
+                    columnSpacing: 6
 
                     Repeater {
                         model: menuWindow.themesModel
@@ -699,7 +699,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                             }
 
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: 36
                             radius: menuWindow.radSmall
                             color: isSel
                                 ? menuWindow.colSelection
@@ -713,13 +713,13 @@ print(json.dumps({"active": active_wall, "items": entries}))
 
                             Row {
                                 anchors.centerIn: parent
-                                spacing: 5
+                                spacing: 6
                                 width: Math.min(parent.width - 10, implicitWidth)
 
                                 Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 8
-                                    height: 8
+                                    width: 9
+                                    height: 9
                                     radius: 2
                                     color: themeTile.modelData.accentColor || "#7aa2f7"
                                 }
@@ -729,10 +729,10 @@ print(json.dumps({"active": active_wall, "items": entries}))
                                     text: themeTile.modelData.themeName || themeTile.modelData.rawName
                                     color: menuWindow.colText
                                     font.family: menuWindow.uiFont
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
                                     font.weight: themeTile.isSel ? Font.Bold : Font.Medium
                                     elide: Text.ElideRight
-                                    width: Math.min(implicitWidth, themeTile.width - 22)
+                                    width: Math.min(implicitWidth, themeTile.width - 24)
                                     renderType: Text.QtRendering
                                 }
                             }
@@ -755,7 +755,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                     text: "Wallpaper transition"
                     color: menuWindow.colTextMuted
                     font.family: menuWindow.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
                     renderType: Text.QtRendering
                 }
@@ -780,7 +780,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                             readonly property bool activeTr: Theme.activeTransition === modelData.value
 
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 30
+                            Layout.preferredHeight: 34
                             radius: menuWindow.radSmall
                             color: activeTr
                                 ? menuWindow.colSelection
@@ -789,12 +789,12 @@ print(json.dumps({"active": active_wall, "items": entries}))
                             border.color: menuWindow.colBorderFocus
 
                             RowLayout {
-                                anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                                spacing: 8
+                                anchors { fill: parent; leftMargin: 9; rightMargin: 9 }
+                                spacing: 9
 
                                 MaterialSymbol {
                                     text: trRow.modelData.icon
-                                    iconSize: 15
+                                    iconSize: 17
                                     fill: trRow.activeTr ? 1 : 0
                                     color: trRow.activeTr ? menuWindow.colPrimary : menuWindow.colTextMuted
                                 }
@@ -803,14 +803,14 @@ print(json.dumps({"active": active_wall, "items": entries}))
                                     text: trRow.modelData.label
                                     color: menuWindow.colText
                                     font.family: menuWindow.uiFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: 13
                                     font.weight: trRow.activeTr ? Font.DemiBold : Font.Normal
                                     renderType: Text.QtRendering
                                 }
                                 MaterialSymbol {
                                     visible: trRow.activeTr
                                     text: "check"
-                                    iconSize: 14
+                                    iconSize: 16
                                     color: menuWindow.colPrimary
                                 }
                             }
@@ -891,17 +891,17 @@ print(json.dumps({"active": active_wall, "items": entries}))
                         readonly property bool pinned: WidgetStore.isPinned(modelData)
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 31
+                        Layout.preferredHeight: 35
                         radius: menuWindow.radSmall
                         color: qwMa.containsMouse ? menuWindow.colLayerHover : "transparent"
 
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
-                            spacing: 8
+                            anchors { fill: parent; leftMargin: 9; rightMargin: 7 }
+                            spacing: 9
 
                             MaterialSymbol {
                                 text: qwRow.wDef ? qwRow.wDef.icon : "widgets"
-                                iconSize: 15
+                                iconSize: 17
                                 fill: qwRow.pinned ? 1 : 0
                                 color: qwRow.pinned ? menuWindow.colPrimary : menuWindow.colTextMuted
                             }
@@ -911,7 +911,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                                 text: qwRow.wDef ? qwRow.wDef.name : qwRow.modelData
                                 color: menuWindow.colText
                                 font.family: menuWindow.uiFont
-                                font.pixelSize: 11
+                                font.pixelSize: 13
                                 font.weight: qwRow.pinned ? Font.Medium : Font.Normal
                                 elide: Text.ElideRight
                                 renderType: Text.QtRendering
@@ -919,15 +919,15 @@ print(json.dumps({"active": active_wall, "items": entries}))
 
                             Rectangle {
                                 visible: qwRow.pinned
-                                Layout.preferredWidth: 22
-                                Layout.preferredHeight: 22
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
                                 radius: 5
                                 color: tuneMa.containsMouse ? menuWindow.colSelection : "transparent"
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     text: "tune"
-                                    iconSize: 13
+                                    iconSize: 15
                                     color: tuneMa.containsMouse ? menuWindow.colPrimary : menuWindow.colTextMuted
                                 }
 
@@ -1000,16 +1000,16 @@ print(json.dumps({"active": active_wall, "items": entries}))
         signal toggled()
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 31
+        Layout.preferredHeight: 35
         radius: menuWindow.radSmall
         color: tMa.containsMouse ? menuWindow.colLayerHover : "transparent"
 
         RowLayout {
-            anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
-            spacing: 8
+            anchors { fill: parent; leftMargin: 9; rightMargin: 7 }
+            spacing: 9
             MaterialSymbol {
                 text: icon
-                iconSize: 15
+                iconSize: 17
                 color: checked ? menuWindow.colPrimary : menuWindow.colTextMuted
             }
             Text {
@@ -1017,7 +1017,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 text: label
                 color: menuWindow.colText
                 font.family: menuWindow.uiFont
-                font.pixelSize: 11
+                font.pixelSize: 13
                 font.weight: Font.Medium
                 renderType: Text.QtRendering
             }
@@ -1040,18 +1040,18 @@ print(json.dumps({"active": active_wall, "items": entries}))
         signal triggered()
 
         Layout.fillWidth: true
-        Layout.preferredHeight: visible ? 31 : 0
+        Layout.preferredHeight: visible ? 35 : 0
         radius: menuWindow.radSmall
         color: aMa.containsMouse
             ? (danger ? menuWindow.colDangerHover : menuWindow.colLayerHover)
             : "transparent"
 
         RowLayout {
-            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-            spacing: 8
+            anchors { fill: parent; leftMargin: 9; rightMargin: 9 }
+            spacing: 9
             MaterialSymbol {
                 text: icon
-                iconSize: 15
+                iconSize: 17
                 color: danger ? menuWindow.colDanger : menuWindow.colTextMuted
             }
             Text {
@@ -1059,7 +1059,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 text: label
                 color: danger ? menuWindow.colDanger : menuWindow.colText
                 font.family: menuWindow.uiFont
-                font.pixelSize: 11
+                font.pixelSize: 13
                 font.weight: Font.Medium
                 renderType: Text.QtRendering
             }
@@ -1074,7 +1074,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
         }
     }
 
-    // Crisp 34px iNiR ContextMenu Row (subtle calm hover, zero chunky pill blobs)
+    // Crisp 38px iNiR ContextMenu Row (readable typography, subtle calm hover)
     component InirMenuRow: Rectangle {
         id: rowItem
         property string icon: ""
@@ -1089,7 +1089,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
         readonly property bool isLit: rowMouse.containsMouse || rowHover.hovered || submenuActive
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 33
+        Layout.preferredHeight: 38
         radius: menuWindow.radSmall
         color: submenuActive
             ? menuWindow.colSelection
@@ -1100,12 +1100,12 @@ print(json.dumps({"active": active_wall, "items": entries}))
         Behavior on color { ColorAnimation { duration: 100 } }
 
         RowLayout {
-            anchors { fill: parent; leftMargin: 9; rightMargin: 8 }
+            anchors { fill: parent; leftMargin: 10; rightMargin: 9 }
             spacing: 10
 
             MaterialSymbol {
                 text: rowItem.icon
-                iconSize: 16
+                iconSize: 18
                 fill: rowItem.isLit ? 1 : 0
                 color: rowItem.isLit ? menuWindow.colPrimary : menuWindow.colTextMuted
             }
@@ -1115,7 +1115,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 text: rowItem.label
                 color: menuWindow.colText
                 font.family: menuWindow.uiFont
-                font.pixelSize: 11
+                font.pixelSize: 13
                 font.weight: rowItem.isLit ? Font.DemiBold : Font.Normal
                 renderType: Text.QtRendering
                 elide: Text.ElideRight
@@ -1123,8 +1123,8 @@ print(json.dumps({"active": active_wall, "items": entries}))
 
             Rectangle {
                 visible: rowItem.accentDotColor !== Qt.color("transparent") && String(rowItem.accentDotColor) !== "#00000000"
-                Layout.preferredWidth: 8
-                Layout.preferredHeight: 8
+                Layout.preferredWidth: 9
+                Layout.preferredHeight: 9
                 radius: 2
                 color: rowItem.accentDotColor
             }
@@ -1134,7 +1134,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
                 text: rowItem.valueText
                 color: menuWindow.colTextMuted
                 font.family: menuWindow.uiFont
-                font.pixelSize: 10
+                font.pixelSize: 12
                 font.weight: Font.Medium
                 renderType: Text.QtRendering
             }
@@ -1142,7 +1142,7 @@ print(json.dumps({"active": active_wall, "items": entries}))
             MaterialSymbol {
                 visible: rowItem.hasSubmenu
                 text: "chevron_right"
-                iconSize: 14
+                iconSize: 16
                 color: rowItem.isLit ? menuWindow.colPrimary : menuWindow.colTextMuted
             }
         }
