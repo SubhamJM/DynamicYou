@@ -222,7 +222,7 @@ FocusScope {
 
         Text {
             Layout.fillWidth: true
-            text: "Moves images into color theme folders inside the selected source folder."
+            text: "Moves images and live wallpapers into color theme folders inside the selected source folder. Videos are classified from frames across the clip."
             color: Theme.subtext
             font.family: Theme.fontFamilyBody
             font.pixelSize: 11
@@ -288,7 +288,7 @@ FocusScope {
                 if (sorter.sorting) return sorter.total > 0
                     ? sorter.current + " / " + sorter.total + " · " + sorter.currentFile : "Scanning folder…";
                 if (!sorter.result) return "";
-                if (sorter.result.total_found === 0) return "No supported images found in this folder.";
+                if (sorter.result.total_found === 0) return "No supported images or videos found in this folder.";
                 let summary = sorter.result.unique_added + " organized · " + sorter.result.duplicates_skipped + " duplicate names skipped";
                 if (sorter.result.failed > 0) summary += " · " + sorter.result.failed + " failed";
                 return summary;

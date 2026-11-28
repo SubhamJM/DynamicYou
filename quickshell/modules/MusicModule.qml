@@ -8,6 +8,7 @@ import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import "../"
+import qs.services
 
 Item {
     id: musicModule
@@ -136,11 +137,17 @@ Item {
             }
         }
 
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].playbackState === MprisPlaybackState.Playing || list[i].isPlaying) {
-                return list[i];
-            }
+        const ctrl = (typeof MprisController !== "undefined") ? MprisController.activePlayer : null;
+        const playingList = list.filter(p => p.playbackState === MprisPlaybackState.Playing || p.isPlaying);
+        if (playingList.length > 0) {
+            if (ctrl && playingList.indexOf(ctrl) !== -1) return ctrl;
+            const withArt = playingList.find(p => MprisController.rawArtUrlFor(p) !== "");
+            return withArt ?? playingList[0];
         }
+
+        if (ctrl && list.indexOf(ctrl) !== -1) return ctrl;
+        const pausedWithArt = list.find(p => MprisController.rawArtUrlFor(p) !== "");
+        if (pausedWithArt) return pausedWithArt;
         if (list.length > 0) return list[0];
         return null;
     }
@@ -177,56 +184,19 @@ Item {
     }
 
     // ========================================================
-    // 2. REMOTE COVER CACHING VIA CURL (Lucid 1:1 Crash Prevention)
+    // 2. REMOTE COVER CACHING VIA COVERART SERVICE
     // ========================================================
     readonly property string rawArtUrl: {
-        if (activePlayer && activePlayer.trackArtUrl && String(activePlayer.trackArtUrl).trim() !== "") {
-            return String(activePlayer.trackArtUrl).trim();
-        }
-        if (typeof dashMod !== "undefined" && dashMod && dashMod.currentAlbumArt && String(dashMod.currentAlbumArt).trim() !== "") {
-            return String(dashMod.currentAlbumArt).trim();
+        if (activePlayer) {
+            const u = MprisController.rawArtUrlFor(activePlayer);
+            if (u !== "") return u;
+            if (activePlayer === MprisController.activePlayer && MprisController.artUrl) {
+                return String(MprisController.artUrl).trim();
+            }
         }
         return "";
     }
-
-    readonly property bool remoteArt: /^https?:/.test(rawArtUrl)
-    readonly property string artFile: {
-        if (!remoteArt) return "";
-        var h = 5381;
-        for (var i = 0; i < rawArtUrl.length; i++) h = ((h * 33) ^ rawArtUrl.charCodeAt(i)) >>> 0;
-        return (Quickshell.env("HOME") || "") + "/.cache/quickshell/art/" + h.toString(16) + ".img";
-    }
-    property string localArt: ""
-    readonly property string effectiveArtUrl: remoteArt ? localArt : rawArtUrl
-
-    function fetchCover() {
-        if (artFile === "") {
-            localArt = "";
-            return;
-        }
-        artFetch.superseded = artFetch.running;
-        artFetch.file = artFile;
-        artFetch.running = false;
-        artFetch.command = ["sh", "-c", artFetch.script, "sh", artFile, rawArtUrl];
-        artFetch.running = true;
-    }
-
-    onArtFileChanged: fetchCover()
-    Component.onCompleted: fetchCover()
-
-    Process {
-        id: artFetch
-        property string file: ""
-        property bool superseded: false
-        readonly property string script: "f=\"$1\"; d=\"$(dirname \"$f\")\"; mkdir -p \"$d\"; find \"$d\" -name '*.img' -mtime +14 -delete 2>/dev/null; [ -s \"$f\" ] || { t=\"$f.$$\"; curl -sfL --max-time 10 -o \"$t\" \"$2\" && mv \"$t\" \"$f\" || rm -f \"$t\"; }; [ -s \"$f\" ]"
-        onExited: (code) => {
-            if (artFetch.superseded) {
-                artFetch.superseded = false;
-                return;
-            }
-            localArt = (code === 0) ? ("file://" + artFetch.file) : "";
-        }
-    }
+    readonly property string effectiveArtUrl: CoverArt.source(rawArtUrl)
 
     // Broadcast current album art to whole shell Theme
     onEffectiveArtUrlChanged: {
@@ -1257,7 +1227,7 @@ Item {
                             IrisArtwork {
                                 width: 18
                                 height: 18
-                                source: String(playerChip.modelData?.trackArtUrl ?? "")
+                                source: CoverArt.source(MprisController.rawArtUrlFor(playerChip.modelData))
                                 circular: true
                                 radius: 9
                             }

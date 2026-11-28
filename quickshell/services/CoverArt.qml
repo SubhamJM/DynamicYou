@@ -26,10 +26,14 @@ Singleton {
     property var _ready: ({})
     property var _failedAt: ({})
     property var _queue: []
-    readonly property int retryAfterMs: 15000
+    readonly property int retryAfterMs: 8000
 
     function isLocal(url: string): bool {
-        return url.startsWith("file://") || url.startsWith("/");
+        return url.startsWith("file://")
+            || url.startsWith("/")
+            || url.startsWith("data:image/")
+            || url.startsWith("image://")
+            || url.startsWith("qrc:/");
     }
 
     function cachePath(url: string): string {
@@ -43,6 +47,8 @@ Singleton {
             return "";
         if (root.isLocal(url))
             return url.startsWith("/") ? `file://${url}` : url;
+        if (!/^https?:\/\//i.test(url))
+            return "";
         if (root._ready[url])
             return Qt.resolvedUrl(root.cachePath(url));
         root.request(url);
@@ -56,7 +62,7 @@ Singleton {
     }
 
     function request(url: string): void {
-        if (!url || root.isLocal(url) || root._ready[url])
+        if (!url || root.isLocal(url) || !/^https?:\/\//i.test(url) || root._ready[url])
             return;
         const failed = root._failedAt[url];
         if (failed && Date.now() - failed < root.retryAfterMs)
@@ -99,7 +105,7 @@ Singleton {
         property string path: ""
         command: ["bash", "-c",
             "test -s \"$2\" && exit 0; mkdir -p \"$(dirname \"$2\")\"; t=$(mktemp \"$2.XXXXXX\") || exit 1; "
-            + "if curl -fLsS -4 --connect-timeout 8 --max-time 30 -o \"$t\" -- \"$1\" && test -s \"$t\"; then mv -f -- \"$t\" \"$2\"; else rm -f -- \"$t\"; exit 1; fi",
+            + "if curl -fLsS -4 -A 'Mozilla/5.0' --retry 1 --retry-delay 1 --connect-timeout 8 --max-time 30 -o \"$t\" -- \"$1\" && test -s \"$t\"; then mv -f -- \"$t\" \"$2\"; else rm -f -- \"$t\"; exit 1; fi",
             "cover-art", url, path]
         onExited: exitCode => {
             const url = downloader.url;

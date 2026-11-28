@@ -21,7 +21,8 @@ Item {
     readonly property bool playing: root.hasPlayer && root.player.playbackState === MprisPlaybackState.Playing
     readonly property string trackTitle: root.hasPlayer ? String(root.player.trackTitle || "") : ""
     readonly property string trackArtist: root.hasPlayer ? String(root.player.trackArtist || "") : ""
-    readonly property string artUrl: root.hasPlayer ? String(root.player.trackArtUrl || "") : ""
+    readonly property string rawArtUrl: root.hasPlayer ? (MprisController.rawArtUrlFor(root.player) || String(MprisController.artUrl || "")) : ""
+    readonly property string artUrl: CoverArt.source(root.rawArtUrl)
     readonly property real trackLength: {
         if (!root.hasPlayer) return 0;
         if (root.player.lengthSupported && Number(root.player.length) > 0)

@@ -39,7 +39,8 @@ Item {
     }
     readonly property string trackTitle: hasPlayer && player.trackTitle ? String(player.trackTitle) : "Nothing Playing"
     readonly property string trackArtist: hasPlayer && player.trackArtist ? String(player.trackArtist) : "Queue empty"
-    readonly property string artUrl: hasPlayer && player.trackArtUrl ? String(player.trackArtUrl) : ""
+    readonly property string rawArtUrl: hasPlayer ? (MprisController.rawArtUrlFor(player) || String(MprisController.artUrl || "")) : ""
+    readonly property string artUrl: CoverArt.source(rawArtUrl)
 
     property real elapsedSec: 0
     property real lengthSec: 0

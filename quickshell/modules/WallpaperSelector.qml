@@ -28,6 +28,7 @@ FocusScope {
     ListModel { id: displayModel }
 
     property string sortMode: "recent" // "recent" (default) | "oldest" | "name_asc" | "name_desc" | "shuffle"
+    property bool liveOnly: false
     property bool sortDropdownOpen: false
     property int filterGeneration: 0
 
@@ -48,6 +49,7 @@ FocusScope {
 
         for (var i = 0; i < fullWallpaperModel.count; i++) {
             var item = fullWallpaperModel.get(i);
+            if (wallModule.liveOnly && !/\.(mp4|webm|mkv|mov|m4v)$/i.test(item.path)) continue;
             if (q === "" || item.name.toLowerCase().indexOf(q) !== -1 || item.path.toLowerCase().indexOf(q) !== -1) {
                 matched.push({
                     "path": item.path,
@@ -280,7 +282,7 @@ try:
 except Exception:
     pass
 
-exts = ('.jpg', '.jpeg', '.png', '.webp', '.mp4')
+exts = ('.jpg', '.jpeg', '.png', '.webp', '.mp4', '.webm', '.mkv', '.mov', '.m4v')
 files = []
 if wall_dir and os.path.exists(wall_dir):
     for root_dir, dirs, fnames in os.walk(wall_dir):
@@ -302,6 +304,14 @@ if not files:
                 break
 
 files_with_mtime = []
+saved = os.path.join(home, '.config/active-theme/current-wallpaper.txt')
+try:
+    with open(saved, encoding='utf-8') as state:
+        selected = state.readline().strip()
+    if selected and os.path.isfile(selected):
+        active_wall = selected
+except OSError:
+    pass
 if active_wall and os.path.isfile(active_wall) and active_wall not in files:
     files.append(active_wall)
 for f in set(files):
@@ -429,14 +439,22 @@ for f, mtime in files_with_mtime:
         }
     }
 
-    // Background process to generate thumbnails using Lucid's script
+    // Background process to generate missing recursive thumbnails (including live videos)
     Process {
         id: thumbsRunner
         running: false
         command: [
-            Quickshell.env("HOME") + "/.config/quickshell/luciddocks/wallpaper-thumbs.sh",
+            Quickshell.env("HOME") + "/.config/quickshell/scripts/wallpaper_thumbs.sh",
             Quickshell.env("HOME") + "/Pictures/Wallpapers"
         ]
+        onExited: {
+            for (let i = 0; i < fullWallpaperModel.count; i++) {
+                if (!fullWallpaperModel.get(i).thumb) {
+                    wallpaperScanner.running = true;
+                    break;
+                }
+            }
+        }
     }
 
     function applyWallpaperPath(path) {
@@ -592,6 +610,51 @@ for f, mtime in files_with_mtime:
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (typeof root !== "undefined") root.switchMode("theme", true);
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: liveBtn
+                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: liveRow.implicitWidth + 24
+                    radius: 16
+                    color: wallModule.liveOnly ? Theme.accent
+                        : (liveMouse.containsMouse ? Qt.alpha(Theme.text, 0.12) : Qt.alpha(Theme.text, 0.07))
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Row {
+                        id: liveRow
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "play_circle"
+                            font.family: Theme.fontFamilyIcon
+                            font.pixelSize: 16
+                            renderType: Text.CurveRendering
+                            color: wallModule.liveOnly ? Theme.fgAccent : Theme.accent
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Live"
+                            font.family: "Google Sans Flex"
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            color: wallModule.liveOnly ? Theme.fgAccent : Theme.text
+                        }
+                    }
+
+                    MouseArea {
+                        id: liveMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            wallModule.liveOnly = !wallModule.liveOnly;
+                            wallModule.userInteracted = false;
+                            wallModule.filterWallpapers();
                         }
                     }
                 }

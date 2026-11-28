@@ -20,10 +20,15 @@ import argparse
 import json
 import math
 import shutil
+import subprocess
 import tempfile
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from PIL import Image
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".m4v"}
 
 # Exact perceptual theme anchors for CIELAB distance calculations
 THEME_ANCHORS = {
@@ -153,7 +158,42 @@ def classify_wallpaper(img_path):
             return best_theme, chosen_rgb, hex_color
 
     except (OSError, Image.DecompressionBombError) as error:
-        raise ValueError(f"Could not read image: {img_path.name}") from error
+        raise ValueError(f"Could not read image: {getattr(img_path, 'name', img_path)}") from error
+
+
+def classify_video(path):
+    """Classify several frames so an opening fade or dark scene cannot decide alone."""
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, timeout=15, check=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ValueError(f"Could not inspect video: {path.name}") from error
+    try:
+        duration = float(probe.stdout.strip())
+    except ValueError as error:
+        raise ValueError(f"Could not read video duration: {path.name}") from error
+    if not math.isfinite(duration):
+        raise ValueError(f"Invalid video duration: {path.name}")
+    samples = [duration * fraction for fraction in (0.25, 0.5, 0.75)] if duration > 2 else [0]
+    results = []
+    for second in samples:
+        try:
+            frame = subprocess.run(
+                ["ffmpeg", "-v", "error", "-ss", str(second), "-i", str(path),
+                 "-frames:v", "1", "-vf", "scale=320:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if frame.returncode == 0 and frame.stdout:
+            stream = BytesIO(frame.stdout)
+            stream.name = path.name
+            results.append(classify_wallpaper(stream))
+    if not results:
+        raise ValueError(f"Could not decode video: {path.name}")
+    # Choose the most frequent theme; a tie favors the middle sample.
+    counts = {theme: sum(entry[0] == theme for entry in results) for theme, _, _ in results}
+    return max(enumerate(results), key=lambda pair: (counts[pair[1][0]], -abs(pair[0] - len(results) // 2)))[1]
 
 def collect_existing_names(dest_dir):
     """Gathers all existing wallpaper filenames across destination theme subfolders."""
@@ -162,7 +202,7 @@ def collect_existing_names(dest_dir):
     if not dest_path.is_dir():
         return existing
 
-    extensions = {".jpg", ".jpeg", ".png", ".webp"}
+    extensions = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
     for item in dest_path.glob("*/*"):
         if item.is_file() and item.suffix.lower() in extensions:
             existing.add(item.name.lower())
@@ -179,7 +219,7 @@ def copy_image(source, destination):
         os.replace(temporary, destination)
 
 
-def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=False):
+def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=False, videos_only=False):
     """
     Scans source_dir for images, deduplicates by filename, classifies via Material You,
     and sorts into partitioned theme subdirectories in dest_dir.
@@ -196,7 +236,7 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=Fa
             print(f"Error: {message}", file=sys.stderr)
         return False
 
-    extensions = {".jpg", ".jpeg", ".png", ".webp"}
+    extensions = VIDEO_EXTENSIONS if videos_only else IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
     files = []
     theme_names = set(THEME_ANCHORS)
     for folder, directories, names in os.walk(source_path):
@@ -257,7 +297,8 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=Fa
             continue
 
         try:
-            theme, rgb, hex_col = classify_wallpaper(file_path)
+            theme, rgb, hex_col = (classify_video(file_path) if file_path.suffix.lower() in VIDEO_EXTENSIONS
+                                   else classify_wallpaper(file_path))
             theme_dir = dest_path / theme
             dest_file = theme_dir / file_path.name
             theme_dir.mkdir(parents=True, exist_ok=True)
@@ -267,6 +308,14 @@ def sort_directory(source_dir, dest_dir, mode="copy", as_json=False, in_place=Fa
                 shutil.move(file_path, dest_file)
                 with manifest_path.open("a", encoding="utf-8") as manifest:
                     manifest.write(json.dumps({"from": str(file_path), "to": str(dest_file)}) + "\n")
+                active_file = dest_path / "current-wallpaper.txt"
+                if not active_file.exists():
+                    active_file = Path.home() / ".config/active-theme/current-wallpaper.txt"
+                try:
+                    if active_file.read_text(encoding="utf-8").strip() == str(file_path):
+                        active_file.write_text(str(dest_file) + "\n", encoding="utf-8")
+                except OSError:
+                    pass
             elif mode == "symlink":
                 dest_file.symlink_to(file_path)
             elif mode == "move":
@@ -335,10 +384,11 @@ def main():
                         help="Operation mode: copy (default), symlink, or move")
     parser.add_argument("--json", action="store_true", help="Emit line-by-line JSON events for UI consumers")
     parser.add_argument("--in-place", action="store_true", help="Move images into theme folders inside the source folder")
+    parser.add_argument("--videos-only", action="store_true", help="Sort only video wallpapers")
 
     args = parser.parse_args()
     return 0 if sort_directory(args.source, args.dest, mode=args.mode, as_json=args.json,
-                               in_place=args.in_place) else 1
+                               in_place=args.in_place, videos_only=args.videos_only) else 1
 
 if __name__ == "__main__":
     sys.exit(main())

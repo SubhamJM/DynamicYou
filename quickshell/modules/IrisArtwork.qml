@@ -26,7 +26,7 @@ Item {
             fillMode: Image.PreserveAspectCrop
             visible: status === Image.Ready
             smooth: true
-            cache: false
+            cache: root.source.startsWith("file://") || root.source.startsWith("image://") || root.source.startsWith("qrc:/")
         }
 
         Text {

@@ -25,49 +25,13 @@ Item {
     readonly property color discBg: Qt.rgba(1, 1, 1, 0.16)
     readonly property color discHover: Qt.rgba(1, 1, 1, 0.26)
 
-    property string cachedArtFile: ""
     readonly property string rawArtUrl: {
         if (!root.hasPlayer) return "";
-        const u = root.player.trackArtUrl ? String(root.player.trackArtUrl) : "";
+        const u = MprisController.rawArtUrlFor(root.player);
         if (u.length > 0) return u;
         return MprisController.artUrl ? String(MprisController.artUrl) : "";
     }
-    readonly property string displayArt: {
-        const u = root.rawArtUrl;
-        if (u.startsWith("http://") || u.startsWith("https://")) return root.cachedArtFile;
-        return u;
-    }
-
-    onRawArtUrlChanged: {
-        const u = root.rawArtUrl;
-        if (u.startsWith("http://") || u.startsWith("https://")) {
-            artCacheProc.running = false;
-            artCacheProc.command = [
-                "python3", "-c",
-                "import sys,hashlib,os,urllib.request\n" +
-                "url=sys.argv[1]; d=os.path.expanduser('~/.cache/quickshell/art'); os.makedirs(d,exist_ok=True)\n" +
-                "p=os.path.join(d,hashlib.sha1(url.encode()).hexdigest()+'.img')\n" +
-                "if not os.path.exists(p) or os.path.getsize(p)==0:\n" +
-                "    try:\n" +
-                "        req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})\n" +
-                "        with urllib.request.urlopen(req,timeout=5) as r, open(p,'wb') as f: f.write(r.read())\n" +
-                "    except Exception: p=''\n" +
-                "print('file://'+p if p and os.path.exists(p) and os.path.getsize(p)>0 else '')",
-                u
-            ];
-            artCacheProc.running = true;
-        } else {
-            root.cachedArtFile = "";
-        }
-    }
-
-    Process {
-        id: artCacheProc
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: root.cachedArtFile = text.trim()
-        }
-    }
+    readonly property string displayArt: CoverArt.source(root.rawArtUrl)
 
     property real posSec: 0
     property real lenSec: 0

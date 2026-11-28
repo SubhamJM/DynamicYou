@@ -279,6 +279,26 @@ Item {
                 }
 
                 Rectangle {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: Theme.dp(8)
+                    width: Theme.dp(48)
+                    height: Theme.dp(24)
+                    radius: Theme.dp(6)
+                    color: Theme.accent
+                    visible: /\.(mp4|webm|mkv|mov|m4v)$/i.test(slot.path)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "▶  LIVE"
+                        color: Theme.fgAccent
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fs(9)
+                        font.bold: true
+                    }
+                }
+
+                Rectangle {
                     anchors.fill: parent
                     color: Theme.text
                     opacity: slot.pressed ? Theme.statePressed : (slot.hovered ? Theme.stateHover : 0)

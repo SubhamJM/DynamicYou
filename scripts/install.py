@@ -256,7 +256,7 @@ def install_deps(selected, browser):
         raise ValueError("--deps is available on Arch-based distributions. Install dependencies with your package manager.")
     core = ("hyprland hyprlock hypridle hyprpicker hyprlauncher hyprpolkitagent hyprsunset "
             "xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xorg-xwayland xdg-utils "
-            "awww imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg wf-recorder "
+            "awww imagemagick wl-clipboard cliphist grim slurp swappy ffmpeg qt6-multimedia qt6-multimedia-ffmpeg wf-recorder "
             "kitty yazi playerctl brightnessctl pamixer cava upower networkmanager iw bluez bluez-utils "
             "pipewire pipewire-pulse wireplumber power-profiles-daemon gnome-keyring libsecret dnsmasq iptables "
             "dbus jq socat libnotify python python-dbus python-gobject python-pillow qrencode "

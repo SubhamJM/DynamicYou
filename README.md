@@ -39,6 +39,8 @@ The installer previews the paths it will change, asks which apps should follow t
 
 On a fresh Arch install, run `./install.sh --deps` as your normal user with access to `sudo`. With your approval it installs Python if needed, then installs the supported Arch packages, including Quickshell with its NetworkManager integration, and `qrencode`. Basic installation uses Arch's official repositories. Quickshell 0.3.2 and Hyprland 0.57.2 are the tested versions.
 
+The wallpaper picker also supports local MP4, WebM, MKV, MOV, and M4V videos in `~/Pictures/Wallpapers`. It creates a still preview with FFmpeg and plays the video silently behind the desktop. Selecting a regular image stops the video. `./install.sh --deps` installs the Qt Multimedia FFmpeg backend and FFmpeg needed for this feature. Wallpaper changes do not alter the selected theme's colors.
+
 The installer offers to start NetworkManager and BlueZ if they are inactive. Wi-Fi and Bluetooth need their respective services and supported hardware. Use `--enable-services` to opt in from a noninteractive install. The installer keeps an already active network manager. After installing, start a Hyprland session to launch the bar.
 
 The browser key uses Zen if present and can fall back to Firefox on a fresh installation. Use `--browser zen` or `--browser helium` to explicitly choose another browser. Installing either through `--deps` requires an existing AUR helper if the browser is absent. System browser defaults are your choice. `setup.sh` uses the same installer, and `setup.sh --install` is an alias for `install.sh --deps`.

@@ -20,6 +20,11 @@ hl.window_rule({
 --  Layer Rules (Blur)
 -- ==================================================
 
+-- Keep the video behind desktop widgets but above awww's poster frame.
+hl.layer_rule({ match = { namespace = "awww-daemon" }, order = 2 })
+hl.layer_rule({ match = { namespace = "dynamic-you-live" }, order = 1 })
+hl.layer_rule({ name = "dynamic-you-snip-noanim", match = { namespace = "^(dynamic-you-snip(-preview)?|matushell:(snip|snippreview))$" }, no_anim = true, blur = false })
+
 hl.layer_rule({
     name = "quickshell-popups-no-blur",
     match = { namespace = "qs_popup" },

@@ -30,7 +30,8 @@ Item {
     readonly property string trackTitle: hasPlayer ? String(player.trackTitle || "").trim() : ""
     readonly property string trackArtist: hasPlayer ? String(player.trackArtist || "").trim() : ""
     readonly property string trackAlbum: hasPlayer ? String(player.trackAlbum || "").trim() : ""
-    readonly property string artUrl: hasPlayer ? String(player.trackArtUrl || "") : ""
+    readonly property string rawArtUrl: hasPlayer ? (MprisController.rawArtUrlFor(player) || String(MprisController.artUrl || "")) : ""
+    readonly property string artUrl: CoverArt.source(rawArtUrl)
     readonly property real trackLength: {
         if (!hasPlayer) return 0;
         const known = MprisController.trackLengths ? MprisController.trackLengths[player.dbusName ?? ""] : null;

@@ -1,0 +1,18 @@
+module matusnip
+singleton MatusConfig 1.0 MatusConfig.qml
+singleton MatusMotion 1.0 MatusMotion.qml
+singleton Theming 1.0 Theming.qml
+singleton MatusOverlays 1.0 MatusOverlays.qml
+singleton MatusLogger 1.0 MatusLogger.qml
+MatusAnim 1.0 MatusAnim.qml
+MatusColorAnim 1.0 MatusColorAnim.qml
+MatusText 1.0 MatusText.qml
+MatusIcon 1.0 MatusIcon.qml
+MatusRipple 1.0 MatusRipple.qml
+MaterialShape 1.0 MaterialShape.qml
+MatusButton 1.0 MatusButton.qml
+MatusIconButton 1.0 MatusIconButton.qml
+MatusFabMenu 1.0 MatusFabMenu.qml
+AreaPickerOverlay 1.0 AreaPickerOverlay.qml
+SnipThumbnail 1.0 SnipThumbnail.qml
+ScreenSnip 1.0 ScreenSnip.qml

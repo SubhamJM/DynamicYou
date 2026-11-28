@@ -117,6 +117,23 @@ Singleton {
         function onThemeReloaded() { root.refreshEnvironment(); }
     }
 
+    FileView {
+        path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/active-theme/current-wallpaper.txt"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: {
+            reload();
+            wallChangeRefreshTimer.restart();
+        }
+    }
+
+    Timer {
+        id: wallChangeRefreshTimer
+        interval: 150
+        repeat: false
+        onTriggered: root.refreshEnvironment()
+    }
+
     Process {
         id: envProbe
         running: false

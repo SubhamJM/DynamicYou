@@ -10,6 +10,7 @@ import "../"
 import "."
 import "." as DashComponents
 import "./widgets"
+import qs.services
 
 Item {
     id: dash
@@ -135,8 +136,11 @@ Item {
     }
     property string currentAlbumArt: {
         if (!activeMprisPlayer) return "";
-        var art = activeMprisPlayer.trackArtUrl || activeMprisPlayer.artUrl || "";
-        return (art.startsWith("file://") || art.startsWith("http://") || art.startsWith("https://") || art.length > 0) ? art : "";
+        var raw = MprisController.rawArtUrlFor(activeMprisPlayer) || "";
+        if (raw === "" && activeMprisPlayer === MprisController.activePlayer) {
+            raw = MprisController.artUrl ? String(MprisController.artUrl) : "";
+        }
+        return raw !== "" ? CoverArt.source(raw) : "";
     }
     property real trackPosition: (activeMprisPlayer && activeMprisPlayer.position) ? activeMprisPlayer.position : 0
     property real trackLength: (activeMprisPlayer && activeMprisPlayer.length) ? activeMprisPlayer.length : 0
@@ -155,6 +159,9 @@ Item {
     readonly property var allMprisPlayers: (typeof Mpris !== "undefined" && Mpris.players) ? Mpris.players.values : []
 
     readonly property var activeMprisPlayer: {
+        if (typeof MprisController !== "undefined" && MprisController.activePlayer) {
+            return MprisController.activePlayer;
+        }
         var list = allMprisPlayers;
         if (!list || list.length === 0) return null;
         for (var i = 0; i < list.length; i++) {

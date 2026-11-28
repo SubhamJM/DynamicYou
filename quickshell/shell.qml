@@ -30,6 +30,8 @@ import qs.modules.irislock
 ShellRoot {
     id: root
 
+    LiveWallpaperController { id: liveWallpaperController }
+
     readonly property alias hotspot: hotspotController
     readonly property alias notepadStore: notesData
     readonly property bool hotspotPanelOpen: activeMode === "wifi" && wifiMod?.activeTab === "hotspot"
@@ -491,7 +493,7 @@ try:
 except Exception:
     pass
 
-exts = ('.jpg', '.jpeg', '.png', '.webp', '.mp4')
+exts = ('.jpg', '.jpeg', '.png', '.webp', '.mp4', '.webm', '.mkv', '.mov', '.m4v')
 files = []
 if wall_dir and os.path.exists(wall_dir):
     for root_dir, dirs, fnames in os.walk(wall_dir):
@@ -509,6 +511,14 @@ if not files:
                 if fn.lower().endswith(exts) and not fn.startswith('.'):
                     files.append(os.path.join(root_dir, fn))
 
+saved = os.path.join(home, '.config/active-theme/current-wallpaper.txt')
+try:
+    with open(saved, encoding='utf-8') as state:
+        selected = state.readline().strip()
+    if selected and os.path.isfile(selected):
+        active_wall = selected
+except OSError:
+    pass
 if active_wall and os.path.isfile(active_wall) and active_wall not in files:
     files.append(active_wall)
 
@@ -2428,65 +2438,20 @@ for f, mtime in files_with_mtime:
         Item {
             id: mediaBubble
             readonly property bool mediaActive: typeof MprisController !== "undefined" && !!MprisController.activePlayer
-            readonly property string artSource: {
+            readonly property string rawArtSource: {
                 if (!mediaActive) return "";
                 const ctrlUrl = MprisController.artUrl ? String(MprisController.artUrl) : "";
                 if (ctrlUrl !== "") return ctrlUrl;
-                const playerUrl = MprisController.activePlayer && MprisController.activePlayer.trackArtUrl
-                    ? String(MprisController.activePlayer.trackArtUrl)
-                    : "";
-                return playerUrl;
+                return MprisController.rawArtUrlFor(MprisController.activePlayer);
             }
-            readonly property bool remoteArt: /^https?:/.test(artSource)
-            readonly property string remoteArtCachePath: {
-                if (!remoteArt) return "";
-                var h = 5381;
-                for (var i = 0; i < artSource.length; i++) h = ((h * 33) ^ artSource.charCodeAt(i)) >>> 0;
-                return (Quickshell.env("HOME") || "") + "/.cache/quickshell/art/" + h.toString(16) + ".img";
-            }
-            property string localFetchedArt: ""
-            readonly property string quantizerSource: {
-                if (!mediaActive || artSource === "") return "";
-                if (remoteArt) return localFetchedArt;
-                if (artSource.startsWith("file://")) return artSource;
-                if (artSource.startsWith("/")) return "file://" + artSource;
-                return "";
-            }
+            readonly property string artSource: mediaActive ? CoverArt.source(rawArtSource) : ""
+            readonly property string quantizerSource: artSource
             property color extractedArtColor: (typeof Theme !== "undefined") ? Theme.accent : "#25b4e5"
             readonly property color ringColor: mediaActive && quantizerSource !== "" ? extractedArtColor : ((typeof Theme !== "undefined") ? Theme.accent : "#25b4e5")
             property real trackProgress: 0
 
-            function refreshBubbleArtCache() {
-                if (remoteArtCachePath === "") {
-                    localFetchedArt = "";
-                    return;
-                }
-                bubbleArtFetch.superseded = bubbleArtFetch.running;
-                bubbleArtFetch.file = remoteArtCachePath;
-                bubbleArtFetch.running = false;
-                bubbleArtFetch.command = ["sh", "-c", bubbleArtFetch.script, "sh", remoteArtCachePath, artSource];
-                bubbleArtFetch.running = true;
-            }
-
-            onRemoteArtCachePathChanged: refreshBubbleArtCache()
-            onArtSourceChanged: {
-                if (!remoteArt) localFetchedArt = "";
-                if (artSource === "") extractedArtColor = (typeof Theme !== "undefined") ? Theme.accent : "#25b4e5";
-            }
-            Component.onCompleted: refreshBubbleArtCache()
-
-            Process {
-                id: bubbleArtFetch
-                property string file: ""
-                property bool superseded: false
-                readonly property string script: "f=\"$1\"; d=\"$(dirname \"$f\")\"; mkdir -p \"$d\"; [ -s \"$f\" ] || { t=\"$f.$$\"; curl -sfL --max-time 8 -o \"$t\" \"$2\" && mv \"$t\" \"$f\" || rm -f \"$t\"; }; [ -s \"$f\" ]"
-                onExited: (code) => {
-                    if (bubbleArtFetch.superseded) {
-                        bubbleArtFetch.superseded = false;
-                        return;
-                    }
-                    mediaBubble.localFetchedArt = (code === 0) ? ("file://" + bubbleArtFetch.file) : "";
-                }
+            onRawArtSourceChanged: {
+                if (rawArtSource === "") extractedArtColor = (typeof Theme !== "undefined") ? Theme.accent : "#25b4e5";
             }
 
             ColorQuantizer {

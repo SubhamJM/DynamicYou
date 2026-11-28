@@ -401,6 +401,15 @@ Singleton {
 		return 0;
 	}
 
+	function _hasMeaningfulMeta(player: MprisPlayer): int {
+		if (!player) return 0;
+		let score = 0;
+		if (root.rawArtUrlFor(player) !== "") score += 2;
+		const title = String(player.trackTitle ?? "").trim();
+		if (title !== "" && !/is playing media$/i.test(title)) score += 1;
+		return score;
+	}
+
 	/** Whether an automatic switch from the tracked player to `player` is allowed. */
 	function mayTakeOver(player: MprisPlayer): bool {
 		const current = root.trackedPlayer;
@@ -409,10 +418,12 @@ Singleton {
 		const diff = root.tierOf(player) - root.tierOf(current);
 		if (diff !== 0)
 			return diff > 0;
-		return player.isPlaying || !current.isPlaying;
+		if (player.isPlaying !== current.isPlaying)
+			return player.isPlaying;
+		return root._hasMeaningfulMeta(player) > root._hasMeaningfulMeta(current);
 	}
 
-	/** The player the policy would pick right now: tier, then playing, then the tracked one. */
+	/** The player the policy would pick right now: tier, then playing, then richer art/metadata, then the tracked one. */
 	function bestApplicationPlayer(): MprisPlayer {
 		let best = null;
 		for (const player of root.applicationPlayers) {
@@ -421,8 +432,11 @@ Singleton {
 				continue;
 			}
 			const diff = root.tierOf(player) - root.tierOf(best);
-			if (diff > 0 || (diff === 0 && player.isPlaying && !best.isPlaying)
-				|| (diff === 0 && player.isPlaying === best.isPlaying && player === root.trackedPlayer))
+			const metaDiff = root._hasMeaningfulMeta(player) - root._hasMeaningfulMeta(best);
+			if (diff > 0
+				|| (diff === 0 && player.isPlaying && !best.isPlaying)
+				|| (diff === 0 && player.isPlaying === best.isPlaying && metaDiff > 0)
+				|| (diff === 0 && player.isPlaying === best.isPlaying && metaDiff === 0 && player === root.trackedPlayer))
 				best = player;
 		}
 		return best;
@@ -443,10 +457,58 @@ Singleton {
 
 	property var activeTrack;
 	property string _artUrlFallback: "";
+	property var _trackArtCache: ({});
+
+	function _rawPlayerArt(player: MprisPlayer): string {
+		if (!player) return "";
+		const direct = player.trackArtUrl ? String(player.trackArtUrl).trim() : "";
+		if (direct !== "") return direct;
+		const metaArt = player.metadata?.["mpris:artUrl"] ? String(player.metadata["mpris:artUrl"]).trim() : "";
+		if (metaArt !== "") return metaArt;
+		return "";
+	}
+
+	function _rememberPlayerArt(player: MprisPlayer, rawUrl: string): void {
+		if (!player || !rawUrl) return;
+		const pkey = root.playerKey(player);
+		if (!pkey) return;
+		const tkey = root.trackKeyOf(player);
+		const title = String(player.trackTitle ?? "");
+		const cur = root._trackArtCache[pkey];
+		if (cur && cur.key === tkey && cur.title === title && cur.url === rawUrl)
+			return;
+		const next = Object.assign({}, root._trackArtCache);
+		next[pkey] = { key: tkey, title: title, url: rawUrl };
+		root._trackArtCache = next;
+	}
+
+	function rawArtUrlFor(player: MprisPlayer): string {
+		if (!player) return "";
+		const live = root._rawPlayerArt(player);
+		if (live !== "") {
+			root._rememberPlayerArt(player, live);
+			return live;
+		}
+		const pkey = root.playerKey(player);
+		const cached = pkey ? root._trackArtCache[pkey] : null;
+		if (cached && cached.url) {
+			const tkey = root.trackKeyOf(player);
+			const title = String(player.trackTitle ?? "");
+			if (cached.key === tkey || (title !== "" && cached.title === title))
+				return cached.url;
+		}
+		return "";
+	}
+
+	function resolvedArtUrlFor(player: MprisPlayer): string {
+		return CoverArt.source(root.rawArtUrlFor(player));
+	}
+
 	readonly property string artUrl: {
-		const url = activePlayer?.trackArtUrl;
+		const url = root.rawArtUrlFor(activePlayer);
 		return (url && url !== "") ? url : _artUrlFallback;
 	}
+	readonly property string resolvedArtUrl: CoverArt.source(root.artUrl);
 
 	onAllPlayersChanged: {
 		if (root.localPlayerSelected && root.localPlayer) {
@@ -544,8 +606,9 @@ Singleton {
 		target: activePlayer
 
 		function onPostTrackChanged() {
-			if (root.activePlayer?.trackArtUrl) {
-				root._artUrlFallback = root.activePlayer.trackArtUrl;
+			const url = root.rawArtUrlFor(root.activePlayer);
+			if (url) {
+				root._artUrlFallback = url;
 				root.updateTrack();
 			} else {
 				artlessTrackTimer.restart();
@@ -553,7 +616,7 @@ Singleton {
 		}
 
 		function onTrackArtUrlChanged() {
-			const url = root.activePlayer?.trackArtUrl;
+			const url = root.rawArtUrlFor(root.activePlayer);
 			if (url && url !== "") {
 				root._artUrlFallback = url;
 				artlessTrackTimer.stop();
@@ -566,8 +629,9 @@ Singleton {
 	}
 
 	onActivePlayerChanged: {
-		if (root.activePlayer?.trackArtUrl) {
-			root._artUrlFallback = root.activePlayer.trackArtUrl;
+		const url = root.rawArtUrlFor(root.activePlayer);
+		if (url) {
+			root._artUrlFallback = url;
 			root.updateTrack();
 		} else {
 			artlessTrackTimer.restart();
@@ -581,8 +645,12 @@ Singleton {
 		id: artlessTrackTimer
 		interval: 400
 		onTriggered: {
-			if (!root.activePlayer?.trackArtUrl)
+			const url = root.rawArtUrlFor(root.activePlayer);
+			if (!url) {
+				if (root.activeTrack && root.activeTrack.key !== root.trackKeyOf(root.activePlayer))
+					root._artUrlFallback = "";
 				root.updateTrack();
+			}
 		}
 	}
 
@@ -590,6 +658,7 @@ Singleton {
 		//console.log(`update: ${this.activePlayer?.trackTitle ?? ""} : ${this.activePlayer?.trackArtists}`)
 		this.activeTrack = {
 			uniqueId: this.activePlayer?.uniqueId ?? 0,
+			key: root.trackKeyOf(this.activePlayer),
 			artUrl: this.artUrl,
 			title: this.activePlayer?.trackTitle || Translation.tr("Unknown Title"),
 			artist: this.activePlayer?.trackArtist || Translation.tr("Unknown Artist"),

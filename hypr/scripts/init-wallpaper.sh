@@ -12,7 +12,7 @@ saved=
 if [[ -f "$active/current-wallpaper.txt" ]]; then
     saved=$(<"$active/current-wallpaper.txt")
 fi
-for candidate in "$active/current-wallpaper" "$saved"; do
+for candidate in "$saved" "$active/current-wallpaper"; do
     [[ -f "$candidate" ]] || continue
     resolved=$(realpath -e -- "$candidate") || continue
     if [[ "$resolved" == "$library_root/"* ]]; then
