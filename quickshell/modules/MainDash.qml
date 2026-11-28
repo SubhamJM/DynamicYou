@@ -1229,7 +1229,7 @@ Item {
                 color: Qt.alpha(dashRow.fgPrimary, 0.14)
             }
 
-            // Workspaces Pager: clean pill chips in crisp Google Sans Flex
+            // Workspaces Pager: clean square cells (26x26, radius 8), no dot or occupied bubble
             Row {
                 id: wsRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -1246,24 +1246,21 @@ Item {
                         readonly property int winCount: dash.getWorkspaceWindowCount(wsCell.wsId)
                         readonly property bool hasWindows: wsCell.winCount > 0
 
-                        width: isFocused ? 28 : 22
-                        height: 22
-                        implicitWidth: width
-                        implicitHeight: height
-                        radius: height / 2
+                        width: 26
+                        height: 26
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: 8
                         anchors.verticalCenter: parent.verticalCenter
 
                         color: isFocused
                             ? Theme.accent
-                            : (wsCellMouse.containsMouse
-                                ? Qt.alpha(dashRow.fgPrimary, 0.14)
-                                : (wsCell.hasWindows ? Qt.alpha(dashRow.fgPrimary, 0.08) : "transparent"))
+                            : (wsCellMouse.containsMouse ? Qt.alpha(dashRow.fgPrimary, 0.12) : "transparent")
 
-                        scale: wsCellMouse.pressed ? 0.92 : (wsCellMouse.containsMouse && !isFocused ? 1.06 : 1.0)
+                        scale: isFocused ? 1.05 : (wsCellMouse.pressed ? 0.92 : (wsCellMouse.containsMouse ? 1.04 : 1.0))
 
-                        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 160 } }
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
 
                         Text {
                             anchors.centerIn: parent
@@ -1272,11 +1269,11 @@ Item {
                                 ? Theme.onAccent
                                 : (wsCellMouse.containsMouse || wsCell.hasWindows
                                     ? dashRow.fgPrimary
-                                    : Qt.alpha(dashRow.fgPrimary, 0.4))
+                                    : Qt.alpha(dashRow.fgPrimary, 0.50))
                             font.family: "Google Sans Flex"
                             font.pixelSize: 12
-                            font.weight: wsCell.isFocused ? Font.DemiBold : Font.Medium
-                            font.variableAxes: ({ "wght": wsCell.isFocused ? 620 : 500, "wdth": 100 })
+                            font.weight: wsCell.isFocused ? Font.Bold : Font.DemiBold
+                            font.variableAxes: ({ "wght": wsCell.isFocused ? 640 : 540, "wdth": 100 })
                             font.features: ({ "tnum": 1 })
                             font.hintingPreference: Font.PreferNoHinting
                             renderType: Text.QtRendering
